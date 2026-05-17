@@ -21,6 +21,7 @@ import {
   Line,
   Rect,
   Stage,
+  Text,
   Transformer,
 } from "react-konva";
 
@@ -32,6 +33,14 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  ContextMenu,
+  ContextMenuCheckboxItem,
+  ContextMenuContent,
+  ContextMenuLabel,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 import { Input } from "@/components/ui/input";
 import type { WireTypeRow } from "@/lib/wire-type-types";
 
@@ -68,6 +77,7 @@ type BuilderInstance = {
   renderHeight: number;
   scale: number;
   rotation: number;
+  showLabel: boolean;
 };
 
 type BuilderConnection = {
@@ -278,6 +288,7 @@ function BuilderAssetNode({
   onMove,
   onImageReady,
   onTransformEnd,
+  onContextMenuSelect,
   onPointSelect,
 }: {
   asset: BuilderAssetDefinition;
@@ -293,6 +304,7 @@ function BuilderAssetNode({
     instanceId: string,
     nextValue: Pick<BuilderInstance, "x" | "y" | "scale" | "rotation">
   ) => void;
+  onContextMenuSelect: (instanceId: string) => void;
   onPointSelect: (instanceId: string, pointKey: string) => void;
 }) {
   const image = useLoadedImage(asset.previewUrl);
@@ -334,6 +346,9 @@ function BuilderAssetNode({
       onTap={() => onSelect(instance.id)}
       onDragMove={(event) => {
         onMove(instance.id, snapToGrid(event.target.x()), snapToGrid(event.target.y()));
+      }}
+      onContextMenu={() => {
+        onContextMenuSelect(instance.id);
       }}
       onTransformEnd={(event) => {
         onTransformEnd(instance.id, {
@@ -404,6 +419,17 @@ function BuilderAssetNode({
           </Group>
         );
       })}
+      {instance.showLabel ? (
+        <Text
+          x={0}
+          y={sourceHeight + 8}
+          text={instance.name}
+          fontSize={12 * markerScale}
+          fill="#0f172a"
+          padding={4 * markerScale}
+          width={Math.max(sourceWidth, 120)}
+        />
+      ) : null}
     </Group>
   );
 }
@@ -435,6 +461,8 @@ export function CustomBuilderContent({
   const nodeRefs = React.useRef(new Map<string, React.ElementRef<typeof Group>>());
   const stageRef = React.useRef<React.ElementRef<typeof Stage> | null>(null);
   const nextIdRef = React.useRef(1);
+  const worldViewportWidth = stageSize.width / canvasScale;
+  const worldViewportHeight = stageSize.height / canvasScale;
 
   React.useEffect(() => {
     const element = stageWrapperRef.current;
@@ -753,6 +781,7 @@ export function CustomBuilderContent({
         renderHeight: asset.height,
         scale: initialScale,
         rotation: 0,
+        showLabel: false,
       },
     ]);
     setSelectedInstanceId(id);
@@ -872,6 +901,19 @@ export function CustomBuilderContent({
 
   function updateCanvasScale(nextScale: number) {
     setCanvasScale(Math.min(MAX_CANVAS_SCALE, Math.max(MIN_CANVAS_SCALE, nextScale)));
+  }
+
+  function setSelectedInstanceLabelVisibility(checked: boolean) {
+    if (!selectedInstanceId) {
+      return;
+    }
+
+    setInstances((current) =>
+      current.map((instance) =>
+        instance.id === selectedInstanceId ? { ...instance, showLabel: checked } : instance
+      )
+    );
+    setCanvasMessage(checked ? "Label komponen ditampilkan." : "Label komponen disembunyikan.");
   }
 
   function resetCanvasView() {
@@ -1038,27 +1080,29 @@ export function CustomBuilderContent({
               {canvasMessage}
             </div>
 
-            <div
-              ref={stageWrapperRef}
-              className="relative min-h-[620px] rounded-3xl border border-border bg-[radial-gradient(circle_at_top,_rgba(15,118,110,0.08),_transparent_36%),linear-gradient(180deg,rgba(248,250,252,0.95),rgba(241,245,249,0.92))]"
-              onDragOver={(event) => {
-                event.preventDefault();
-                event.dataTransfer.dropEffect = "copy";
-              }}
-              onDrop={(event) => {
-                event.preventDefault();
+            <ContextMenu>
+              <ContextMenuTrigger asChild>
+                <div
+                  ref={stageWrapperRef}
+                  className="relative min-h-[620px] rounded-3xl border border-border bg-[radial-gradient(circle_at_top,_rgba(15,118,110,0.08),_transparent_36%),linear-gradient(180deg,rgba(248,250,252,0.95),rgba(241,245,249,0.92))]"
+                  onDragOver={(event) => {
+                    event.preventDefault();
+                    event.dataTransfer.dropEffect = "copy";
+                  }}
+                  onDrop={(event) => {
+                    event.preventDefault();
 
-                const assetId = event.dataTransfer.getData("application/x-builder-asset");
-                const bounds = stageWrapperRef.current?.getBoundingClientRect();
+                    const assetId = event.dataTransfer.getData("application/x-builder-asset");
+                    const bounds = stageWrapperRef.current?.getBoundingClientRect();
 
-                if (!assetId || !bounds) {
-                  return;
-                }
+                    if (!assetId || !bounds) {
+                      return;
+                    }
 
-                addInstance(assetId, event.clientX - bounds.left, event.clientY - bounds.top);
-              }}
-            >
-              <Stage
+                    addInstance(assetId, event.clientX - bounds.left, event.clientY - bounds.top);
+                  }}
+                >
+                  <Stage
                 ref={stageRef}
                 width={stageSize.width}
                 height={stageSize.height}
@@ -1091,24 +1135,24 @@ export function CustomBuilderContent({
               >
                 <Layer>
                   {Array.from(
-                    { length: Math.ceil(stageSize.width / WIRE_GRID_SIZE) + 1 },
+                    { length: Math.ceil(worldViewportWidth / WIRE_GRID_SIZE) + 1 },
                     (_, index) => index * WIRE_GRID_SIZE
                   ).map((x) => (
                     <Line
                       key={`grid-v-${x}`}
-                      points={[x, 0, x, stageSize.height]}
+                      points={[x, 0, x, worldViewportHeight]}
                       stroke={GRID_LINE_COLOR}
                       strokeWidth={1}
                       listening={false}
                     />
                   ))}
                   {Array.from(
-                    { length: Math.ceil(stageSize.height / WIRE_GRID_SIZE) + 1 },
+                    { length: Math.ceil(worldViewportHeight / WIRE_GRID_SIZE) + 1 },
                     (_, index) => index * WIRE_GRID_SIZE
                   ).map((y) => (
                     <Line
                       key={`grid-h-${y}`}
-                      points={[0, y, stageSize.width, y]}
+                      points={[0, y, worldViewportWidth, y]}
                       stroke={GRID_LINE_COLOR}
                       strokeWidth={1}
                       listening={false}
@@ -1284,7 +1328,10 @@ export function CustomBuilderContent({
                         isSelected={instance.id === selectedInstanceId}
                         isDeleteMode={false}
                         selectedPoint={selectedPoint}
-                        onSelect={setSelectedInstanceId}
+                        onSelect={(instanceId) => {
+                          setSelectedInstanceId(instanceId);
+                          setSelectedConnectionId(null);
+                        }}
                         onMove={(instanceId, x, y) => {
                           setInstances((current) => {
                             const nextInstances = current.map((item) =>
@@ -1322,6 +1369,10 @@ export function CustomBuilderContent({
                             return nextInstances;
                           });
                         }}
+                        onContextMenuSelect={(instanceId) => {
+                          setSelectedInstanceId(instanceId);
+                          setSelectedConnectionId(null);
+                        }}
                         onPointSelect={handlePointSelect}
                       />
                     );
@@ -1342,22 +1393,37 @@ export function CustomBuilderContent({
                     anchorSize={8}
                   />
                 </Layer>
-              </Stage>
+                  </Stage>
 
-              {instances.length === 0 ? (
-                <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                  <div className="max-w-sm rounded-3xl border border-border/70 bg-background/92 px-6 py-5 text-center shadow-sm">
-                    <div className="mx-auto mb-3 flex size-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                      <HugeiconsIcon icon={PaintBrush02Icon} strokeWidth={2} />
+                  {instances.length === 0 ? (
+                    <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                      <div className="max-w-sm rounded-3xl border border-border/70 bg-background/92 px-6 py-5 text-center shadow-sm">
+                        <div className="mx-auto mb-3 flex size-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                          <HugeiconsIcon icon={PaintBrush02Icon} strokeWidth={2} />
+                        </div>
+                        <div className="font-medium text-foreground">Canvas masih kosong</div>
+                        <div className="mt-1 text-sm text-muted-foreground">
+                          Drag asset dari kiri atau klik asset untuk menempatkannya ke builder.
+                        </div>
+                      </div>
                     </div>
-                    <div className="font-medium text-foreground">Canvas masih kosong</div>
-                    <div className="mt-1 text-sm text-muted-foreground">
-                      Drag asset dari kiri atau klik asset untuk menempatkannya ke builder.
-                    </div>
-                  </div>
+                  ) : null}
                 </div>
-              ) : null}
-            </div>
+              </ContextMenuTrigger>
+              <ContextMenuContent>
+                <ContextMenuLabel>Component Options</ContextMenuLabel>
+                <ContextMenuSeparator />
+                <ContextMenuCheckboxItem
+                  checked={selectedInstance?.showLabel ?? false}
+                  disabled={!selectedInstance}
+                  onCheckedChange={(checked) => {
+                    setSelectedInstanceLabelVisibility(checked === true);
+                  }}
+                >
+                  Label
+                </ContextMenuCheckboxItem>
+              </ContextMenuContent>
+            </ContextMenu>
           </CardContent>
         </Card>
 
