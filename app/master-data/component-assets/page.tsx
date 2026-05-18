@@ -15,10 +15,14 @@ import { AppSidebar } from "@/components/app-sidebar";
 import { ComponentAssetManagementContent } from "@/components/component-asset-management-content";
 import { TopNavbar } from "@/components/top-navbar";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
+import { getComponentAssetCatalogGroups } from "@/lib/component-asset-catalog";
 import { getComponentAssetRows } from "@/lib/component-asset-data";
 
 export default async function ComponentAssetsPage() {
-  const componentAssets = await getComponentAssetRows();
+  const [componentAssets, catalogGroups] = await Promise.all([
+    getComponentAssetRows(),
+    getComponentAssetCatalogGroups(),
+  ]);
 
   return (
     <SidebarProvider>
@@ -87,6 +91,7 @@ export default async function ComponentAssetsPage() {
 
           <ComponentAssetManagementContent
             initialComponentAssets={componentAssets}
+            catalogGroups={catalogGroups}
           />
         </div>
       </SidebarInset>

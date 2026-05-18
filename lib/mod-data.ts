@@ -13,10 +13,17 @@ type PrismaModRecord = {
   isActive: boolean;
 };
 
+type PrismaOwnedAssetRecord = {
+  ownerId: string | null;
+  svgUrl: string | null;
+  thumbnailUrl: string | null;
+};
+
 export const seedModRows: ModRow[] = [
   {
     id: "seed-mod-coil-split",
     name: "Coil Split Mod",
+    previewUrl: null,
     slug: "coil-split-mod",
     description: "Lets a humbucker run as a single coil using a switching control.",
     requiresPushPull: true,
@@ -28,6 +35,7 @@ export const seedModRows: ModRow[] = [
   {
     id: "seed-mod-series-parallel",
     name: "Series Parallel Mod",
+    previewUrl: null,
     slug: "series-parallel-mod",
     description: "Switches a humbucker between series and parallel wiring modes.",
     requiresPushPull: true,
@@ -39,6 +47,7 @@ export const seedModRows: ModRow[] = [
   {
     id: "seed-mod-neck-on-switch",
     name: "Neck On Switch",
+    previewUrl: null,
     slug: "neck-on-switch",
     description: "Adds the neck pickup into combinations not available on stock wiring.",
     requiresPushPull: false,
@@ -50,6 +59,7 @@ export const seedModRows: ModRow[] = [
   {
     id: "seed-mod-phase-reverse",
     name: "Phase Reverse Mod",
+    previewUrl: null,
     slug: "phase-reverse-mod",
     description: "Flips phase on one pickup for thin, nasal out-of-phase sounds.",
     requiresPushPull: false,
@@ -60,10 +70,11 @@ export const seedModRows: ModRow[] = [
   },
 ];
 
-function mapRecord(record: PrismaModRecord): ModRow {
+function mapRecord(record: PrismaModRecord, previewUrl: string | null): ModRow {
   return {
     id: record.id,
     name: record.name,
+    previewUrl,
     slug: record.slug,
     description: record.description,
     requiresPushPull: record.requiresPushPull,
@@ -97,7 +108,25 @@ export async function getModRows(): Promise<ModRow[]> {
       },
     })) as PrismaModRecord[];
 
-    return mods.map(mapRecord);
+    const ownedAssets = (await prisma.componentAsset.findMany({
+      where: {
+        ownerType: "mod",
+        ownerId: {
+          in: mods.map((item) => item.id),
+        },
+      },
+      select: {
+        ownerId: true,
+        svgUrl: true,
+        thumbnailUrl: true,
+      },
+    })) as PrismaOwnedAssetRecord[];
+
+    const ownedAssetMap = new Map(
+      ownedAssets.map((item) => [item.ownerId, item.thumbnailUrl ?? item.svgUrl])
+    );
+
+    return mods.map((item) => mapRecord(item, ownedAssetMap.get(item.id) ?? null));
   } catch {
     return seedModRows;
   }

@@ -14,10 +14,17 @@ type PrismaSwitchTypeRecord = {
   isActive: boolean;
 };
 
+type PrismaOwnedAssetRecord = {
+  ownerId: string | null;
+  svgUrl: string | null;
+  thumbnailUrl: string | null;
+};
+
 export const seedSwitchTypeRows: SwitchTypeRow[] = [
   {
     id: "seed-5-way-blade",
     name: "5-Way Blade Switch",
+    previewUrl: null,
     slug: "5-way-blade-switch",
     positionCount: 5,
     poleCount: 2,
@@ -30,6 +37,7 @@ export const seedSwitchTypeRows: SwitchTypeRow[] = [
   {
     id: "seed-3-way-toggle",
     name: "3-Way Toggle Switch",
+    previewUrl: null,
     slug: "3-way-toggle-switch",
     positionCount: 3,
     poleCount: 2,
@@ -42,6 +50,7 @@ export const seedSwitchTypeRows: SwitchTypeRow[] = [
   {
     id: "seed-4-way-blade",
     name: "4-Way Blade Switch",
+    previewUrl: null,
     slug: "4-way-blade-switch",
     positionCount: 4,
     poleCount: 2,
@@ -54,6 +63,7 @@ export const seedSwitchTypeRows: SwitchTypeRow[] = [
   {
     id: "seed-dpdt-mini-toggle",
     name: "DPDT Mini Toggle",
+    previewUrl: null,
     slug: "dpdt-mini-toggle",
     positionCount: 2,
     poleCount: 2,
@@ -65,10 +75,14 @@ export const seedSwitchTypeRows: SwitchTypeRow[] = [
   },
 ];
 
-function mapRecord(record: PrismaSwitchTypeRecord): SwitchTypeRow {
+function mapRecord(
+  record: PrismaSwitchTypeRecord,
+  previewUrl: string | null
+): SwitchTypeRow {
   return {
     id: record.id,
     name: record.name,
+    previewUrl,
     slug: record.slug,
     positionCount: record.positionCount,
     poleCount: record.poleCount,
@@ -104,7 +118,25 @@ export async function getSwitchTypeRows(): Promise<SwitchTypeRow[]> {
       },
     })) as PrismaSwitchTypeRecord[];
 
-    return switchTypes.map(mapRecord);
+    const ownedAssets = (await prisma.componentAsset.findMany({
+      where: {
+        ownerType: "switch-type",
+        ownerId: {
+          in: switchTypes.map((item) => item.id),
+        },
+      },
+      select: {
+        ownerId: true,
+        svgUrl: true,
+        thumbnailUrl: true,
+      },
+    })) as PrismaOwnedAssetRecord[];
+
+    const ownedAssetMap = new Map(
+      ownedAssets.map((item) => [item.ownerId, item.thumbnailUrl ?? item.svgUrl])
+    );
+
+    return switchTypes.map((item) => mapRecord(item, ownedAssetMap.get(item.id) ?? null));
   } catch {
     return seedSwitchTypeRows;
   }

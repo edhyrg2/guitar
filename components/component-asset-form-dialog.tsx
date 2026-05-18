@@ -13,6 +13,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import type { ComponentAssetCatalogGroup } from "@/lib/component-asset-catalog";
 import {
   type ComponentAssetInput,
   type ComponentAssetRow,
@@ -26,10 +27,13 @@ type ComponentAssetFormDialogProps = {
   description: string;
   submitLabel: string;
   initialValue?: ComponentAssetRow | null;
+  catalogGroups: ComponentAssetCatalogGroup[];
   onSubmit: (value: ComponentAssetSubmitValue) => Promise<void> | void;
 };
 
 const defaultComponentAsset: ComponentAssetInput = {
+  ownerType: null,
+  ownerId: null,
   componentType: "",
   name: "",
   slug: null,
@@ -38,6 +42,7 @@ const defaultComponentAsset: ComponentAssetInput = {
   width: null,
   height: null,
   anchorPointsJson: null,
+  editorDocumentJson: null,
   styleType: null,
   isActive: true,
 };
@@ -49,6 +54,7 @@ export function ComponentAssetFormDialog({
   description,
   submitLabel,
   initialValue,
+  catalogGroups,
   onSubmit,
 }: ComponentAssetFormDialogProps) {
   const formKey = `${initialValue?.id ?? "new"}-${open ? "open" : "closed"}`;
@@ -61,6 +67,7 @@ export function ComponentAssetFormDialog({
         description={description}
         submitLabel={submitLabel}
         initialValue={initialValue}
+        catalogGroups={catalogGroups}
         onSubmit={onSubmit}
         onCancel={() => onOpenChange(false)}
       />
@@ -73,6 +80,7 @@ type ComponentAssetFormDialogContentProps = {
   description: string;
   submitLabel: string;
   initialValue?: ComponentAssetRow | null;
+  catalogGroups: ComponentAssetCatalogGroup[];
   onSubmit: (value: ComponentAssetSubmitValue) => Promise<void> | void;
   onCancel: () => void;
 };
@@ -82,28 +90,55 @@ function ComponentAssetFormDialogContent({
   description,
   submitLabel,
   initialValue,
+  catalogGroups,
   onSubmit,
   onCancel,
 }: ComponentAssetFormDialogContentProps) {
   const [form, setForm] = React.useState<ComponentAssetInput>(
-    initialValue
+        initialValue
       ? {
+          ownerType: initialValue.ownerType,
+          ownerId: initialValue.ownerId,
           componentType: initialValue.componentType,
           name: initialValue.name,
           slug: initialValue.slug,
-          svgUrl: initialValue.svgUrl,
+          svgUrl: initialValue.svgUrl ?? initialValue.thumbnailUrl,
           thumbnailUrl: initialValue.thumbnailUrl,
           width: initialValue.width,
           height: initialValue.height,
           anchorPointsJson: initialValue.anchorPointsJson,
+          editorDocumentJson: initialValue.editorDocumentJson,
           styleType: initialValue.styleType,
           isActive: initialValue.isActive,
         }
       : defaultComponentAsset
   );
   const [submitting, setSubmitting] = React.useState(false);
-  const [svgFile, setSvgFile] = React.useState<File | null>(null);
-  const [thumbnailFile, setThumbnailFile] = React.useState<File | null>(null);
+  const [imageFile, setImageFile] = React.useState<File | null>(null);
+  const componentTypeOptions = React.useMemo(() => {
+    const currentType = form.componentType.trim();
+    const baseOptions = catalogGroups.map((group) => group.type);
+
+    if (!currentType || baseOptions.includes(currentType)) {
+      return baseOptions;
+    }
+
+    return [currentType, ...baseOptions];
+  }, [catalogGroups, form.componentType]);
+  const selectedGroup = React.useMemo(
+    () => catalogGroups.find((group) => group.type === form.componentType.trim()) ?? null,
+    [catalogGroups, form.componentType]
+  );
+  const componentNameOptions = React.useMemo(() => {
+    const currentName = form.name.trim();
+    const baseOptions = selectedGroup?.names ?? [];
+
+    if (!currentName || baseOptions.includes(currentName)) {
+      return baseOptions;
+    }
+
+    return [currentName, ...baseOptions];
+  }, [form.name, selectedGroup]);
 
   const updateField = <K extends keyof ComponentAssetInput>(
     key: K,
@@ -112,33 +147,20 @@ function ComponentAssetFormDialogContent({
     setForm((current) => ({ ...current, [key]: value }));
   };
 
-  const svgPreviewUrl = React.useMemo(
-    () => (svgFile ? URL.createObjectURL(svgFile) : null),
-    [svgFile]
-  );
-  const thumbnailPreviewUrl = React.useMemo(
-    () => (thumbnailFile ? URL.createObjectURL(thumbnailFile) : null),
-    [thumbnailFile]
+  const imagePreviewUrl = React.useMemo(
+    () => (imageFile ? URL.createObjectURL(imageFile) : null),
+    [imageFile]
   );
 
   React.useEffect(() => {
     return () => {
-      if (svgPreviewUrl) {
-        URL.revokeObjectURL(svgPreviewUrl);
+      if (imagePreviewUrl) {
+        URL.revokeObjectURL(imagePreviewUrl);
       }
     };
-  }, [svgPreviewUrl]);
+  }, [imagePreviewUrl]);
 
-  React.useEffect(() => {
-    return () => {
-      if (thumbnailPreviewUrl) {
-        URL.revokeObjectURL(thumbnailPreviewUrl);
-      }
-    };
-  }, [thumbnailPreviewUrl]);
-
-  const assetPreviewSrc = svgPreviewUrl ?? form.svgUrl;
-  const thumbnailPreviewSrc = thumbnailPreviewUrl ?? form.thumbnailUrl;
+  const imagePreviewSrc = imagePreviewUrl ?? form.svgUrl ?? form.thumbnailUrl;
 
   async function handleSubmit() {
     setSubmitting(true);
@@ -151,12 +173,11 @@ function ComponentAssetFormDialogContent({
           name: form.name.trim(),
           slug: form.slug?.trim() || null,
           svgUrl: form.svgUrl?.trim() || null,
-          thumbnailUrl: form.thumbnailUrl?.trim() || null,
+          thumbnailUrl: form.svgUrl?.trim() || null,
           anchorPointsJson: form.anchorPointsJson?.trim() || null,
           styleType: form.styleType?.trim() || null,
         },
-        svgFile,
-        thumbnailFile,
+        imageFile,
       });
       onCancel();
     } finally {
@@ -174,19 +195,43 @@ function ComponentAssetFormDialogContent({
       <div className="grid gap-4 px-6 pb-6 sm:grid-cols-2">
         <label className="flex flex-col gap-2">
           <span className="text-xs font-medium">Component Type</span>
-          <Input
+          <select
             value={form.componentType}
-            onChange={(event) => updateField("componentType", event.target.value)}
-            placeholder="Switch"
-          />
+            onChange={(event) => {
+              const nextType = event.target.value;
+              const nextGroup =
+                catalogGroups.find((group) => group.type === nextType) ?? null;
+
+              updateField("componentType", nextType);
+              updateField("name", nextGroup?.names[0] ?? "");
+            }}
+            className="h-9 rounded-md border border-input bg-input/20 px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 dark:bg-input/30"
+          >
+            <option value="">Select component type</option>
+            {componentTypeOptions.map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </select>
         </label>
         <label className="flex flex-col gap-2">
           <span className="text-xs font-medium">Name</span>
-          <Input
+          <select
             value={form.name}
             onChange={(event) => updateField("name", event.target.value)}
-            placeholder="5-Way Blade Switch Top View"
-          />
+            disabled={!selectedGroup}
+            className="h-9 rounded-md border border-input bg-input/20 px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30"
+          >
+            <option value="">
+              {selectedGroup ? "Select component name" : "Select component type first"}
+            </option>
+            {componentNameOptions.map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </select>
         </label>
         <label className="flex flex-col gap-2">
           <span className="text-xs font-medium">Slug</span>
@@ -205,53 +250,33 @@ function ComponentAssetFormDialogContent({
           />
         </label>
         <label className="flex flex-col gap-2 sm:col-span-2">
-          <span className="text-xs font-medium">Asset Path</span>
+          <span className="text-xs font-medium">Image Path</span>
           <Input
             value={form.svgUrl ?? ""}
             onChange={(event) => updateField("svgUrl", event.target.value)}
             placeholder="/uploads/component-assets/your-asset.svg"
           />
+          <span className="text-xs text-muted-foreground">
+            Path ini dipakai sebagai asset utama. Thumbnail akan ikut memakai gambar yang
+            sama, atau dibuat otomatis saat upload file.
+          </span>
         </label>
         <label className="flex flex-col gap-2 sm:col-span-2">
-          <span className="text-xs font-medium">Asset File</span>
+          <span className="text-xs font-medium">Image File</span>
           <Input
             type="file"
             accept=".svg,.png,.jpg,.jpeg,image/svg+xml,image/png,image/jpeg"
-            onChange={(event) => setSvgFile(event.target.files?.[0] ?? null)}
+            onChange={(event) => setImageFile(event.target.files?.[0] ?? null)}
           />
           <span className="text-xs text-muted-foreground">
-            Upload JPG, PNG, atau SVG. Jika dipilih, file ini akan menggantikan path
-            asset di atas.
+            Upload JPG, PNG, atau SVG. Sistem akan menyimpan asset utama dan membuat
+            thumbnail terkompres otomatis dari file yang sama.
           </span>
         </label>
         <AssetPreviewCard
-          title="Asset Preview"
-          src={assetPreviewSrc}
+          title="Image Preview"
+          src={imagePreviewSrc}
           alt={form.name || "Component asset preview"}
-        />
-        <label className="flex flex-col gap-2 sm:col-span-2">
-          <span className="text-xs font-medium">Thumbnail Path</span>
-          <Input
-            value={form.thumbnailUrl ?? ""}
-            onChange={(event) => updateField("thumbnailUrl", event.target.value)}
-            placeholder="/uploads/component-assets/your-thumb.png"
-          />
-        </label>
-        <label className="flex flex-col gap-2 sm:col-span-2">
-          <span className="text-xs font-medium">Thumbnail File</span>
-          <Input
-            type="file"
-            accept=".svg,.png,.jpg,.jpeg,image/svg+xml,image/png,image/jpeg"
-            onChange={(event) => setThumbnailFile(event.target.files?.[0] ?? null)}
-          />
-          <span className="text-xs text-muted-foreground">
-            Thumbnail juga bisa diupload sebagai JPG, PNG, atau SVG.
-          </span>
-        </label>
-        <AssetPreviewCard
-          title="Thumbnail Preview"
-          src={thumbnailPreviewSrc}
-          alt={form.name ? `${form.name} thumbnail` : "Component thumbnail preview"}
         />
         <label className="flex flex-col gap-2">
           <span className="text-xs font-medium">Width</span>

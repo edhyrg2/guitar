@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Image from "next/image";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
   Add01Icon,
@@ -11,6 +12,7 @@ import {
   ToggleOnIcon,
 } from "@hugeicons/core-free-icons";
 
+import { AssetEditorButton } from "@/components/asset-editor-button";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { DataTableCard } from "@/components/data-table-card";
 import { PickupTypeFormDialog } from "@/components/pickup-type-form-dialog";
@@ -138,6 +140,7 @@ export function PickupTypeManagementContent({
           }
           renderHeader={() => (
             <TableRow>
+              <TableHead>Preview</TableHead>
               <TableHead>Name</TableHead>
               <TableHead>Slug</TableHead>
               <TableHead>Coil Count</TableHead>
@@ -148,6 +151,22 @@ export function PickupTypeManagementContent({
           )}
           renderRow={(pickupType) => (
             <TableRow key={pickupType.id}>
+              <TableCell>
+                <div className="relative flex h-14 w-14 items-center justify-center overflow-hidden rounded-md border bg-muted/20">
+                  {pickupType.previewUrl ? (
+                    <Image
+                      src={pickupType.previewUrl}
+                      alt={pickupType.name}
+                      fill
+                      sizes="56px"
+                      unoptimized
+                      className="object-contain"
+                    />
+                  ) : (
+                    <span className="text-[10px] text-muted-foreground">No image</span>
+                  )}
+                </div>
+              </TableCell>
               <TableCell className="font-medium">{pickupType.name}</TableCell>
               <TableCell>{pickupType.slug ?? "-"}</TableCell>
               <TableCell>{pickupType.coilCount ?? "-"}</TableCell>
@@ -162,6 +181,7 @@ export function PickupTypeManagementContent({
               </TableCell>
               <TableCell>
                 <div className="flex gap-2">
+                  <AssetEditorButton ownerType="pickup-type" ownerId={pickupType.id} />
                   <Button
                     variant="outline"
                     size="sm"
@@ -191,7 +211,7 @@ export function PickupTypeManagementContent({
             </TableRow>
           )}
           emptyMessage={
-            <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
+            <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
               No pickup types match the current search.
             </TableCell>
           }

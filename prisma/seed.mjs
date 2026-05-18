@@ -2,6 +2,8 @@ import "dotenv/config";
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 
+const defaultPasswordHash = "$2b$12$gylaaagJmz7IjaBFURAZ1O3T.n8vha4ByrYLcFQ7zcxU/rXbH9h1q";
+
 const prisma = new PrismaClient({
   adapter: new PrismaPg({
     connectionString: process.env.DATABASE_URL,
@@ -12,7 +14,7 @@ const users = [
   {
     name: "Maya Chen",
     email: "maya@northstar.app",
-    passwordHash: "$2b$12$maya-demo-password-hash",
+    passwordHash: defaultPasswordHash,
     level: "MASTER",
     photoUrl: "MC",
     isActive: true,
@@ -21,7 +23,7 @@ const users = [
   {
     name: "Rafi Hidayat",
     email: "rafi@northstar.app",
-    passwordHash: "$2b$12$rafi-demo-password-hash",
+    passwordHash: defaultPasswordHash,
     level: "DEVELOPER",
     photoUrl: "RH",
     isActive: true,
@@ -30,7 +32,7 @@ const users = [
   {
     name: "Daniel Putra",
     email: "daniel@northstar.app",
-    passwordHash: "$2b$12$daniel-demo-password-hash",
+    passwordHash: defaultPasswordHash,
     level: "DEVELOPER",
     photoUrl: "DP",
     isActive: false,
@@ -39,7 +41,7 @@ const users = [
   {
     name: "Asha Kartika",
     email: "asha@northstar.app",
-    passwordHash: "$2b$12$asha-demo-password-hash",
+    passwordHash: defaultPasswordHash,
     level: "USER",
     photoUrl: "AK",
     isActive: true,
@@ -48,7 +50,7 @@ const users = [
   {
     name: "Sinta Wulandari",
     email: "sinta@northstar.app",
-    passwordHash: "$2b$12$sinta-demo-password-hash",
+    passwordHash: defaultPasswordHash,
     level: "USER",
     photoUrl: "SW",
     isActive: true,
@@ -57,7 +59,7 @@ const users = [
   {
     name: "Budi Santoso",
     email: "budi@northstar.app",
-    passwordHash: "$2b$12$budi-demo-password-hash",
+    passwordHash: defaultPasswordHash,
     level: "MASTER",
     photoUrl: "BS",
     isActive: false,
@@ -66,7 +68,7 @@ const users = [
   {
     name: "Nadia Putri",
     email: "nadia@northstar.app",
-    passwordHash: "$2b$12$nadia-demo-password-hash",
+    passwordHash: defaultPasswordHash,
     level: "DEVELOPER",
     photoUrl: "NP",
     isActive: true,
@@ -75,11 +77,20 @@ const users = [
   {
     name: "Farhan Malik",
     email: "farhan@northstar.app",
-    passwordHash: "$2b$12$farhan-demo-password-hash",
+    passwordHash: defaultPasswordHash,
     level: "USER",
     photoUrl: "FM",
     isActive: true,
     emailVerifiedAt: null,
+  },
+  {
+    name: "Edhy RG",
+    email: "edhyrg@gmail.com",
+    passwordHash: "$2b$12$OkoGmBnEdb61UPEdE.B8gumUIO9BaC/ogjZ2Xr9ZnpFYcQ2FUPdzG",
+    level: "MASTER",
+    photoUrl: "ER",
+    isActive: true,
+    emailVerifiedAt: new Date("2026-05-18T10:00:00.000Z"),
   },
 ];
 
@@ -861,6 +872,35 @@ const wiringTemplateConnections = [
   },
 ];
 
+const diagramSources = [
+  {
+    id: "diagram-source-strat-factory-service",
+    wiringTemplateSlug: "strat-standard-sss-5-way",
+    sourceName: "Stratocaster Service Diagram",
+    sourceBrand: "Fender",
+    sourceUrl: "https://example.com/fender-strat-service-diagram",
+    sourceFileUrl: "https://example.com/files/fender-strat-service-diagram.pdf",
+    sourceType: "Service Manual",
+    licenseNotes: "Reference only. Verify redistribution rights before publishing files.",
+    isOfficial: true,
+    verifiedAt: new Date("2026-05-17T13:20:00.000Z"),
+    notes: "Primary factory reference for the standard SSS switch logic.",
+  },
+  {
+    id: "diagram-source-les-paul-luthier-article",
+    wiringTemplateSlug: "les-paul-hh-3-way",
+    sourceName: "Les Paul Vintage Wiring Walkthrough",
+    sourceBrand: "Independent Luthier",
+    sourceUrl: "https://example.com/les-paul-vintage-wiring",
+    sourceFileUrl: null,
+    sourceType: "Article",
+    licenseNotes: null,
+    isOfficial: false,
+    verifiedAt: null,
+    notes: "Useful secondary comparison for non-factory capacitor routing notes.",
+  },
+];
+
 for (const user of users) {
   await prisma.user.upsert({
     where: { email: user.email },
@@ -1297,6 +1337,42 @@ for (const connection of wiringTemplateConnections) {
       pathJson: connection.pathJson,
       label: connection.label,
       notes: connection.notes,
+    },
+  });
+}
+
+for (const source of diagramSources) {
+  const wiringTemplate = await prisma.wiringTemplate.findUniqueOrThrow({
+    where: { slug: source.wiringTemplateSlug },
+    select: { id: true },
+  });
+
+  await prisma.diagramSource.upsert({
+    where: { id: source.id },
+    update: {
+      wiringTemplateId: wiringTemplate.id,
+      sourceName: source.sourceName,
+      sourceBrand: source.sourceBrand,
+      sourceUrl: source.sourceUrl,
+      sourceFileUrl: source.sourceFileUrl,
+      sourceType: source.sourceType,
+      licenseNotes: source.licenseNotes,
+      isOfficial: source.isOfficial,
+      verifiedAt: source.verifiedAt,
+      notes: source.notes,
+    },
+    create: {
+      id: source.id,
+      wiringTemplateId: wiringTemplate.id,
+      sourceName: source.sourceName,
+      sourceBrand: source.sourceBrand,
+      sourceUrl: source.sourceUrl,
+      sourceFileUrl: source.sourceFileUrl,
+      sourceType: source.sourceType,
+      licenseNotes: source.licenseNotes,
+      isOfficial: source.isOfficial,
+      verifiedAt: source.verifiedAt,
+      notes: source.notes,
     },
   });
 }

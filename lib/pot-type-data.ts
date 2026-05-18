@@ -16,10 +16,17 @@ type PrismaPotTypeRecord = {
   isActive: boolean;
 };
 
+type PrismaOwnedAssetRecord = {
+  ownerId: string | null;
+  svgUrl: string | null;
+  thumbnailUrl: string | null;
+};
+
 export const seedPotTypeRows: PotTypeRow[] = [
   {
     id: "seed-volume-250k-audio",
     name: "250K Audio Volume",
+    previewUrl: "/assets/components/pots/250k-audio-front.svg",
     valueOhm: 250000,
     valueLabel: "250K",
     taper: "Audio",
@@ -34,6 +41,7 @@ export const seedPotTypeRows: PotTypeRow[] = [
   {
     id: "seed-tone-500k-audio-push-pull",
     name: "500K Audio Tone Push Pull",
+    previewUrl: null,
     valueOhm: 500000,
     valueLabel: "500K",
     taper: "Audio",
@@ -48,6 +56,7 @@ export const seedPotTypeRows: PotTypeRow[] = [
   {
     id: "seed-tone-250k-no-load",
     name: "250K No Load Tone",
+    previewUrl: null,
     valueOhm: 250000,
     valueLabel: "250K",
     taper: "Audio",
@@ -62,6 +71,7 @@ export const seedPotTypeRows: PotTypeRow[] = [
   {
     id: "seed-blend-500k-linear-push-push",
     name: "500K Linear Blend Push Push",
+    previewUrl: null,
     valueOhm: 500000,
     valueLabel: "500K",
     taper: "Linear",
@@ -75,10 +85,14 @@ export const seedPotTypeRows: PotTypeRow[] = [
   },
 ];
 
-function mapRecord(record: PrismaPotTypeRecord): PotTypeRow {
+function mapRecord(
+  record: PrismaPotTypeRecord,
+  previewUrl: string | null
+): PotTypeRow {
   return {
     id: record.id,
     name: record.name,
+    previewUrl,
     valueOhm: record.valueOhm,
     valueLabel: record.valueLabel,
     taper: record.taper,
@@ -118,7 +132,25 @@ export async function getPotTypeRows(): Promise<PotTypeRow[]> {
       },
     })) as PrismaPotTypeRecord[];
 
-    return potTypes.map(mapRecord);
+    const ownedAssets = (await prisma.componentAsset.findMany({
+      where: {
+        ownerType: "pot-type",
+        ownerId: {
+          in: potTypes.map((item) => item.id),
+        },
+      },
+      select: {
+        ownerId: true,
+        svgUrl: true,
+        thumbnailUrl: true,
+      },
+    })) as PrismaOwnedAssetRecord[];
+
+    const ownedAssetMap = new Map(
+      ownedAssets.map((item) => [item.ownerId, item.thumbnailUrl ?? item.svgUrl])
+    );
+
+    return potTypes.map((item) => mapRecord(item, ownedAssetMap.get(item.id) ?? null));
   } catch {
     return seedPotTypeRows;
   }

@@ -1,6 +1,7 @@
 export type PotTypeRow = {
   id: string;
   name: string;
+  previewUrl: string | null;
   valueOhm: number;
   valueLabel: string;
   taper: string | null;
@@ -13,4 +14,4 @@ export type PotTypeRow = {
   isActive: boolean;
 };
 
-export type PotTypeInput = Omit<PotTypeRow, "id">;
+export type PotTypeInput = Omit<PotTypeRow, "id" | "previewUrl">;

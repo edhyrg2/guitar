@@ -19,6 +19,7 @@ import { StatCard } from "@/components/stat-card";
 import { StatusPill } from "@/components/status-pill";
 import { Button } from "@/components/ui/button";
 import { TableCell, TableHead, TableRow } from "@/components/ui/table";
+import type { ComponentAssetCatalogGroup } from "@/lib/component-asset-catalog";
 import {
   type ComponentAssetRow,
   type ComponentAssetSubmitValue,
@@ -26,10 +27,12 @@ import {
 
 type ComponentAssetManagementContentProps = {
   initialComponentAssets: ComponentAssetRow[];
+  catalogGroups: ComponentAssetCatalogGroup[];
 };
 
 export function ComponentAssetManagementContent({
   initialComponentAssets,
+  catalogGroups,
 }: ComponentAssetManagementContentProps) {
   const [componentAssets, setComponentAssets] = React.useState<ComponentAssetRow[]>(
     initialComponentAssets
@@ -42,23 +45,20 @@ export function ComponentAssetManagementContent({
     const formData = new FormData();
     const { data } = value;
 
+    formData.append("ownerType", data.ownerType ?? "");
+    formData.append("ownerId", data.ownerId ?? "");
     formData.append("componentType", data.componentType);
     formData.append("name", data.name);
     formData.append("slug", data.slug ?? "");
-    formData.append("svgUrl", data.svgUrl ?? "");
-    formData.append("thumbnailUrl", data.thumbnailUrl ?? "");
+    formData.append("imageUrl", data.svgUrl ?? "");
     formData.append("width", data.width === null ? "" : String(data.width));
     formData.append("height", data.height === null ? "" : String(data.height));
     formData.append("anchorPointsJson", data.anchorPointsJson ?? "");
     formData.append("styleType", data.styleType ?? "");
     formData.append("isActive", String(data.isActive));
 
-    if (value.svgFile) {
-      formData.append("svgFile", value.svgFile);
-    }
-
-    if (value.thumbnailFile) {
-      formData.append("thumbnailFile", value.thumbnailFile);
+    if (value.imageFile) {
+      formData.append("imageFile", value.imageFile);
     }
 
     return formData;
@@ -263,6 +263,7 @@ export function ComponentAssetManagementContent({
         title="Create component asset"
         description="Add a new SVG or thumbnail asset for a component."
         submitLabel="Create asset"
+        catalogGroups={catalogGroups}
         onSubmit={createComponentAsset}
       />
 
@@ -277,6 +278,7 @@ export function ComponentAssetManagementContent({
         description="Update component asset metadata used in diagrams and builders."
         submitLabel="Save changes"
         initialValue={editTarget}
+        catalogGroups={catalogGroups}
         onSubmit={async (value) => {
           if (!editTarget) {
             return;

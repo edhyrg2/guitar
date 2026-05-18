@@ -1,5 +1,6 @@
 export type CapacitorRow = {
   id: string;
+  previewUrl: string | null;
   valueFarads: number;
   valueLabel: string;
   type: string | null;
@@ -8,4 +9,4 @@ export type CapacitorRow = {
   isActive: boolean;
 };
 
-export type CapacitorInput = Omit<CapacitorRow, "id">;
+export type CapacitorInput = Omit<CapacitorRow, "id" | "previewUrl">;

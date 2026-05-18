@@ -11,9 +11,16 @@ type PrismaResistorRecord = {
   isActive: boolean;
 };
 
+type PrismaOwnedAssetRecord = {
+  ownerId: string | null;
+  svgUrl: string | null;
+  thumbnailUrl: string | null;
+};
+
 export const seedResistorRows: ResistorRow[] = [
   {
     id: "seed-resistor-150k",
+    previewUrl: null,
     valueOhm: 150000,
     valueLabel: "150K",
     wattage: "1/4W",
@@ -23,6 +30,7 @@ export const seedResistorRows: ResistorRow[] = [
   },
   {
     id: "seed-resistor-220k",
+    previewUrl: null,
     valueOhm: 220000,
     valueLabel: "220K",
     wattage: "1/4W",
@@ -32,6 +40,7 @@ export const seedResistorRows: ResistorRow[] = [
   },
   {
     id: "seed-resistor-470k",
+    previewUrl: null,
     valueOhm: 470000,
     valueLabel: "470K",
     wattage: "1/4W",
@@ -41,6 +50,7 @@ export const seedResistorRows: ResistorRow[] = [
   },
   {
     id: "seed-resistor-1m",
+    previewUrl: null,
     valueOhm: 1000000,
     valueLabel: "1M",
     wattage: "1/4W",
@@ -50,9 +60,13 @@ export const seedResistorRows: ResistorRow[] = [
   },
 ];
 
-function mapRecord(record: PrismaResistorRecord): ResistorRow {
+function mapRecord(
+  record: PrismaResistorRecord,
+  previewUrl: string | null
+): ResistorRow {
   return {
     id: record.id,
+    previewUrl,
     valueOhm: record.valueOhm,
     valueLabel: record.valueLabel,
     wattage: record.wattage,
@@ -83,7 +97,25 @@ export async function getResistorRows(): Promise<ResistorRow[]> {
       },
     })) as PrismaResistorRecord[];
 
-    return resistors.map(mapRecord);
+    const ownedAssets = (await prisma.componentAsset.findMany({
+      where: {
+        ownerType: "resistor",
+        ownerId: {
+          in: resistors.map((item) => item.id),
+        },
+      },
+      select: {
+        ownerId: true,
+        svgUrl: true,
+        thumbnailUrl: true,
+      },
+    })) as PrismaOwnedAssetRecord[];
+
+    const ownedAssetMap = new Map(
+      ownedAssets.map((item) => [item.ownerId, item.thumbnailUrl ?? item.svgUrl])
+    );
+
+    return resistors.map((item) => mapRecord(item, ownedAssetMap.get(item.id) ?? null));
   } catch {
     return seedResistorRows;
   }

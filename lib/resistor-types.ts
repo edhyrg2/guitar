@@ -1,5 +1,6 @@
 export type ResistorRow = {
   id: string;
+  previewUrl: string | null;
   valueOhm: number;
   valueLabel: string;
   wattage: string | null;
@@ -8,4 +9,4 @@ export type ResistorRow = {
   isActive: boolean;
 };
 
-export type ResistorInput = Omit<ResistorRow, "id">;
+export type ResistorInput = Omit<ResistorRow, "id" | "previewUrl">;

@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Image from "next/image";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
   Add01Icon,
@@ -11,6 +12,7 @@ import {
   VolumeHighIcon,
 } from "@hugeicons/core-free-icons";
 
+import { AssetEditorButton } from "@/components/asset-editor-button";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { DataTableCard } from "@/components/data-table-card";
 import { PotTypeFormDialog } from "@/components/pot-type-form-dialog";
@@ -145,6 +147,7 @@ export function PotTypeManagementContent({
           }
           renderHeader={() => (
             <TableRow>
+              <TableHead>Preview</TableHead>
               <TableHead>Name</TableHead>
               <TableHead>Value</TableHead>
               <TableHead>Taper</TableHead>
@@ -157,6 +160,22 @@ export function PotTypeManagementContent({
           )}
           renderRow={(item) => (
             <TableRow key={item.id}>
+              <TableCell>
+                <div className="relative flex h-14 w-14 items-center justify-center overflow-hidden rounded-md border bg-muted/20">
+                  {item.previewUrl ? (
+                    <Image
+                      src={item.previewUrl}
+                      alt={item.name}
+                      fill
+                      sizes="56px"
+                      unoptimized
+                      className="object-contain"
+                    />
+                  ) : (
+                    <span className="text-[10px] text-muted-foreground">No image</span>
+                  )}
+                </div>
+              </TableCell>
               <TableCell className="font-medium">{item.name}</TableCell>
               <TableCell>
                 <div className="flex flex-col">
@@ -185,6 +204,7 @@ export function PotTypeManagementContent({
               </TableCell>
               <TableCell>
                 <div className="flex gap-2">
+                  <AssetEditorButton ownerType="pot-type" ownerId={item.id} />
                   <Button
                     variant="outline"
                     size="sm"
@@ -214,7 +234,7 @@ export function PotTypeManagementContent({
             </TableRow>
           )}
           emptyMessage={
-            <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
+            <TableCell colSpan={9} className="py-8 text-center text-muted-foreground">
               No potentiometers match the current search.
             </TableCell>
           }

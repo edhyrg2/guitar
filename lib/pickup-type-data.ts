@@ -10,10 +10,17 @@ type PrismaPickupTypeRecord = {
   description: string | null;
 };
 
+type PrismaOwnedAssetRecord = {
+  ownerId: string | null;
+  svgUrl: string | null;
+  thumbnailUrl: string | null;
+};
+
 export const seedPickupTypeRows: PickupTypeRow[] = [
   {
     id: "seed-single-coil",
     name: "Vintage Strat",
+    previewUrl: null,
     slug: "vintage-strat",
     coilCount: "Single Coil",
     isActive: true,
@@ -22,6 +29,7 @@ export const seedPickupTypeRows: PickupTypeRow[] = [
   {
     id: "seed-humbucker",
     name: "Modern Output",
+    previewUrl: null,
     slug: "modern-output",
     coilCount: "Humbucker",
     isActive: true,
@@ -30,6 +38,7 @@ export const seedPickupTypeRows: PickupTypeRow[] = [
   {
     id: "seed-p90",
     name: "Soapbar Classic",
+    previewUrl: null,
     slug: "soapbar-classic",
     coilCount: "P90",
     isActive: true,
@@ -38,6 +47,7 @@ export const seedPickupTypeRows: PickupTypeRow[] = [
   {
     id: "seed-piezo",
     name: "Bridge Piezo",
+    previewUrl: null,
     slug: "bridge-piezo",
     coilCount: "Piezo",
     isActive: false,
@@ -45,10 +55,14 @@ export const seedPickupTypeRows: PickupTypeRow[] = [
   },
 ];
 
-function mapPickupTypeRecord(record: PrismaPickupTypeRecord): PickupTypeRow {
+function mapPickupTypeRecord(
+  record: PrismaPickupTypeRecord,
+  previewUrl: string | null
+): PickupTypeRow {
   return {
     id: record.id,
     name: record.name,
+    previewUrl,
     slug: record.slug,
     coilCount: record.coilCount,
     isActive: record.isActive,
@@ -76,7 +90,27 @@ export async function getPickupTypeRows(): Promise<PickupTypeRow[]> {
       },
     })) as PrismaPickupTypeRecord[];
 
-    return pickupTypes.map(mapPickupTypeRecord);
+    const ownedAssets = (await prisma.componentAsset.findMany({
+      where: {
+        ownerType: "pickup-type",
+        ownerId: {
+          in: pickupTypes.map((item) => item.id),
+        },
+      },
+      select: {
+        ownerId: true,
+        svgUrl: true,
+        thumbnailUrl: true,
+      },
+    })) as PrismaOwnedAssetRecord[];
+
+    const ownedAssetMap = new Map(
+      ownedAssets.map((item) => [item.ownerId, item.thumbnailUrl ?? item.svgUrl])
+    );
+
+    return pickupTypes.map((item) =>
+      mapPickupTypeRecord(item, ownedAssetMap.get(item.id) ?? null)
+    );
   } catch {
     return seedPickupTypeRows;
   }

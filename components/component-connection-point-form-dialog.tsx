@@ -108,6 +108,7 @@ function ComponentConnectionPointFormDialogContent({
     null
   );
   const imageContainerRef = React.useRef<HTMLDivElement | null>(null);
+  const imageElementRef = React.useRef<HTMLImageElement | null>(null);
 
   const updateField = <K extends keyof ComponentConnectionPointInput>(
     key: K,
@@ -124,15 +125,61 @@ function ComponentConnectionPointFormDialogContent({
     selectedAsset?.width != null && selectedAsset?.height != null
       ? { width: selectedAsset.width, height: selectedAsset.height }
       : imageSize;
+  const [imageDisplayBox, setImageDisplayBox] = React.useState<{
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  } | null>(null);
 
-  function handleImageClick(event: React.MouseEvent<HTMLDivElement>) {
-    if (!selectedAsset?.imageUrl || !coordinateBase || !imageContainerRef.current) {
+  const syncImageDisplayBox = React.useCallback(() => {
+    const container = imageContainerRef.current;
+    const image = imageElementRef.current;
+
+    if (!container || !image) {
+      setImageDisplayBox(null);
       return;
     }
 
-    const rect = imageContainerRef.current.getBoundingClientRect();
-    const relativeX = (event.clientX - rect.left) / rect.width;
-    const relativeY = (event.clientY - rect.top) / rect.height;
+    const containerRect = container.getBoundingClientRect();
+    const imageRect = image.getBoundingClientRect();
+
+    setImageDisplayBox({
+      x: imageRect.left - containerRect.left,
+      y: imageRect.top - containerRect.top,
+      width: imageRect.width,
+      height: imageRect.height,
+    });
+  }, []);
+
+  React.useEffect(() => {
+    const container = imageContainerRef.current;
+
+    if (!container) {
+      return;
+    }
+
+    const observer = new ResizeObserver(() => {
+      syncImageDisplayBox();
+    });
+
+    observer.observe(container);
+    syncImageDisplayBox();
+
+    return () => observer.disconnect();
+  }, [selectedAsset?.id, syncImageDisplayBox]);
+
+  function handleImageClick(event: React.MouseEvent<HTMLDivElement>) {
+    if (!selectedAsset?.imageUrl || !coordinateBase || !imageDisplayBox) {
+      return;
+    }
+
+    const rect = event.currentTarget.getBoundingClientRect();
+    const localX = event.clientX - rect.left;
+    const localY = event.clientY - rect.top;
+
+    const relativeX = localX / rect.width;
+    const relativeY = localY / rect.height;
 
     const nextX = Number((relativeX * coordinateBase.width).toFixed(2));
     const nextY = Number((relativeY * coordinateBase.height).toFixed(2));
@@ -144,10 +191,10 @@ function ComponentConnectionPointFormDialogContent({
     }));
   }
 
-  const markerPosition = coordinateBase
+  const markerPosition = coordinateBase && imageDisplayBox
     ? {
-        left: `${Math.max(0, Math.min((form.x / coordinateBase.width) * 100, 100))}%`,
-        top: `${Math.max(0, Math.min((form.y / coordinateBase.height) * 100, 100))}%`,
+        left: imageDisplayBox.x + (Math.max(0, Math.min(form.x, coordinateBase.width)) / coordinateBase.width) * imageDisplayBox.width,
+        top: imageDisplayBox.y + (Math.max(0, Math.min(form.y, coordinateBase.height)) / coordinateBase.height) * imageDisplayBox.height,
       }
     : null;
 
@@ -183,6 +230,7 @@ function ComponentConnectionPointFormDialogContent({
             value={form.componentAssetId}
             onChange={(event) => {
               setImageSize(null);
+              setImageDisplayBox(null);
               updateField("componentAssetId", event.target.value);
             }}
             className="h-9 rounded-md border border-input bg-input/20 px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 dark:bg-input/30"
@@ -206,7 +254,6 @@ function ComponentConnectionPointFormDialogContent({
               <>
                 <div
                   ref={imageContainerRef}
-                  onClick={handleImageClick}
                   className="relative mx-auto w-full max-w-2xl cursor-crosshair overflow-hidden rounded-md border bg-background"
                   style={{
                     aspectRatio:
@@ -222,6 +269,7 @@ function ComponentConnectionPointFormDialogContent({
                     sizes="(max-width: 768px) 100vw, 768px"
                     unoptimized
                     className="object-contain"
+                    ref={imageElementRef}
                     onLoad={(event) => {
                       const target = event.currentTarget;
                       if (!selectedAsset.width || !selectedAsset.height) {
@@ -230,12 +278,28 @@ function ComponentConnectionPointFormDialogContent({
                           height: target.naturalHeight,
                         });
                       }
+                      syncImageDisplayBox();
                     }}
                   />
+                  {imageDisplayBox ? (
+                    <div
+                      className="absolute cursor-crosshair"
+                      style={{
+                        left: imageDisplayBox.x,
+                        top: imageDisplayBox.y,
+                        width: imageDisplayBox.width,
+                        height: imageDisplayBox.height,
+                      }}
+                      onClick={handleImageClick}
+                    />
+                  ) : null}
                   {markerPosition ? (
                     <div
                       className="pointer-events-none absolute h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-primary shadow-sm"
-                      style={markerPosition}
+                      style={{
+                        left: markerPosition.left,
+                        top: markerPosition.top,
+                      }}
                     />
                   ) : null}
                 </div>

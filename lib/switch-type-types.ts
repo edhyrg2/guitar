@@ -1,6 +1,7 @@
 export type SwitchTypeRow = {
   id: string;
   name: string;
+  previewUrl: string | null;
   slug: string | null;
   positionCount: number;
   poleCount: number;
@@ -11,4 +12,4 @@ export type SwitchTypeRow = {
   isActive: boolean;
 };
 
-export type SwitchTypeInput = Omit<SwitchTypeRow, "id">;
+export type SwitchTypeInput = Omit<SwitchTypeRow, "id" | "previewUrl">;

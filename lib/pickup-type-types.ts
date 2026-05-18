@@ -13,10 +13,11 @@ export type PickupTypeOption = (typeof pickupTypeOptions)[number];
 export type PickupTypeRow = {
   id: string;
   name: string;
+  previewUrl: string | null;
   slug: string | null;
   coilCount: string | null;
   isActive: boolean;
   description: string | null;
 };
 
-export type PickupTypeInput = Omit<PickupTypeRow, "id">;
+export type PickupTypeInput = Omit<PickupTypeRow, "id" | "previewUrl">;

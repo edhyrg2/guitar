@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { useSession } from "next-auth/react";
 import { HugeiconsIcon } from "@hugeicons/react";
 import type { IconSvgElement } from "@hugeicons/react";
 import {
@@ -23,6 +24,7 @@ import {
   VolumeHighIcon,
 } from "@hugeicons/core-free-icons";
 
+import { AuthUserControl } from "@/components/auth-user-control";
 import { GuitarIcon } from "@/components/guitar-icon";
 import {
   Sidebar,
@@ -63,18 +65,13 @@ type SidebarItem =
 
 const primaryItems: SidebarItem[] = [
   { title: "Overview", href: "/", icon: DashboardSquare01Icon, badge: "Live" },
-  { title: "Users", href: "/users", icon: UserAccountIcon, badge: "DB" },
-  {
-    title: "AI Diagram Import",
-    href: "/ai/diagram-import",
-    icon: StarsIcon,
-    badge: "AI",
-  },
   { title: "Custom Builder", href: "/custom-builder", icon: PaintBrush02Icon },
+  { title: "Custom Component", href: "/custom-component", icon: PaintBrush02Icon },
   { title: "Saved Setups", href: "#", icon: BookBookmark01Icon },
 ];
 
 const secondaryItems: SidebarItem[] = [
+  { title: "Users", href: "/users", icon: UserAccountIcon, badge: "DB" },
   { title: "Popular Mods", href: "#", icon: StarsIcon, badge: "5" },
   { title: "Settings", href: "#", icon: Settings01Icon },
   { title: "Help", href: "#", icon: HelpCircleIcon },
@@ -85,6 +82,7 @@ type AppSidebarProps = {
 };
 
 export function AppSidebar({ activePath = "/" }: AppSidebarProps) {
+  const { data: session } = useSession();
   const [masterDataOpen, setMasterDataOpen] = React.useState(
     activePath.startsWith("/master-data")
   );
@@ -94,6 +92,11 @@ export function AppSidebar({ activePath = "/" }: AppSidebarProps) {
   const [wiringOpen, setWiringOpen] = React.useState(
     activePath.startsWith("/wiring")
   );
+  const levelLabelMap = {
+    USER: "User",
+    DEVELOPER: "Developer",
+    MASTER: "Master",
+  } as const;
 
   return (
     <Sidebar collapsible="icon" variant="inset">
@@ -153,6 +156,46 @@ export function AppSidebar({ activePath = "/" }: AppSidebarProps) {
                   </Link>
                 </SidebarMenuItem>
               ))}
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  isActive={activePath.startsWith("/guitar")}
+                  onClick={() => setGuitarOpen((value) => !value)}
+                >
+                  <GuitarIcon />
+                  <span>Guitar</span>
+                  <HugeiconsIcon
+                    icon={guitarOpen ? ArrowDown01Icon : ArrowRight01Icon}
+                    strokeWidth={2}
+                    className="ml-auto"
+                  />
+                </SidebarMenuButton>
+                {guitarOpen ? (
+                  <SidebarMenuSub>
+                    <SidebarMenuSubItem>
+                      <SidebarMenuSubButton
+                        asChild
+                        isActive={activePath === "/guitar/brands"}
+                      >
+                        <Link href="/guitar/brands">
+                          <GuitarIcon />
+                          <span>Guitar Brand</span>
+                        </Link>
+                      </SidebarMenuSubButton>
+                    </SidebarMenuSubItem>
+                    <SidebarMenuSubItem>
+                      <SidebarMenuSubButton
+                        asChild
+                        isActive={activePath === "/guitar/models"}
+                      >
+                        <Link href="/guitar/models">
+                          <HugeiconsIcon icon={ViewIcon} strokeWidth={2} />
+                          <span>Guitar Models</span>
+                        </Link>
+                      </SidebarMenuSubButton>
+                    </SidebarMenuSubItem>
+                  </SidebarMenuSub>
+                ) : null}
+              </SidebarMenuItem>
               <SidebarMenuItem>
                 <SidebarMenuButton
                   isActive={activePath.startsWith("/master-data")}
@@ -294,46 +337,6 @@ export function AppSidebar({ activePath = "/" }: AppSidebarProps) {
               </SidebarMenuItem>
               <SidebarMenuItem>
                 <SidebarMenuButton
-                  isActive={activePath.startsWith("/guitar")}
-                  onClick={() => setGuitarOpen((value) => !value)}
-                >
-                  <GuitarIcon />
-                  <span>Guitar</span>
-                  <HugeiconsIcon
-                    icon={guitarOpen ? ArrowDown01Icon : ArrowRight01Icon}
-                    strokeWidth={2}
-                    className="ml-auto"
-                  />
-                </SidebarMenuButton>
-                {guitarOpen ? (
-                  <SidebarMenuSub>
-                    <SidebarMenuSubItem>
-                      <SidebarMenuSubButton
-                        asChild
-                        isActive={activePath === "/guitar/brands"}
-                      >
-                        <Link href="/guitar/brands">
-                          <GuitarIcon />
-                          <span>Guitar Brand</span>
-                        </Link>
-                      </SidebarMenuSubButton>
-                    </SidebarMenuSubItem>
-                    <SidebarMenuSubItem>
-                      <SidebarMenuSubButton
-                        asChild
-                        isActive={activePath === "/guitar/models"}
-                      >
-                        <Link href="/guitar/models">
-                          <HugeiconsIcon icon={ViewIcon} strokeWidth={2} />
-                          <span>Guitar Models</span>
-                        </Link>
-                      </SidebarMenuSubButton>
-                    </SidebarMenuSubItem>
-                  </SidebarMenuSub>
-                ) : null}
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton
                   isActive={activePath.startsWith("/wiring")}
                   onClick={() => setWiringOpen((value) => !value)}
                 >
@@ -383,6 +386,17 @@ export function AppSidebar({ activePath = "/" }: AppSidebarProps) {
                     <SidebarMenuSubItem>
                       <SidebarMenuSubButton
                         asChild
+                        isActive={activePath === "/wiring/diagram-sources"}
+                      >
+                        <Link href="/wiring/diagram-sources">
+                          <HugeiconsIcon icon={BookBookmark01Icon} strokeWidth={2} />
+                          <span>Diagram Source</span>
+                        </Link>
+                      </SidebarMenuSubButton>
+                    </SidebarMenuSubItem>
+                    <SidebarMenuSubItem>
+                      <SidebarMenuSubButton
+                        asChild
                         isActive={activePath === "/wiring/template-components"}
                       >
                         <Link href="/wiring/template-components">
@@ -404,6 +418,24 @@ export function AppSidebar({ activePath = "/" }: AppSidebarProps) {
                     </SidebarMenuSubItem>
                   </SidebarMenuSub>
                 ) : null}
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <Link
+                  href="/ai/diagram-import"
+                  data-slot="sidebar-menu-button"
+                  data-sidebar="menu-button"
+                  data-size="default"
+                  data-active={activePath === "/ai/diagram-import"}
+                  className={cn(
+                    sidebarMenuButtonVariants({ size: "default" })
+                  )}
+                >
+                  <HugeiconsIcon icon={StarsIcon} strokeWidth={2} />
+                  <span>AI Diagram Import</span>
+                  <span className="ml-auto rounded-sm bg-sidebar-accent px-1.5 py-0.5 text-[0.625rem] font-medium text-sidebar-accent-foreground">
+                    AI
+                  </span>
+                </Link>
               </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroupContent>
@@ -447,21 +479,14 @@ export function AppSidebar({ activePath = "/" }: AppSidebarProps) {
       </SidebarContent>
 
       <SidebarFooter>
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton>
-              <div className="flex size-8 items-center justify-center rounded-md bg-sidebar-accent font-medium text-sidebar-accent-foreground">
-                WG
-              </div>
-              <div className="grid flex-1 text-left text-xs">
-                <span className="truncate font-medium">Workshop Guide</span>
-                <span className="truncate text-sidebar-foreground/70">
-                  Build references and mods
-                </span>
-              </div>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
+        {session?.user ? (
+          <AuthUserControl
+            variant="sidebar"
+            name={session.user.name ?? session.user.email ?? "User"}
+            level={levelLabelMap[session.user.level]}
+            photo={session.user.photo}
+          />
+        ) : null}
       </SidebarFooter>
 
       <SidebarRail />

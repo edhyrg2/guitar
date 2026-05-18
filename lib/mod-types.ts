@@ -1,6 +1,7 @@
 export type ModRow = {
   id: string;
   name: string;
+  previewUrl: string | null;
   slug: string | null;
   description: string | null;
   requiresPushPull: boolean;
@@ -10,4 +11,4 @@ export type ModRow = {
   isActive: boolean;
 };
 
-export type ModInput = Omit<ModRow, "id">;
+export type ModInput = Omit<ModRow, "id" | "previewUrl">;

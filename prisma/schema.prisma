@@ -23,6 +23,7 @@ model User {
   emailVerifiedAt DateTime?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
+  customComponentDrafts CustomComponentDraft[]
 
   @@index([email])
   @@index([level])
@@ -252,6 +253,8 @@ model Mod {
 
 model ComponentAsset {
   id               String   @id @default(cuid())
+  ownerType        String?  @map("owner_type")
+  ownerId          String?  @map("owner_id")
   componentType    String   @map("component_type")
   name             String
   slug             String?  @unique
@@ -260,6 +263,7 @@ model ComponentAsset {
   width            Int?
   height           Int?
   anchorPointsJson Json?    @map("anchor_points_json")
+  editorDocumentJson Json?  @map("editor_document_json")
   styleType        String?  @map("style_type")
   isActive         Boolean  @default(true) @map("is_active")
   connectionPoints ComponentConnectionPoint[]
@@ -268,7 +272,26 @@ model ComponentAsset {
   @@index([name])
   @@index([componentType])
   @@index([isActive])
+  @@index([ownerType, ownerId])
+  @@unique([ownerType, ownerId])
   @@map("component_assets")
+}
+
+model CustomComponentDraft {
+  id           String   @id @default(cuid())
+  userId       String   @map("user_id")
+  name         String
+  slug         String?  @unique
+  description  String?
+  documentJson Json     @map("document_json")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  user         User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([userId])
+  @@index([name])
+  @@index([updatedAt])
+  @@map("custom_component_drafts")
 }
 
 model ComponentConnectionPoint {
@@ -324,6 +347,7 @@ model WiringTemplate {
   updatedAt             DateTime            @updatedAt @map("updated_at")
   pickupConfiguration   PickupConfiguration @relation(fields: [pickupConfigurationId], references: [id], onDelete: Restrict)
   switchType            SwitchType          @relation(fields: [switchTypeId], references: [id], onDelete: Restrict)
+  diagramSources        DiagramSource[]
   components            WiringTemplateComponent[]
   connections           WiringTemplateConnection[]
 
@@ -332,6 +356,27 @@ model WiringTemplate {
   @@index([switchTypeId])
   @@index([isVerified])
   @@map("wiring_templates")
+}
+
+model DiagramSource {
+  id               String         @id @default(cuid())
+  wiringTemplateId String         @map("wiring_template_id")
+  sourceName       String         @map("source_name")
+  sourceBrand      String?        @map("source_brand")
+  sourceUrl        String?        @map("source_url")
+  sourceFileUrl    String?        @map("source_file_url")
+  sourceType       String?        @map("source_type")
+  licenseNotes     String?        @map("license_notes")
+  isOfficial       Boolean        @default(false) @map("is_official")
+  verifiedAt       DateTime?      @map("verified_at")
+  notes            String?
+  wiringTemplate   WiringTemplate @relation(fields: [wiringTemplateId], references: [id], onDelete: Restrict)
+
+  @@index([wiringTemplateId])
+  @@index([sourceType])
+  @@index([isOfficial])
+  @@index([verifiedAt])
+  @@map("diagram_sources")
 }
 
 model WiringTemplateComponent {

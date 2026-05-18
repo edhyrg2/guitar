@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono, Inter } from "next/font/google";
 import "./globals.css";
+import { AppProviders } from "@/components/app-providers";
 import { cn } from "@/lib/utils";
 import { ThemeSync } from "@/components/theme-sync";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -41,8 +42,10 @@ export default function RootLayout({
       )}
     >
       <body className="min-h-full flex flex-col">
-        <ThemeSync />
-        <TooltipProvider>{children}</TooltipProvider>
+        <AppProviders>
+          <ThemeSync />
+          <TooltipProvider>{children}</TooltipProvider>
+        </AppProviders>
       </body>
     </html>
   );
