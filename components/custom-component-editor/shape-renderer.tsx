@@ -176,15 +176,15 @@ export function ShapeRenderer({
       {object.type === "text" ? (
         <>
           <Rect
-            width={object.width}
-            height={object.height}
+            width={dimensions.width}
+            height={dimensions.height}
             fill="rgba(0,0,0,0)"
             strokeEnabled={false}
           />
           <Text
             text={object.text}
-            width={object.width}
-            height={object.height}
+            width={dimensions.width}
+            height={dimensions.height}
             fontSize={object.fontSize}
             fontFamily={resolvedTextFontFamily}
             fontStyle={object.fontStyle ?? "normal"}

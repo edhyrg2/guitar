@@ -15,7 +15,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { useEditorStore } from "@/lib/custom-component-editor-store";
-import { getObjectDimensions } from "@/lib/custom-component-editor-utils";
+import {
+  getObjectDimensions,
+  withAutoSizedTextDimensions,
+} from "@/lib/custom-component-editor-utils";
 import type {
   CanvasObject,
   ConnectionPoint,
@@ -71,13 +74,23 @@ function resizeObject(object: CanvasObject, axis: "width" | "height", rawValue: 
   if (
     object.type === "rectangle" ||
     object.type === "ellipse" ||
-    object.type === "image" ||
-    object.type === "text"
+    object.type === "image"
   ) {
     return {
       ...object,
       [axis]: clampedValue,
     } as CanvasObject;
+  }
+
+  if (object.type === "text") {
+    const dimensions = getObjectDimensions(object);
+    const currentSize = axis === "width" ? dimensions.width : dimensions.height;
+    const ratio = clampedValue / Math.max(currentSize, 1);
+
+    return withAutoSizedTextDimensions({
+      ...object,
+      fontSize: Math.max(8, object.fontSize * ratio),
+    });
   }
 
   const dimensions = getObjectDimensions(object);
@@ -117,11 +130,11 @@ function toggleTextStyle(
 
   const nextFontStyle = Array.from(currentStyles).join(" ").trim();
 
-  return {
+  return withAutoSizedTextDimensions({
     ...object,
     fontStyle:
       nextFontStyle === "" ? "normal" : (nextFontStyle as typeof object.fontStyle),
-  };
+  });
 }
 
 export function PropertiesPanel() {
@@ -148,11 +161,38 @@ export function PropertiesPanel() {
   const updateObject = useEditorStore((state) => state.updateObject);
   const replaceObject = useEditorStore((state) => state.replaceObject);
   const updateConnectionPoint = useEditorStore((state) => state.updateConnectionPoint);
+  const beginHistoryTransaction = useEditorStore(
+    (state) => state.beginHistoryTransaction
+  );
+  const endHistoryTransaction = useEditorStore((state) => state.endHistoryTransaction);
   const deleteSelectedConnectionPoint = useEditorStore(
     (state) => state.deleteSelectedConnectionPoint
   );
   const hasMixedSelection =
     Boolean(selectedObject) && selectedConnectionPointIds.length > 0;
+  const colorHistoryRef = React.useRef<string | null>(null);
+
+  function beginColorHistorySession(key: string) {
+    if (colorHistoryRef.current === key) {
+      return;
+    }
+
+    if (colorHistoryRef.current !== null) {
+      endHistoryTransaction();
+    }
+
+    colorHistoryRef.current = key;
+    beginHistoryTransaction();
+  }
+
+  function endColorHistorySession(key: string) {
+    if (colorHistoryRef.current !== key) {
+      return;
+    }
+
+    colorHistoryRef.current = null;
+    endHistoryTransaction();
+  }
 
   if (!selectedObject && !selectedConnectionPoint) {
     return (
@@ -477,6 +517,9 @@ export function PropertiesPanel() {
                 className="h-9 w-14 shrink-0 px-1"
                 disabled={isTransparentColor(selectedObject.fill)}
                 value={isTransparentColor(selectedObject.fill) ? "#ffffff" : selectedObject.fill}
+                onPointerDown={() => beginColorHistorySession("object-fill")}
+                onFocus={() => beginColorHistorySession("object-fill")}
+                onBlur={() => endColorHistorySession("object-fill")}
                 onChange={(event) =>
                   updateObject(selectedObject.id, { fill: event.target.value })
                 }
@@ -498,6 +541,9 @@ export function PropertiesPanel() {
             <Input
               type="color"
               value={selectedObject.stroke === "transparent" ? "#ffffff" : selectedObject.stroke}
+              onPointerDown={() => beginColorHistorySession("object-stroke")}
+              onFocus={() => beginColorHistorySession("object-stroke")}
+              onBlur={() => endColorHistorySession("object-stroke")}
               onChange={(event) =>
                 updateObject(selectedObject.id, { stroke: event.target.value })
               }
@@ -587,7 +633,12 @@ export function PropertiesPanel() {
               <Input
                 value={selectedObject.text}
                 onChange={(event) =>
-                  updateObject(selectedObject.id, { text: event.target.value })
+                  replaceObject(
+                    withAutoSizedTextDimensions({
+                      ...selectedObject,
+                      text: event.target.value,
+                    })
+                  )
                 }
               />
             </PropertyRow>
@@ -608,9 +659,12 @@ export function PropertiesPanel() {
                         return;
                       }
 
-                      updateObject(selectedObject.id, {
-                        fontSize: Math.max(8, nextValue),
-                      });
+                      replaceObject(
+                        withAutoSizedTextDimensions({
+                          ...selectedObject,
+                          fontSize: Math.max(8, nextValue),
+                        })
+                      );
                     },
                   })
                 }
@@ -625,9 +679,12 @@ export function PropertiesPanel() {
                         return;
                       }
 
-                      updateObject(selectedObject.id, {
-                        fontSize: Math.max(8, nextValue),
-                      });
+                      replaceObject(
+                        withAutoSizedTextDimensions({
+                          ...selectedObject,
+                          fontSize: Math.max(8, nextValue),
+                        })
+                      );
                     },
                   })
                 }
@@ -736,6 +793,30 @@ function ConnectionPointProperties({
   onUpdate: (patch: Partial<ConnectionPoint>) => void;
   onDelete: () => void;
 }) {
+  const beginHistoryTransaction = useEditorStore(
+    (state) => state.beginHistoryTransaction
+  );
+  const endHistoryTransaction = useEditorStore((state) => state.endHistoryTransaction);
+  const colorHistoryActiveRef = React.useRef(false);
+
+  function beginColorHistorySession() {
+    if (colorHistoryActiveRef.current) {
+      return;
+    }
+
+    colorHistoryActiveRef.current = true;
+    beginHistoryTransaction();
+  }
+
+  function endColorHistorySession() {
+    if (!colorHistoryActiveRef.current) {
+      return;
+    }
+
+    colorHistoryActiveRef.current = false;
+    endHistoryTransaction();
+  }
+
   return (
     <Card className="rounded-3xl border-border/70 shadow-sm">
       <CardHeader>
@@ -769,6 +850,9 @@ function ConnectionPointProperties({
               type="color"
               className="h-9 w-14 shrink-0 px-1"
               value={connectionPoint.color}
+              onPointerDown={beginColorHistorySession}
+              onFocus={beginColorHistorySession}
+              onBlur={endColorHistorySession}
               onChange={(event) => onUpdate({ color: event.target.value })}
             />
             <Input

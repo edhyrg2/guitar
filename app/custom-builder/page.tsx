@@ -14,6 +14,10 @@ import { TopNavbar } from "@/components/top-navbar";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { getPrismaClient } from "@/lib/prisma";
 import { getWireTypeRows } from "@/lib/wire-type-data";
+import {
+  getWiringTemplatePickupConfigurationOptions,
+  getWiringTemplateSwitchTypeOptions,
+} from "@/lib/wiring-template-data";
 
 type AssetAnchorPoint = {
   key?: string;
@@ -26,26 +30,17 @@ type AssetAnchorPoint = {
   description?: string | null;
 };
 
-type OwnerAssetRecord = {
-  id: string;
-  ownerType: string | null;
-  ownerId: string | null;
-  componentType: string;
-  name: string;
-  slug: string | null;
-  svgUrl: string | null;
-  thumbnailUrl: string | null;
-  width: number | null;
-  height: number | null;
-  anchorPointsJson: unknown;
-  styleType: string | null;
-  isActive: boolean;
-};
-
 type NamedOwnerRecord = {
   id: string;
   name: string;
   slug?: string | null;
+  svgUrl?: string | null;
+  thumbnailUrl?: string | null;
+  width?: number | null;
+  height?: number | null;
+  anchorPointsJson?: unknown;
+  styleType?: string | null;
+  componentAssetId?: string | null;
   isActive: boolean;
 };
 
@@ -94,19 +89,12 @@ function parseAssetConnectionPoints(anchorPointsJson: unknown) {
 function buildBuilderAssets(
   owners: NamedOwnerRecord[],
   ownerType: string,
-  fallbackComponentType: string,
-  assetMap: Map<string, OwnerAssetRecord>
+  fallbackComponentType: string
 ) {
   return owners
     .filter((owner) => owner.isActive)
     .map((owner) => {
-      const asset = assetMap.get(`${ownerType}:${owner.id}`);
-
-      if (!asset) {
-        return null;
-      }
-
-      const connectionPoints = parseAssetConnectionPoints(asset.anchorPointsJson);
+      const connectionPoints = parseAssetConnectionPoints(owner.anchorPointsJson);
 
       if (connectionPoints.length === 0) {
         return null;
@@ -114,13 +102,14 @@ function buildBuilderAssets(
 
       return {
         id: `${ownerType}:${owner.id}`,
-        componentType: asset.componentType || fallbackComponentType,
-        name: owner.name || asset.name,
-        slug: owner.slug ?? asset.slug,
-        width: asset.width ?? 220,
-        height: asset.height ?? 140,
-        previewUrl: asset.svgUrl ?? asset.thumbnailUrl,
-        styleType: asset.styleType,
+        componentAssetId: owner.componentAssetId ?? null,
+        componentType: fallbackComponentType,
+        name: owner.name,
+        slug: owner.slug ?? null,
+        width: owner.width ?? 220,
+        height: owner.height ?? 140,
+        previewUrl: owner.svgUrl ?? owner.thumbnailUrl ?? null,
+        styleType: owner.styleType ?? null,
         connectionPoints,
       } satisfies BuilderAssetDefinition;
     })
@@ -141,47 +130,84 @@ async function getBuilderAssets(): Promise<BuilderAssetDefinition[]> {
     resistors,
     pickupTypes,
     mods,
-    ownedAssets,
   ] = await Promise.all([
     prisma.switchType.findMany({
       orderBy: [{ isActive: "desc" }, { name: "asc" }],
-      select: { id: true, name: true, slug: true, isActive: true },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        svgAssetId: true,
+        svgUrl: true,
+        thumbnailUrl: true,
+        width: true,
+        height: true,
+        anchorPointsJson: true,
+        styleType: true,
+        isActive: true,
+      },
     }),
     prisma.potType.findMany({
       orderBy: [{ isActive: "desc" }, { valueOhm: "asc" }, { name: "asc" }],
-      select: { id: true, name: true, isActive: true },
+      select: {
+        id: true,
+        name: true,
+        svgUrl: true,
+        thumbnailUrl: true,
+        width: true,
+        height: true,
+        anchorPointsJson: true,
+        styleType: true,
+        isActive: true,
+      },
     }),
     prisma.capacitor.findMany({
       orderBy: [{ isActive: "desc" }, { valueFarads: "asc" }],
-      select: { id: true, valueLabel: true, isActive: true },
+      select: {
+        id: true,
+        valueLabel: true,
+        svgUrl: true,
+        thumbnailUrl: true,
+        width: true,
+        height: true,
+        anchorPointsJson: true,
+        styleType: true,
+        isActive: true,
+      },
     }),
     prisma.resistor.findMany({
       orderBy: [{ isActive: "desc" }, { valueOhm: "asc" }],
-      select: { id: true, valueLabel: true, isActive: true },
+      select: {
+        id: true,
+        valueLabel: true,
+        svgUrl: true,
+        thumbnailUrl: true,
+        width: true,
+        height: true,
+        anchorPointsJson: true,
+        styleType: true,
+        isActive: true,
+      },
     }),
     prisma.pickupType.findMany({
       orderBy: [{ isActive: "desc" }, { name: "asc" }],
-      select: { id: true, name: true, slug: true, isActive: true },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        svgUrl: true,
+        thumbnailUrl: true,
+        width: true,
+        height: true,
+        anchorPointsJson: true,
+        styleType: true,
+        isActive: true,
+      },
     }),
     prisma.mod.findMany({
       orderBy: [{ isActive: "desc" }, { name: "asc" }],
-      select: { id: true, name: true, slug: true, isActive: true },
-    }),
-    prisma.componentAsset.findMany({
-      where: {
-        isActive: true,
-        ownerType: {
-          in: ["switch-type", "pot-type", "capacitor", "resistor", "pickup-type", "mod"],
-        },
-        ownerId: {
-          not: null,
-        },
-      },
       select: {
         id: true,
-        ownerType: true,
-        ownerId: true,
-        componentType: true,
         name: true,
         slug: true,
         svgUrl: true,
@@ -195,83 +221,110 @@ async function getBuilderAssets(): Promise<BuilderAssetDefinition[]> {
     }),
   ]);
 
-  const assetMap = new Map(
-    (ownedAssets as OwnerAssetRecord[])
-      .filter((asset) => asset.ownerType && asset.ownerId)
-      .map((asset) => [`${asset.ownerType}:${asset.ownerId}`, asset])
-  );
-
   return [
     ...buildBuilderAssets(
       switchTypes.map((item) => ({
         id: item.id,
         name: item.name,
         slug: item.slug,
+        svgUrl: item.svgUrl,
+        thumbnailUrl: item.thumbnailUrl,
+        width: item.width,
+        height: item.height,
+        anchorPointsJson: item.anchorPointsJson,
+        styleType: item.styleType,
+        componentAssetId: item.svgAssetId,
         isActive: item.isActive,
       })),
       "switch-type",
-      "Switch",
-      assetMap
+      "Switch"
     ),
     ...buildBuilderAssets(
       potTypes.map((item) => ({
         id: item.id,
         name: item.name,
+        svgUrl: item.svgUrl,
+        thumbnailUrl: item.thumbnailUrl,
+        width: item.width,
+        height: item.height,
+        anchorPointsJson: item.anchorPointsJson,
+        styleType: item.styleType,
         isActive: item.isActive,
       })),
       "pot-type",
-      "Potentiometer",
-      assetMap
+      "Potentiometer"
     ),
     ...buildBuilderAssets(
       capacitors.map((item) => ({
         id: item.id,
         name: item.valueLabel,
+        svgUrl: item.svgUrl,
+        thumbnailUrl: item.thumbnailUrl,
+        width: item.width,
+        height: item.height,
+        anchorPointsJson: item.anchorPointsJson,
+        styleType: item.styleType,
         isActive: item.isActive,
       })),
       "capacitor",
-      "Capacitor",
-      assetMap
+      "Capacitor"
     ),
     ...buildBuilderAssets(
       resistors.map((item) => ({
         id: item.id,
         name: item.valueLabel,
+        svgUrl: item.svgUrl,
+        thumbnailUrl: item.thumbnailUrl,
+        width: item.width,
+        height: item.height,
+        anchorPointsJson: item.anchorPointsJson,
+        styleType: item.styleType,
         isActive: item.isActive,
       })),
       "resistor",
-      "Resistor",
-      assetMap
+      "Resistor"
     ),
     ...buildBuilderAssets(
       pickupTypes.map((item) => ({
         id: item.id,
         name: item.name,
         slug: item.slug,
+        svgUrl: item.svgUrl,
+        thumbnailUrl: item.thumbnailUrl,
+        width: item.width,
+        height: item.height,
+        anchorPointsJson: item.anchorPointsJson,
+        styleType: item.styleType,
         isActive: item.isActive,
       })),
       "pickup-type",
-      "Pickup",
-      assetMap
+      "Pickup"
     ),
     ...buildBuilderAssets(
       mods.map((item) => ({
         id: item.id,
         name: item.name,
         slug: item.slug,
+        svgUrl: item.svgUrl,
+        thumbnailUrl: item.thumbnailUrl,
+        width: item.width,
+        height: item.height,
+        anchorPointsJson: item.anchorPointsJson,
+        styleType: item.styleType,
         isActive: item.isActive,
       })),
       "mod",
-      "Accessory / Mod",
-      assetMap
+      "Accessory / Mod"
     ),
   ];
 }
 
 export default async function CustomBuilderPage() {
-  const [builderAssets, wireTypes] = await Promise.all([
+  const [builderAssets, wireTypes, pickupConfigurationOptions, switchTypeOptions] = await Promise.all([
     getBuilderAssets(),
     getWireTypeRows(),
+    getWiringTemplatePickupConfigurationOptions(),
+    getWiringTemplateSwitchTypeOptions(),
   ]);
 
   return (
@@ -298,7 +351,12 @@ export default async function CustomBuilderPage() {
             ]}
           />
 
-          <CustomBuilderContent assets={builderAssets} wireTypes={wireTypes} />
+          <CustomBuilderContent
+            assets={builderAssets}
+            wireTypes={wireTypes}
+            pickupConfigurationOptions={pickupConfigurationOptions}
+            switchTypeOptions={switchTypeOptions}
+          />
         </div>
       </SidebarInset>
     </SidebarProvider>

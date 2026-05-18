@@ -8,6 +8,7 @@ export type WiringTemplateRow = {
   name: string;
   slug: string | null;
   description: string | null;
+  thumbnailUrl: string | null;
   pickupConfigurationId: string;
   pickupConfigurationName: string;
   switchTypeId: string;

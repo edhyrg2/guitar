@@ -1,7 +1,9 @@
 ﻿"use client";
 
 import * as React from "react";
+import type Konva from "konva";
 import Image from "next/image";
+import { useSession } from "next-auth/react";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
   AlignBottomIcon,
@@ -11,10 +13,13 @@ import {
   AlignTopIcon,
   AlignVerticalCenterIcon,
   Cancel01Icon,
+  DatabaseIcon,
   Delete02Icon,
+  FloppyDiskIcon,
   PaintBrush02Icon,
   PlusSignIcon,
   Redo02Icon,
+  Rocket01Icon,
   SearchAddIcon,
   SearchMinusIcon,
   Undo02Icon,
@@ -49,11 +54,27 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import {
+  normalizeBuilderSavedSetupDocument,
+  type BuilderSavedSetupDocument,
+  type BuilderSavedSetupRow,
+  type BuilderSavedSetupStatus,
+} from "@/lib/custom-builder-saved-setup-types";
+import type { WiringTemplateReference } from "@/lib/wiring-template-types";
 import type { WireTypeRow } from "@/lib/wire-type-types";
 
 export type BuilderAssetDefinition = {
   id: string;
+  componentAssetId: string | null;
   componentType: string;
   name: string;
   slug: string | null;
@@ -76,6 +97,7 @@ export type BuilderAssetDefinition = {
 type BuilderInstance = {
   id: string;
   assetId: string;
+  componentAssetId: string | null;
   name: string;
   componentType: string;
   x: number;
@@ -114,9 +136,25 @@ type BuilderSnapshot = {
   connections: BuilderConnection[];
 };
 
+type BuilderPublishFormState = {
+  name: string;
+  slug: string;
+  description: string;
+  pickupConfigurationId: string;
+  switchTypeId: string;
+  volumeCount: number;
+  toneCount: number;
+  difficultyLevel: string;
+  sourceType: string;
+  sourceUrl: string;
+  isVerified: boolean;
+};
+
 type CustomBuilderContentProps = {
   assets: BuilderAssetDefinition[];
   wireTypes: WireTypeRow[];
+  pickupConfigurationOptions: WiringTemplateReference[];
+  switchTypeOptions: WiringTemplateReference[];
 };
 
 const INITIAL_MAX_COMPONENT_WIDTH = 280;
@@ -268,6 +306,69 @@ function createBuilderSnapshot(
   };
 }
 
+function slugifyBuilderSetupName(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function createBuilderSavedSetupDocument(
+  instances: BuilderInstance[],
+  connections: BuilderConnection[],
+  selectedWireTypeId: string | null
+): BuilderSavedSetupDocument {
+  return {
+    version: 1,
+    selectedWireTypeId,
+    instances: cloneInstances(instances),
+    connections: cloneConnections(connections),
+  };
+}
+
+function getBuilderExportBounds(nodes: Konva.Node[]) {
+  if (nodes.length === 0) {
+    return null;
+  }
+
+  const bounds = nodes
+    .map((node) => node.getClientRect({ skipShadow: false, skipStroke: false }))
+    .filter((rect) => rect.width > 0 && rect.height > 0);
+
+  if (bounds.length === 0) {
+    return null;
+  }
+
+  const minX = Math.min(...bounds.map((rect) => rect.x));
+  const minY = Math.min(...bounds.map((rect) => rect.y));
+  const maxX = Math.max(...bounds.map((rect) => rect.x + rect.width));
+  const maxY = Math.max(...bounds.map((rect) => rect.y + rect.height));
+  const padding = 24;
+
+  return {
+    x: Math.max(0, Math.floor(minX - padding)),
+    y: Math.max(0, Math.floor(minY - padding)),
+    width: Math.ceil(maxX - minX + padding * 2),
+    height: Math.ceil(maxY - minY + padding * 2),
+  };
+}
+
+function formatSavedSetupLifecycleLabel(
+  status: BuilderSavedSetupStatus | null,
+  publishedTemplateId: string | null
+) {
+  if (publishedTemplateId) {
+    return "draft • published";
+  }
+
+  if (status === "DRAFT") {
+    return "draft";
+  }
+
+  return null;
+}
+
 function updateConnectionControlPoints(
   connection: BuilderConnection,
   segmentIndex: number,
@@ -325,6 +426,7 @@ function BuilderAssetNode({
   isSelected,
   isDeleteMode,
   selectedPoint,
+  renderMode = "full",
   onSelect,
   onDragStart,
   onMove,
@@ -340,6 +442,7 @@ function BuilderAssetNode({
   isSelected: boolean;
   isDeleteMode: boolean;
   selectedPoint: SelectedPoint | null;
+  renderMode?: "full" | "points-only";
     onSelect: (instanceId: string, additive?: boolean) => void;
     onDragStart: (instanceId: string, x: number, y: number) => void;
     onMove: (instanceId: string, x: number, y: number) => void;
@@ -380,70 +483,108 @@ function BuilderAssetNode({
 
   return (
     <Group
-      ref={nodeRef}
+      name="builder-export-content"
+      ref={renderMode === "full" ? nodeRef : undefined}
       x={instance.x}
       y={instance.y}
       rotation={instance.rotation}
       scaleX={instance.scale}
       scaleY={instance.scale}
-      draggable={!isDeleteMode}
-        onClick={(event) =>
-          onSelect(
-            instance.id,
-            event.evt.shiftKey || event.evt.ctrlKey || event.evt.metaKey
-          )
-        }
-        onTap={() => onSelect(instance.id)}
-        onDragStart={(event) => {
-          event.cancelBubble = true;
-          onDragStart(instance.id, snapToGrid(event.target.x()), snapToGrid(event.target.y()));
-        }}
-        onDragMove={(event) => {
-          event.cancelBubble = true;
-          onMove(instance.id, snapToGrid(event.target.x()), snapToGrid(event.target.y()));
-        }}
-        onDragEnd={(event) => {
-          event.cancelBubble = true;
-          onDragEnd();
-        }}
-      onContextMenu={() => {
-        onContextMenuSelect(instance.id);
-      }}
-      onTransformEnd={(event) => {
-        onTransformEnd(instance.id, {
-          x: snapToGrid(event.target.x()),
-          y: snapToGrid(event.target.y()),
-          scale: Math.max(0.2, event.target.scaleX()),
-          rotation: event.target.rotation(),
-        });
-      }}
+      draggable={renderMode === "full" && !isDeleteMode}
+      listening={renderMode === "full"}
+      onClick={
+        renderMode === "full"
+          ? (event) =>
+              onSelect(
+                instance.id,
+                event.evt.shiftKey || event.evt.ctrlKey || event.evt.metaKey
+              )
+          : undefined
+      }
+      onTap={renderMode === "full" ? () => onSelect(instance.id) : undefined}
+      onDragStart={
+        renderMode === "full"
+          ? (event) => {
+              event.cancelBubble = true;
+              onDragStart(instance.id, snapToGrid(event.target.x()), snapToGrid(event.target.y()));
+            }
+          : undefined
+      }
+      onDragMove={
+        renderMode === "full"
+          ? (event) => {
+              event.cancelBubble = true;
+              onMove(instance.id, snapToGrid(event.target.x()), snapToGrid(event.target.y()));
+            }
+          : undefined
+      }
+      onDragEnd={
+        renderMode === "full"
+          ? (event) => {
+              event.cancelBubble = true;
+              onDragEnd();
+            }
+          : undefined
+      }
+      onContextMenu={
+        renderMode === "full"
+          ? () => {
+              onContextMenuSelect(instance.id);
+            }
+          : undefined
+      }
+      onTransformEnd={
+        renderMode === "full"
+          ? (event) => {
+              onTransformEnd(instance.id, {
+                x: snapToGrid(event.target.x()),
+                y: snapToGrid(event.target.y()),
+                scale: Math.max(0.2, event.target.scaleX()),
+                rotation: event.target.rotation(),
+              });
+            }
+          : undefined
+      }
     >
-      <Rect
-        width={sourceWidth}
-        height={sourceHeight}
-        fill="rgba(0,0,0,0)"
-        strokeEnabled={false}
-      />
-      {image ? (
-        <KonvaImage
-          image={image}
-          width={sourceWidth}
-          height={sourceHeight}
-          shadowColor={isSelected ? "#0f172a" : undefined}
-          shadowBlur={isSelected ? 8 : 0}
-          shadowOpacity={isSelected ? 0.14 : 0}
-          shadowOffsetY={isSelected ? 3 : 0}
-        />
-      ) : (
+      {renderMode === "full" ? (
+        <>
+          <Rect
+            width={sourceWidth}
+            height={sourceHeight}
+            fill="rgba(0,0,0,0)"
+            strokeEnabled={false}
+          />
+          {image ? (
+            <KonvaImage
+              image={image}
+              width={sourceWidth}
+              height={sourceHeight}
+              shadowColor={isSelected ? "#0f172a" : undefined}
+              shadowBlur={isSelected ? 8 : 0}
+              shadowOpacity={isSelected ? 0.14 : 0}
+              shadowOffsetY={isSelected ? 3 : 0}
+            />
+          ) : (
+            <Rect
+              width={sourceWidth}
+              height={sourceHeight}
+              fill="#e2e8f0"
+              cornerRadius={12}
+              stroke={isSelected ? "#0f766e" : "#cbd5e1"}
+              strokeWidth={isSelected ? 2 : 1}
+            />
+          )}
+        </>
+      ) : null}
+      {renderMode === "points-only" ? (
         <Rect
           width={sourceWidth}
           height={sourceHeight}
-          fill="#e2e8f0"
-          cornerRadius={12}
-          stroke={isSelected ? "#0f766e" : "#cbd5e1"}
-          strokeWidth={isSelected ? 2 : 1}
+          fill="rgba(0,0,0,0)"
+          strokeEnabled={false}
+          listening={false}
         />
-      )}
+      ) : null}
       {asset.connectionPoints.map((point) => {
         const active =
           selectedPoint?.instanceId === instance.id &&
@@ -487,6 +628,7 @@ function BuilderAssetNode({
           fill="#0f172a"
           padding={4 * markerScale}
           width={Math.max(sourceWidth, 120)}
+          listening={false}
         />
       ) : null}
     </Group>
@@ -503,6 +645,11 @@ function BuilderTopbar({
   canStraightenWire,
   hasSelectedPoint,
   hasSelection,
+  canSaveSetup,
+  saveBusy,
+  publishBusy,
+  currentSetupLabel,
+  statusText,
   onWireTypeChange,
   onUndo,
   onRedo,
@@ -514,6 +661,9 @@ function BuilderTopbar({
   onStraightenWire,
   onDeleteSelection,
   onClearCanvas,
+  onSaveDraft,
+  onPublish,
+  onOpenSavedSetups,
 }: {
   selectedWireTypeId: string;
   wireTypes: WireTypeRow[];
@@ -524,6 +674,11 @@ function BuilderTopbar({
   canStraightenWire: boolean;
   hasSelectedPoint: boolean;
   hasSelection: boolean;
+  canSaveSetup: boolean;
+  saveBusy: boolean;
+  publishBusy: boolean;
+  currentSetupLabel?: string | null;
+  statusText?: string | null;
   onWireTypeChange: (wireTypeId: string) => void;
   onUndo: () => void;
   onRedo: () => void;
@@ -535,6 +690,9 @@ function BuilderTopbar({
   onStraightenWire: () => void;
   onDeleteSelection: () => void;
   onClearCanvas: () => void;
+  onSaveDraft: () => void;
+  onPublish: () => void;
+  onOpenSavedSetups: () => void;
 }) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/70 bg-background/95 px-4 py-3 backdrop-blur">
@@ -602,6 +760,38 @@ function BuilderTopbar({
       </div>
 
       <div className="flex flex-wrap items-center justify-end gap-2">
+        {currentSetupLabel ? (
+          <div className="rounded-full border border-border/70 bg-card px-3 py-1 text-xs text-muted-foreground shadow-sm">
+            Setup: <span className="font-medium text-foreground">{currentSetupLabel}</span>
+          </div>
+        ) : null}
+        {statusText ? (
+          <div className="rounded-full border border-border/70 bg-card px-3 py-1 text-xs text-muted-foreground shadow-sm">
+            {statusText}
+          </div>
+        ) : null}
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={!canSaveSetup || saveBusy}
+          onClick={onSaveDraft}
+        >
+          <HugeiconsIcon icon={FloppyDiskIcon} strokeWidth={2} data-icon="inline-start" />
+          {saveBusy ? "Saving..." : "Save Draft"}
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={!canSaveSetup || publishBusy}
+          onClick={onPublish}
+        >
+          <HugeiconsIcon icon={Rocket01Icon} strokeWidth={2} data-icon="inline-start" />
+          {publishBusy ? "Publishing..." : "Publish"}
+        </Button>
+        <Button variant="outline" size="sm" onClick={onOpenSavedSetups}>
+          <HugeiconsIcon icon={DatabaseIcon} strokeWidth={2} data-icon="inline-start" />
+          Saved Setups
+        </Button>
         <Button variant="outline" size="sm" onClick={onCancelWiring} disabled={!hasSelectedPoint}>
           <HugeiconsIcon icon={Cancel01Icon} strokeWidth={2} data-icon="inline-start" />
           Cancel Wiring
@@ -634,7 +824,10 @@ function BuilderTopbar({
 export function CustomBuilderContent({
   assets,
   wireTypes,
+  pickupConfigurationOptions,
+  switchTypeOptions,
 }: CustomBuilderContentProps) {
+  const { data: session, status: sessionStatus } = useSession();
   const [instances, setInstances] = React.useState<BuilderInstance[]>([]);
   const [connections, setConnections] = React.useState<BuilderConnection[]>([]);
   const [selectedInstanceId, setSelectedInstanceId] = React.useState<string | null>(null);
@@ -657,6 +850,38 @@ export function CustomBuilderContent({
   const [pointerPosition, setPointerPosition] = React.useState<{ x: number; y: number } | null>(
     null
   );
+  const [savedSetups, setSavedSetups] = React.useState<BuilderSavedSetupRow[]>([]);
+  const [activeSavedSetupId, setActiveSavedSetupId] = React.useState<string | null>(null);
+  const [activeSavedSetupName, setActiveSavedSetupName] = React.useState<string | null>(null);
+  const [savedSetupStatus, setSavedSetupStatus] = React.useState<BuilderSavedSetupStatus | null>(
+    null
+  );
+  const [activePublishedTemplateId, setActivePublishedTemplateId] = React.useState<string | null>(
+    null
+  );
+  const [savedSetupDescription, setSavedSetupDescription] = React.useState("");
+  const [saveDialogOpen, setSaveDialogOpen] = React.useState(false);
+  const [savedSetupBrowserOpen, setSavedSetupBrowserOpen] = React.useState(false);
+  const [setupNameInput, setSetupNameInput] = React.useState("");
+  const [setupDescriptionInput, setSetupDescriptionInput] = React.useState("");
+  const [publishDialogOpen, setPublishDialogOpen] = React.useState(false);
+  const [publishErrorMessage, setPublishErrorMessage] = React.useState<string | null>(null);
+  const [publishForm, setPublishForm] = React.useState<BuilderPublishFormState>({
+    name: "",
+    slug: "",
+    description: "",
+    pickupConfigurationId: pickupConfigurationOptions[0]?.id ?? "",
+    switchTypeId: switchTypeOptions[0]?.id ?? "",
+    volumeCount: 1,
+    toneCount: 1,
+    difficultyLevel: "",
+    sourceType: "Custom Builder",
+    sourceUrl: "",
+    isVerified: false,
+  });
+  const [isSavingSetup, setIsSavingSetup] = React.useState(false);
+  const [isLoadingSavedSetups, setIsLoadingSavedSetups] = React.useState(false);
+  const [savedSetupActionId, setSavedSetupActionId] = React.useState<string | null>(null);
   const deferredAssetQuery = React.useDeferredValue(assetQuery);
   const stageWrapperRef = React.useRef<HTMLDivElement | null>(null);
   const transformerRef = React.useRef<React.ElementRef<typeof Transformer> | null>(null);
@@ -689,6 +914,7 @@ export function CustomBuilderContent({
   const nextIdRef = React.useRef(1);
   const worldViewportWidth = stageSize.width / canvasScale;
   const worldViewportHeight = stageSize.height / canvasScale;
+  const canPersistSavedSetups = sessionStatus === "authenticated";
   latestInstancesRef.current = instances;
   latestConnectionsRef.current = connections;
 
@@ -750,6 +976,25 @@ export function CustomBuilderContent({
   );
   const selectedConnection =
     connections.find((connection) => connection.id === selectedConnectionId) ?? null;
+  const persistedDocument = React.useMemo(
+    () =>
+      createBuilderSavedSetupDocument(
+        instances,
+        connections,
+        selectedWireTypeId || null
+      ),
+    [connections, instances, selectedWireTypeId]
+  );
+
+  const persistSavedSetupListEntry = React.useCallback((nextSetup: BuilderSavedSetupRow) => {
+    setSavedSetups((current) => {
+      const remaining = current.filter((item) => item.id !== nextSetup.id);
+      return [nextSetup, ...remaining].sort(
+        (left, right) =>
+          new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime()
+      );
+    });
+  }, []);
   const handleImageReady = React.useEffectEvent(
     (instanceId: string, renderWidth: number, renderHeight: number) => {
       setInstances((current) => {
@@ -1094,6 +1339,78 @@ export function CustomBuilderContent({
     historyTransactionSnapshotRef.current = null;
   }
 
+  function applySavedSetupDocument(document: BuilderSavedSetupDocument) {
+    const normalized = normalizeBuilderSavedSetupDocument(document);
+    const nextInstances = cloneInstances(normalized.instances);
+    const nextConnections = cloneConnections(normalized.connections).filter((connection) => {
+      const fromExists = nextInstances.some((instance) => instance.id === connection.fromInstanceId);
+      const toExists = nextInstances.some((instance) => instance.id === connection.toInstanceId);
+      return fromExists && toExists;
+    });
+    const maxInstanceSequence = nextInstances.reduce((currentMax, instance) => {
+      const match = instance.id.match(/builder-instance-(\d+)$/);
+      const value = match ? Number(match[1]) : 0;
+      return Number.isFinite(value) ? Math.max(currentMax, value) : currentMax;
+    }, 0);
+    const maxConnectionSequence = nextConnections.reduce((currentMax, connection) => {
+      const match = connection.id.match(/builder-connection-(\d+)$/);
+      const value = match ? Number(match[1]) : 0;
+      return Number.isFinite(value) ? Math.max(currentMax, value) : currentMax;
+    }, 0);
+
+    nextIdRef.current = Math.max(nextIdRef.current, maxInstanceSequence, maxConnectionSequence) + 1;
+    setSelectedWireTypeId(
+      normalized.selectedWireTypeId && wireTypes.some((item) => item.id === normalized.selectedWireTypeId)
+        ? normalized.selectedWireTypeId
+        : wireTypes[0]?.id ?? ""
+    );
+    applySnapshot({
+      instances: nextInstances,
+      connections: nextConnections,
+    });
+  }
+
+  const createPublishThumbnailDataUrl = React.useCallback(() => {
+    const stage = stageRef.current;
+
+    if (!stage) {
+      return null;
+    }
+
+    const hiddenNodes = Array.from(stage.find(".builder-export-hidden"));
+    const contentNodes = Array.from(stage.find(".builder-export-content"));
+    const previousVisibility = hiddenNodes.map((node) => node.visible());
+    const previousStagePosition = { x: stage.x(), y: stage.y() };
+    const previousStageScale = { x: stage.scaleX(), y: stage.scaleY() };
+
+    hiddenNodes.forEach((node) => node.visible(false));
+    stage.position({ x: 0, y: 0 });
+    stage.scale({ x: 1, y: 1 });
+    stage.batchDraw();
+
+    try {
+      const exportBounds = getBuilderExportBounds(contentNodes);
+
+      if (!exportBounds) {
+        return null;
+      }
+
+      return stage.toDataURL({
+        x: exportBounds.x,
+        y: exportBounds.y,
+        width: exportBounds.width,
+        height: exportBounds.height,
+        pixelRatio: 2,
+        mimeType: "image/png",
+      });
+    } finally {
+      stage.position(previousStagePosition);
+      stage.scale(previousStageScale);
+      hiddenNodes.forEach((node, index) => node.visible(previousVisibility[index] ?? true));
+      stage.batchDraw();
+    }
+  }, []);
+
   const undoBuilder = React.useCallback(() => {
     setPastSnapshots((current) => {
       const previous = current.at(-1);
@@ -1201,6 +1518,7 @@ export function CustomBuilderContent({
       {
         id,
         assetId: asset.id,
+        componentAssetId: asset.componentAssetId,
         name: asset.name,
         componentType: asset.componentType,
         x: snapToGrid(Math.max(24, x - asset.width / 2)),
@@ -1424,6 +1742,292 @@ export function CustomBuilderContent({
     setSelectedPoint(null);
     setCanvasMessage("Canvas dibersihkan.");
   }
+
+  const loadSavedSetups = React.useCallback(async () => {
+    if (!canPersistSavedSetups) {
+      return;
+    }
+
+    setIsLoadingSavedSetups(true);
+
+    try {
+      const response = await fetch("/api/builder-saved-setups");
+      const payload = (await response.json()) as
+        | BuilderSavedSetupRow[]
+        | { error?: string };
+
+      if (!response.ok || !Array.isArray(payload)) {
+        throw new Error(
+          !Array.isArray(payload) && payload.error
+            ? payload.error
+            : "Failed to load saved setups."
+        );
+      }
+
+      setSavedSetups(payload);
+    } catch (error) {
+      setCanvasMessage(error instanceof Error ? error.message : "Failed to load saved setups.");
+    } finally {
+      setIsLoadingSavedSetups(false);
+    }
+  }, [canPersistSavedSetups]);
+
+  const saveSetupDraft = React.useCallback(
+    async () => {
+      if (!canPersistSavedSetups) {
+        setCanvasMessage("Sign in to save builder setups.");
+        return;
+      }
+
+      const name = setupNameInput.trim();
+      const description = setupDescriptionInput.trim();
+
+      if (!name) {
+        setCanvasMessage("Setup name is required.");
+        return;
+      }
+
+      setIsSavingSetup(true);
+
+      try {
+        const response = await fetch(
+          activeSavedSetupId ? `/api/builder-saved-setups/${activeSavedSetupId}` : "/api/builder-saved-setups",
+          {
+            method: activeSavedSetupId ? "PUT" : "POST",
+            headers: {
+              "content-type": "application/json",
+            },
+            body: JSON.stringify({
+              name,
+              slug: null,
+              description: description || null,
+              status: "DRAFT" satisfies BuilderSavedSetupStatus,
+              document: persistedDocument,
+            }),
+          }
+        );
+        const payload = (await response.json()) as
+          | BuilderSavedSetupRow
+          | { error?: string };
+
+        if (!response.ok || Array.isArray(payload) || !("id" in payload)) {
+          throw new Error(
+            !Array.isArray(payload) && "error" in payload && payload.error
+              ? payload.error
+              : "Failed to save setup."
+          );
+        }
+
+        setActiveSavedSetupId(payload.id);
+        setActiveSavedSetupName(payload.name);
+        setSavedSetupStatus(payload.status);
+        setActivePublishedTemplateId(payload.publishedTemplateId);
+        setSavedSetupDescription(payload.description ?? "");
+        persistSavedSetupListEntry(payload);
+        setCanvasMessage(`Draft "${payload.name}" saved.`);
+        setSaveDialogOpen(false);
+      } catch (error) {
+        setCanvasMessage(error instanceof Error ? error.message : "Failed to save setup.");
+      } finally {
+        setIsSavingSetup(false);
+      }
+    },
+    [
+      activeSavedSetupId,
+      canPersistSavedSetups,
+      persistSavedSetupListEntry,
+      persistedDocument,
+      setupDescriptionInput,
+      setupNameInput,
+    ]
+  );
+
+  const deleteSavedSetup = React.useCallback(
+    async (setupId: string) => {
+      setSavedSetupActionId(setupId);
+
+      try {
+        const response = await fetch(`/api/builder-saved-setups/${setupId}`, {
+          method: "DELETE",
+        });
+        const payload = (await response.json()) as { error?: string; success?: boolean };
+
+        if (!response.ok) {
+          throw new Error(payload.error || "Failed to delete saved setup.");
+        }
+
+        setSavedSetups((current) => current.filter((item) => item.id !== setupId));
+
+        if (activeSavedSetupId === setupId) {
+          setActiveSavedSetupId(null);
+          setActiveSavedSetupName(null);
+          setSavedSetupStatus(null);
+          setActivePublishedTemplateId(null);
+          setSavedSetupDescription("");
+        }
+
+        setCanvasMessage("Saved setup deleted.");
+      } catch (error) {
+        setCanvasMessage(error instanceof Error ? error.message : "Failed to delete saved setup.");
+      } finally {
+        setSavedSetupActionId(null);
+      }
+    },
+    [activeSavedSetupId]
+  );
+
+  const openSaveDraftDialog = React.useCallback(() => {
+    if (!canPersistSavedSetups) {
+      setCanvasMessage("Sign in to save builder setups.");
+      return;
+    }
+
+    setSetupNameInput(activeSavedSetupName ?? "Untitled Builder Setup");
+    setSetupDescriptionInput(savedSetupDescription);
+    setSaveDialogOpen(true);
+  }, [activeSavedSetupName, canPersistSavedSetups, savedSetupDescription]);
+
+  const openPublishDialog = React.useCallback(() => {
+    if (!canPersistSavedSetups) {
+      setCanvasMessage("Sign in to publish builder setups.");
+      return;
+    }
+
+    const baseName = activeSavedSetupName ?? "Builder Setup";
+
+    setPublishForm({
+      name: baseName,
+      slug: slugifyBuilderSetupName(baseName),
+      description: savedSetupDescription,
+      pickupConfigurationId: pickupConfigurationOptions[0]?.id ?? "",
+      switchTypeId: switchTypeOptions[0]?.id ?? "",
+      volumeCount: 1,
+      toneCount: 1,
+      difficultyLevel: "",
+      sourceType: "Custom Builder",
+      sourceUrl: "",
+      isVerified: false,
+    });
+    setPublishErrorMessage(null);
+    setPublishDialogOpen(true);
+  }, [
+    activeSavedSetupName,
+    canPersistSavedSetups,
+    pickupConfigurationOptions,
+    savedSetupDescription,
+    switchTypeOptions,
+  ]);
+
+  const openSavedSetupBrowser = React.useCallback(() => {
+    setSavedSetupBrowserOpen(true);
+
+    if (canPersistSavedSetups) {
+      void loadSavedSetups();
+    }
+  }, [canPersistSavedSetups, loadSavedSetups]);
+
+  const publishToWiringTemplate = React.useCallback(async () => {
+    if (!canPersistSavedSetups) {
+      setCanvasMessage("Sign in to publish builder setups.");
+      return;
+    }
+
+    if (instances.length === 0) {
+      setPublishErrorMessage("Add at least one component before publishing.");
+      setCanvasMessage("Add at least one component before publishing.");
+      return;
+    }
+
+    if (!publishForm.name.trim() || !publishForm.slug.trim()) {
+      setPublishErrorMessage("Name and slug are required to publish.");
+      setCanvasMessage("Name and slug are required to publish.");
+      return;
+    }
+
+    const thumbnailDataUrl = createPublishThumbnailDataUrl();
+
+    if (!thumbnailDataUrl) {
+      setPublishErrorMessage("Thumbnail publish tidak bisa dibuat dari canvas saat ini.");
+      setCanvasMessage("Thumbnail publish tidak bisa dibuat dari canvas saat ini.");
+      return;
+    }
+
+    setIsSavingSetup(true);
+    setPublishErrorMessage(null);
+
+    try {
+      const response = await fetch("/api/custom-builder-publish", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          savedSetupId: activeSavedSetupId,
+          thumbnailDataUrl,
+          name: publishForm.name.trim(),
+          slug: publishForm.slug.trim(),
+          description: publishForm.description.trim() || null,
+          pickupConfigurationId: publishForm.pickupConfigurationId,
+          switchTypeId: publishForm.switchTypeId,
+          volumeCount: publishForm.volumeCount,
+          toneCount: publishForm.toneCount,
+          difficultyLevel: publishForm.difficultyLevel.trim() || null,
+          sourceType: publishForm.sourceType.trim() || null,
+          sourceUrl: publishForm.sourceUrl.trim() || null,
+          isVerified: publishForm.isVerified,
+          document: persistedDocument,
+        }),
+      });
+      const rawPayload = await response.text();
+      const payload = rawPayload
+        ? ((JSON.parse(rawPayload) as {
+            error?: string;
+            template?: { id: string; name: string; slug: string | null };
+            savedSetup?: BuilderSavedSetupRow | null;
+          }))
+        : {};
+
+      if (!response.ok) {
+        throw new Error(
+          ("error" in payload && payload.error) ||
+            rawPayload ||
+            `Failed to publish builder setup. HTTP ${response.status}`
+        );
+      }
+
+      if (payload.savedSetup) {
+        setActiveSavedSetupId(payload.savedSetup.id);
+        setActiveSavedSetupName(payload.savedSetup.name);
+        setSavedSetupStatus(payload.savedSetup.status);
+        setActivePublishedTemplateId(payload.savedSetup.publishedTemplateId);
+        setSavedSetupDescription(payload.savedSetup.description ?? "");
+        persistSavedSetupListEntry(payload.savedSetup);
+      } else {
+        setSavedSetupStatus("DRAFT");
+      }
+
+      setCanvasMessage(
+        `Published wiring template "${payload.template?.name ?? publishForm.name.trim()}".`
+      );
+      setPublishErrorMessage(null);
+      setPublishDialogOpen(false);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to publish builder setup.";
+      setPublishErrorMessage(message);
+      setCanvasMessage(message);
+    } finally {
+      setIsSavingSetup(false);
+    }
+  }, [
+    activeSavedSetupId,
+    canPersistSavedSetups,
+    instances.length,
+    persistSavedSetupListEntry,
+    persistedDocument,
+    publishForm,
+    createPublishThumbnailDataUrl,
+  ]);
 
   function removeSelectedConnection() {
     if (!selectedConnectionId) {
@@ -1930,6 +2534,28 @@ export function CustomBuilderContent({
               canStraightenWire={Boolean(selectedConnectionId)}
               hasSelectedPoint={Boolean(selectedPoint)}
               hasSelection={Boolean(selectedInstanceIds.length > 0 || selectedConnectionId)}
+              canSaveSetup={canPersistSavedSetups}
+              saveBusy={isSavingSetup && saveDialogOpen}
+              publishBusy={isSavingSetup && publishDialogOpen}
+              currentSetupLabel={
+                activeSavedSetupName
+                  ? `${activeSavedSetupName}${
+                      formatSavedSetupLifecycleLabel(
+                        savedSetupStatus,
+                        activePublishedTemplateId
+                      )
+                        ? ` (${formatSavedSetupLifecycleLabel(savedSetupStatus, activePublishedTemplateId)})`
+                        : ""
+                    }`
+                  : null
+              }
+              statusText={
+                sessionStatus === "loading"
+                  ? "Checking session..."
+                  : canPersistSavedSetups
+                    ? null
+                    : "Saved setups require sign-in."
+              }
               onWireTypeChange={setSelectedWireTypeId}
               onUndo={undoBuilder}
               onRedo={redoBuilder}
@@ -1947,6 +2573,9 @@ export function CustomBuilderContent({
                 removeSelectedInstances();
               }}
               onClearCanvas={clearCanvas}
+              onSaveDraft={openSaveDraftDialog}
+              onPublish={openPublishDialog}
+              onOpenSavedSetups={openSavedSetupBrowser}
             />
             <div className="border-b border-border/70 px-4 py-3 text-sm text-muted-foreground">
               {canvasMessage}
@@ -2092,6 +2721,7 @@ export function CustomBuilderContent({
                         ).map((x) => (
                           <Line
                             key={`grid-v-${x}`}
+                            name="builder-export-hidden"
                             points={[x, 0, x, worldViewportHeight]}
                             stroke={GRID_LINE_COLOR}
                             strokeWidth={1}
@@ -2104,178 +2734,13 @@ export function CustomBuilderContent({
                         ).map((y) => (
                           <Line
                             key={`grid-h-${y}`}
+                            name="builder-export-hidden"
                             points={[0, y, worldViewportWidth, y]}
                             stroke={GRID_LINE_COLOR}
                             strokeWidth={1}
                             listening={false}
                           />
                         ))}
-                        {connections.map((connection) => {
-                          const from = getPoint(connection.fromInstanceId, connection.fromPointKey);
-                          const to = getPoint(connection.toInstanceId, connection.toPointKey);
-                          const wireType = wireTypes.find((item) => item.id === connection.wireTypeId);
-                          const isSelected = connection.id === selectedConnectionId;
-
-                          if (!from || !to) {
-                            return null;
-                          }
-
-                          const renderedControlPoints = normalizeConnectionControlPoints(
-                            connection.controlPoints,
-                            from,
-                            to
-                          );
-                          const pathPoints = [from, ...renderedControlPoints, to];
-
-                          return (
-                            <React.Fragment key={connection.id}>
-                              <Line
-                                points={flattenPathPoints(pathPoints)}
-                                stroke={wireType?.hexColor ?? "#334155"}
-                                strokeWidth={isSelected ? 5 : 4}
-                                lineCap="round"
-                                lineJoin="round"
-                                onClick={() => {
-                                  setSelectedConnectionId(connection.id);
-                                  setSelectedInstanceId(null);
-                                  setSelectedInstanceIds([]);
-                                }}
-                                onTap={() => {
-                                  setSelectedConnectionId(connection.id);
-                                  setSelectedInstanceId(null);
-                                  setSelectedInstanceIds([]);
-                                }}
-                              />
-                              {pathPoints.slice(0, -1).map((point, index) => {
-                                const nextPoint = pathPoints[index + 1];
-                                const isVertical =
-                                  Math.abs(point.x - nextPoint.x) < Math.abs(point.y - nextPoint.y);
-                                const segmentLength = isVertical
-                                  ? Math.abs(point.y - nextPoint.y)
-                                  : Math.abs(point.x - nextPoint.x);
-
-                                if (segmentLength < 8) {
-                                  return null;
-                                }
-
-                                return (
-                                  <Line
-                                    key={`${connection.id}-segment-${index}`}
-                                    points={[point.x, point.y, nextPoint.x, nextPoint.y]}
-                                    stroke="rgba(15, 23, 42, 0.01)"
-                                    strokeWidth={WIRE_HIT_STROKE_WIDTH}
-                                    lineCap="round"
-                                    draggable
-                                    onDragStart={() => {
-                                      beginHistoryTransaction();
-                                    }}
-                                    onClick={() => {
-                                      setSelectedConnectionId(connection.id);
-                                      setSelectedInstanceId(null);
-                                      setSelectedInstanceIds([]);
-                                    }}
-                                    onTap={() => {
-                                      setSelectedConnectionId(connection.id);
-                                      setSelectedInstanceId(null);
-                                      setSelectedInstanceIds([]);
-                                    }}
-                                    onDblClick={(event) => {
-                                      const stage = event.target.getStage();
-                                      const position = stage?.getPointerPosition();
-
-                                      if (!position) {
-                                        return;
-                                      }
-
-                                      handleConnectionSegmentInsert(connection.id, index, position);
-                                      setSelectedConnectionId(connection.id);
-                                      setSelectedInstanceId(null);
-                                      setSelectedInstanceIds([]);
-                                      setCanvasMessage("Titik belok baru ditambahkan ke kabel.");
-                                    }}
-                                    onDragMove={(event) => {
-                                      const delta = isVertical ? event.target.x() : event.target.y();
-                                      handleConnectionSegmentDrag(
-                                        connection.id,
-                                        index,
-                                        isVertical ? "x" : "y",
-                                        delta
-                                      );
-                                      event.target.position({ x: 0, y: 0 });
-                                      setSelectedConnectionId(connection.id);
-                                      setSelectedInstanceId(null);
-                                      setSelectedInstanceIds([]);
-                                    }}
-                                    onDragEnd={() => {
-                                      commitHistoryTransaction();
-                                    }}
-                                  />
-                                );
-                              })}
-                              {isSelected
-                                ? renderedControlPoints.map((controlPoint, index) => (
-                                    <Circle
-                                      key={`${connection.id}-handle-${index}`}
-                                      x={controlPoint.x}
-                                      y={controlPoint.y}
-                                      radius={WIRE_HANDLE_RADIUS}
-                                      fill="#ffffff"
-                                      stroke={wireType?.hexColor ?? "#334155"}
-                                      strokeWidth={2}
-                                      draggable
-                                      onDragStart={() => {
-                                        beginHistoryTransaction();
-                                      }}
-                                      onClick={() => {
-                                        setSelectedConnectionId(connection.id);
-                                        setSelectedInstanceId(null);
-                                        setSelectedInstanceIds([]);
-                                      }}
-                                      onTap={() => {
-                                        setSelectedConnectionId(connection.id);
-                                        setSelectedInstanceId(null);
-                                        setSelectedInstanceIds([]);
-                                      }}
-                                      onDblClick={() => {
-                                        handleConnectionControlPointRemove(connection.id, index);
-                                        setCanvasMessage("Titik belok kabel dihapus.");
-                                      }}
-                                      onDragMove={(event) => {
-                                        handleConnectionControlPointDrag(
-                                          connection.id,
-                                          index,
-                                          event.target.x(),
-                                          event.target.y()
-                                        );
-                                      }}
-                                      onDragEnd={() => {
-                                        commitHistoryTransaction();
-                                      }}
-                                    />
-                                  ))
-                                : null}
-                              <Circle x={from.x} y={from.y} radius={4} fill={wireType?.hexColor ?? "#334155"} />
-                              <Circle x={to.x} y={to.y} radius={4} fill={wireType?.hexColor ?? "#334155"} />
-                            </React.Fragment>
-                          );
-                        })}
-                        {selectedPoint && pointerPosition ? (() => {
-                          const point = getPoint(selectedPoint.instanceId, selectedPoint.pointKey);
-
-                          if (!point) {
-                            return null;
-                          }
-
-                          return (
-                            <Line
-                              points={[point.x, point.y, pointerPosition.x, pointerPosition.y]}
-                              stroke="#f97316"
-                              strokeWidth={3}
-                              dash={[10, 8]}
-                              lineCap="round"
-                            />
-                          );
-                        })() : null}
                         {selectionBox ? (() => {
                           const rect = getSelectionRect(selectionBox);
 
@@ -2285,6 +2750,7 @@ export function CustomBuilderContent({
 
                           return (
                             <Rect
+                              name="builder-export-hidden"
                               x={rect.x}
                               y={rect.y}
                               width={rect.width}
@@ -2385,7 +2851,224 @@ export function CustomBuilderContent({
                             />
                           );
                         })}
+                        {connections.map((connection) => {
+                          const from = getPoint(connection.fromInstanceId, connection.fromPointKey);
+                          const to = getPoint(connection.toInstanceId, connection.toPointKey);
+                          const wireType = wireTypes.find((item) => item.id === connection.wireTypeId);
+                          const isSelected = connection.id === selectedConnectionId;
+                          const wiringSelectionActive = Boolean(selectedPoint);
+
+                          if (!from || !to) {
+                            return null;
+                          }
+
+                          const renderedControlPoints = normalizeConnectionControlPoints(
+                            connection.controlPoints,
+                            from,
+                            to
+                          );
+                          const pathPoints = [from, ...renderedControlPoints, to];
+
+                          return (
+                            <React.Fragment key={connection.id}>
+                              <Line
+                                name="builder-export-content"
+                                points={flattenPathPoints(pathPoints)}
+                                stroke={wireType?.hexColor ?? "#334155"}
+                                strokeWidth={isSelected ? 5 : 4}
+                                lineCap="round"
+                                lineJoin="round"
+                                listening={!wiringSelectionActive}
+                                onClick={() => {
+                                  setSelectedConnectionId(connection.id);
+                                  setSelectedInstanceId(null);
+                                  setSelectedInstanceIds([]);
+                                }}
+                                onTap={() => {
+                                  setSelectedConnectionId(connection.id);
+                                  setSelectedInstanceId(null);
+                                  setSelectedInstanceIds([]);
+                                }}
+                              />
+                              {pathPoints.slice(0, -1).map((point, index) => {
+                                const nextPoint = pathPoints[index + 1];
+                                const isVertical =
+                                  Math.abs(point.x - nextPoint.x) < Math.abs(point.y - nextPoint.y);
+                                const segmentLength = isVertical
+                                  ? Math.abs(point.y - nextPoint.y)
+                                  : Math.abs(point.x - nextPoint.x);
+
+                                if (segmentLength < 8) {
+                                  return null;
+                                }
+
+                                return (
+                                  <Line
+                                    key={`${connection.id}-segment-${index}`}
+                                    name="builder-export-hidden"
+                                    points={[point.x, point.y, nextPoint.x, nextPoint.y]}
+                                    stroke="rgba(15, 23, 42, 0.01)"
+                                    strokeWidth={WIRE_HIT_STROKE_WIDTH}
+                                    lineCap="round"
+                                    listening={!wiringSelectionActive}
+                                    draggable
+                                    onDragStart={() => {
+                                      beginHistoryTransaction();
+                                    }}
+                                    onClick={() => {
+                                      setSelectedConnectionId(connection.id);
+                                      setSelectedInstanceId(null);
+                                      setSelectedInstanceIds([]);
+                                    }}
+                                    onTap={() => {
+                                      setSelectedConnectionId(connection.id);
+                                      setSelectedInstanceId(null);
+                                      setSelectedInstanceIds([]);
+                                    }}
+                                    onDblClick={(event) => {
+                                      const stage = event.target.getStage();
+                                      const position = stage?.getPointerPosition();
+
+                                      if (!position) {
+                                        return;
+                                      }
+
+                                      handleConnectionSegmentInsert(connection.id, index, position);
+                                      setSelectedConnectionId(connection.id);
+                                      setSelectedInstanceId(null);
+                                      setSelectedInstanceIds([]);
+                                      setCanvasMessage("Titik belok baru ditambahkan ke kabel.");
+                                    }}
+                                    onDragMove={(event) => {
+                                      const delta = isVertical ? event.target.x() : event.target.y();
+                                      handleConnectionSegmentDrag(
+                                        connection.id,
+                                        index,
+                                        isVertical ? "x" : "y",
+                                        delta
+                                      );
+                                      event.target.position({ x: 0, y: 0 });
+                                      setSelectedConnectionId(connection.id);
+                                      setSelectedInstanceId(null);
+                                      setSelectedInstanceIds([]);
+                                    }}
+                                    onDragEnd={() => {
+                                      commitHistoryTransaction();
+                                    }}
+                                  />
+                                );
+                              })}
+                              {isSelected
+                                ? renderedControlPoints.map((controlPoint, index) => (
+                                    <Circle
+                                      key={`${connection.id}-handle-${index}`}
+                                      name="builder-export-hidden"
+                                      x={controlPoint.x}
+                                      y={controlPoint.y}
+                                      radius={WIRE_HANDLE_RADIUS}
+                                      fill="#ffffff"
+                                      stroke={wireType?.hexColor ?? "#334155"}
+                                      strokeWidth={2}
+                                      listening={!wiringSelectionActive}
+                                      draggable
+                                      onDragStart={() => {
+                                        beginHistoryTransaction();
+                                      }}
+                                      onClick={() => {
+                                        setSelectedConnectionId(connection.id);
+                                        setSelectedInstanceId(null);
+                                        setSelectedInstanceIds([]);
+                                      }}
+                                      onTap={() => {
+                                        setSelectedConnectionId(connection.id);
+                                        setSelectedInstanceId(null);
+                                        setSelectedInstanceIds([]);
+                                      }}
+                                      onDblClick={() => {
+                                        handleConnectionControlPointRemove(connection.id, index);
+                                        setCanvasMessage("Titik belok kabel dihapus.");
+                                      }}
+                                      onDragMove={(event) => {
+                                        handleConnectionControlPointDrag(
+                                          connection.id,
+                                          index,
+                                          event.target.x(),
+                                          event.target.y()
+                                        );
+                                      }}
+                                      onDragEnd={() => {
+                                        commitHistoryTransaction();
+                                      }}
+                                    />
+                                  ))
+                                : null}
+                              <Circle
+                                name="builder-export-content"
+                                x={from.x}
+                                y={from.y}
+                                radius={4}
+                                fill={wireType?.hexColor ?? "#334155"}
+                                listening={false}
+                              />
+                              <Circle
+                                name="builder-export-content"
+                                x={to.x}
+                                y={to.y}
+                                radius={4}
+                                fill={wireType?.hexColor ?? "#334155"}
+                                listening={false}
+                              />
+                            </React.Fragment>
+                          );
+                        })}
+                        {instances.map((instance) => {
+                          const asset = getAsset(instance.assetId);
+
+                          if (!asset) {
+                            return null;
+                          }
+
+                          return (
+                            <BuilderAssetNode
+                              key={`${instance.id}-points-overlay`}
+                              asset={asset}
+                              instance={instance}
+                              nodeRef={() => undefined}
+                              isSelected={selectedInstanceIds.includes(instance.id)}
+                              isDeleteMode={false}
+                              selectedPoint={selectedPoint}
+                              renderMode="points-only"
+                              onSelect={selectInstance}
+                              onDragStart={() => undefined}
+                              onMove={() => undefined}
+                              onDragEnd={() => undefined}
+                              onImageReady={handleImageReady}
+                              onTransformEnd={() => undefined}
+                              onContextMenuSelect={() => undefined}
+                              onPointSelect={handlePointSelect}
+                            />
+                          );
+                        })}
+                        {selectedPoint && pointerPosition ? (() => {
+                          const point = getPoint(selectedPoint.instanceId, selectedPoint.pointKey);
+
+                          if (!point) {
+                            return null;
+                          }
+
+                          return (
+                            <Line
+                              name="builder-export-hidden"
+                              points={[point.x, point.y, pointerPosition.x, pointerPosition.y]}
+                              stroke="#f97316"
+                              strokeWidth={3}
+                              dash={[10, 8]}
+                              lineCap="round"
+                            />
+                          );
+                        })() : null}
                         <Transformer
+                          name="builder-export-hidden"
                           ref={transformerRef}
                           rotateEnabled
                           keepRatio
@@ -2668,6 +3351,361 @@ export function CustomBuilderContent({
           </div>
         </div>
       </div>
+
+      <Dialog open={saveDialogOpen} onOpenChange={setSaveDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Save Draft</DialogTitle>
+            <DialogDescription>
+              Simpan setup builder saat ini sebagai draft.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-3 px-6 pb-2">
+            <div className="grid gap-1.5">
+              <label htmlFor="builder-setup-name" className="text-sm font-medium text-foreground">
+                Setup name
+              </label>
+              <Input
+                id="builder-setup-name"
+                value={setupNameInput}
+                onChange={(event) => setSetupNameInput(event.target.value)}
+                placeholder="Mis. Strat HSS Modern Wiring"
+              />
+            </div>
+            <div className="grid gap-1.5">
+              <label
+                htmlFor="builder-setup-description"
+                className="text-sm font-medium text-foreground"
+              >
+                Description
+              </label>
+              <textarea
+                id="builder-setup-description"
+                value={setupDescriptionInput}
+                onChange={(event) => setSetupDescriptionInput(event.target.value)}
+                placeholder="Catatan singkat tentang setup ini."
+                className="min-h-24 rounded-md border border-input bg-input/20 px-3 py-2 text-sm outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSaveDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              disabled={isSavingSetup}
+              onClick={() => {
+                void saveSetupDraft();
+              }}
+            >
+              {isSavingSetup ? "Saving..." : "Save Draft"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={publishDialogOpen} onOpenChange={setPublishDialogOpen}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Publish to Wiring Templates</DialogTitle>
+            <DialogDescription>
+              Buat template resmi dari custom builder dan simpan ke tabel wiring template.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-4 px-6 pb-2 sm:grid-cols-2">
+            {publishErrorMessage ? (
+              <div className="rounded-2xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive sm:col-span-2">
+                {publishErrorMessage}
+              </div>
+            ) : null}
+            <label className="flex flex-col gap-2 sm:col-span-2">
+              <span className="text-xs font-medium">Name</span>
+              <Input
+                value={publishForm.name}
+                onChange={(event) =>
+                  setPublishForm((current) => ({
+                    ...current,
+                    name: event.target.value,
+                    slug: slugifyBuilderSetupName(event.target.value),
+                  }))
+                }
+                placeholder="Strat Standard SSS 5-Way"
+              />
+            </label>
+            <label className="flex flex-col gap-2">
+              <span className="text-xs font-medium">Slug</span>
+              <Input
+                value={publishForm.slug}
+                onChange={(event) =>
+                  setPublishForm((current) => ({
+                    ...current,
+                    slug: slugifyBuilderSetupName(event.target.value),
+                  }))
+                }
+                placeholder="strat-standard-sss-5-way"
+              />
+            </label>
+            <label className="flex flex-col gap-2">
+              <span className="text-xs font-medium">Difficulty Level</span>
+              <Input
+                value={publishForm.difficultyLevel}
+                onChange={(event) =>
+                  setPublishForm((current) => ({
+                    ...current,
+                    difficultyLevel: event.target.value,
+                  }))
+                }
+                placeholder="Intermediate"
+              />
+            </label>
+            <label className="flex flex-col gap-2">
+              <span className="text-xs font-medium">Pickup Configuration</span>
+              <select
+                value={publishForm.pickupConfigurationId}
+                onChange={(event) =>
+                  setPublishForm((current) => ({
+                    ...current,
+                    pickupConfigurationId: event.target.value,
+                  }))
+                }
+                className="h-9 rounded-md border border-input bg-input/20 px-3 text-sm outline-none"
+              >
+                {pickupConfigurationOptions.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex flex-col gap-2">
+              <span className="text-xs font-medium">Switch Type</span>
+              <select
+                value={publishForm.switchTypeId}
+                onChange={(event) =>
+                  setPublishForm((current) => ({
+                    ...current,
+                    switchTypeId: event.target.value,
+                  }))
+                }
+                className="h-9 rounded-md border border-input bg-input/20 px-3 text-sm outline-none"
+              >
+                {switchTypeOptions.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex flex-col gap-2">
+              <span className="text-xs font-medium">Volume Count</span>
+              <Input
+                type="number"
+                min="0"
+                value={publishForm.volumeCount}
+                onChange={(event) =>
+                  setPublishForm((current) => ({
+                    ...current,
+                    volumeCount: Number(event.target.value || 0),
+                  }))
+                }
+              />
+            </label>
+            <label className="flex flex-col gap-2">
+              <span className="text-xs font-medium">Tone Count</span>
+              <Input
+                type="number"
+                min="0"
+                value={publishForm.toneCount}
+                onChange={(event) =>
+                  setPublishForm((current) => ({
+                    ...current,
+                    toneCount: Number(event.target.value || 0),
+                  }))
+                }
+              />
+            </label>
+            <label className="flex flex-col gap-2">
+              <span className="text-xs font-medium">Source Type</span>
+              <Input
+                value={publishForm.sourceType}
+                onChange={(event) =>
+                  setPublishForm((current) => ({
+                    ...current,
+                    sourceType: event.target.value,
+                  }))
+                }
+                placeholder="Custom Builder"
+              />
+            </label>
+            <label className="flex flex-col gap-2">
+              <span className="text-xs font-medium">Source URL</span>
+              <Input
+                value={publishForm.sourceUrl}
+                onChange={(event) =>
+                  setPublishForm((current) => ({
+                    ...current,
+                    sourceUrl: event.target.value,
+                  }))
+                }
+                placeholder="https://example.com/reference"
+              />
+            </label>
+            <label className="flex flex-col gap-2 sm:col-span-2">
+              <span className="text-xs font-medium">Description</span>
+              <textarea
+                value={publishForm.description}
+                onChange={(event) =>
+                  setPublishForm((current) => ({
+                    ...current,
+                    description: event.target.value,
+                  }))
+                }
+                rows={3}
+                className="min-h-20 rounded-md border border-input bg-input/20 px-3 py-2 text-sm outline-none"
+                placeholder="Catatan singkat tentang wiring template ini."
+              />
+            </label>
+            <label className="flex items-center gap-2 text-sm text-muted-foreground sm:col-span-2">
+              <input
+                type="checkbox"
+                checked={publishForm.isVerified}
+                onChange={(event) =>
+                  setPublishForm((current) => ({
+                    ...current,
+                    isVerified: event.target.checked,
+                  }))
+                }
+              />
+              Tandai template sebagai verified
+            </label>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPublishDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              disabled={
+                isSavingSetup ||
+                !publishForm.name.trim() ||
+                !publishForm.slug.trim() ||
+                !publishForm.pickupConfigurationId ||
+                !publishForm.switchTypeId ||
+                publishForm.volumeCount < 0 ||
+                publishForm.toneCount < 0
+              }
+              onClick={() => {
+                void publishToWiringTemplate();
+              }}
+            >
+              {isSavingSetup ? "Publishing..." : "Publish"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={savedSetupBrowserOpen} onOpenChange={setSavedSetupBrowserOpen}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Saved Setups</DialogTitle>
+            <DialogDescription>
+              Muat ulang, review, atau hapus setup builder yang tersimpan.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-3 px-6 pb-2">
+            <div className="flex items-center justify-between gap-3 rounded-md border border-border/70 bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+              <span>
+                {session?.user?.email
+                  ? `Signed in as ${session.user.email}`
+                  : "No active session."}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={!canPersistSavedSetups || isLoadingSavedSetups}
+                onClick={() => {
+                  void loadSavedSetups();
+                }}
+              >
+                {isLoadingSavedSetups ? "Refreshing..." : "Refresh"}
+              </Button>
+            </div>
+
+            <div className="max-h-96 overflow-auto rounded-md border border-border/70">
+              {savedSetups.length === 0 ? (
+                <div className="px-4 py-8 text-center text-sm text-muted-foreground">
+                  {isLoadingSavedSetups
+                    ? "Loading saved setups..."
+                    : "Belum ada saved setup untuk user ini."}
+                </div>
+              ) : (
+                <div className="divide-y divide-border/70">
+                  {savedSetups.map((setup) => (
+                    <div
+                      key={setup.id}
+                      className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+                    >
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-medium text-foreground">
+                          {setup.name}
+                        </div>
+                        <div className="mt-1 text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
+                          {setup.status}
+                          {setup.publishedTemplateId ? " • linked to template" : ""}
+                          {setup.slug ? ` • ${setup.slug}` : ""}
+                        </div>
+                        {setup.description ? (
+                          <div className="mt-1 text-xs text-muted-foreground">
+                            {setup.description}
+                          </div>
+                        ) : null}
+                        <div className="mt-1 text-[11px] text-muted-foreground">
+                          Updated {new Date(setup.updatedAt).toLocaleString()}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={savedSetupActionId === setup.id}
+                          onClick={() => {
+                            applySavedSetupDocument(
+                              normalizeBuilderSavedSetupDocument(setup.documentJson)
+                            );
+                            setActiveSavedSetupId(setup.id);
+                            setActiveSavedSetupName(setup.name);
+                            setSavedSetupStatus(setup.status);
+                            setActivePublishedTemplateId(setup.publishedTemplateId);
+                            setSavedSetupDescription(setup.description ?? "");
+                            setCanvasMessage(`Setup "${setup.name}" loaded.`);
+                            setSavedSetupBrowserOpen(false);
+                          }}
+                        >
+                          Load
+                        </Button>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          disabled={savedSetupActionId === setup.id}
+                          onClick={() => {
+                            void deleteSavedSetup(setup.id);
+                          }}
+                        >
+                          {savedSetupActionId === setup.id ? "Deleting..." : "Delete"}
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -9,6 +9,7 @@ type PrismaWiringTemplateRecord = {
   name: string;
   slug: string | null;
   description: string | null;
+  thumbnailUrl: string | null;
   pickupConfigurationId: string;
   switchTypeId: string;
   volumeCount: number;
@@ -32,6 +33,7 @@ export const seedWiringTemplateRows: WiringTemplateRow[] = [
     name: "Strat Standard SSS 5-Way",
     slug: "strat-standard-sss-5-way",
     description: "Classic strat layout with master volume and two tone controls.",
+    thumbnailUrl: null,
     pickupConfigurationId: "seed-sss",
     pickupConfigurationName: "Three Single Coil",
     switchTypeId: "seed-5-way-blade",
@@ -55,6 +57,7 @@ export const seedWiringTemplateRows: WiringTemplateRow[] = [
     name: "Les Paul HH 3-Way",
     slug: "les-paul-hh-3-way",
     description: "Traditional dual-humbucker wiring with two volume and two tone controls.",
+    thumbnailUrl: null,
     pickupConfigurationId: "seed-hh",
     pickupConfigurationName: "Dual Humbucker",
     switchTypeId: "seed-3-way-toggle",
@@ -95,6 +98,7 @@ function mapRecord(record: PrismaWiringTemplateRecord): WiringTemplateRow {
     name: record.name,
     slug: record.slug,
     description: record.description,
+    thumbnailUrl: record.thumbnailUrl,
     pickupConfigurationId: record.pickupConfigurationId,
     pickupConfigurationName: record.pickupConfiguration.name,
     switchTypeId: record.switchTypeId,

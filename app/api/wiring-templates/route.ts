@@ -12,6 +12,7 @@ function mapTemplateResponse(record: {
   name: string;
   slug: string | null;
   description: string | null;
+  thumbnailUrl: string | null;
   pickupConfigurationId: string;
   switchTypeId: string;
   volumeCount: number;
@@ -33,6 +34,7 @@ function mapTemplateResponse(record: {
     name: record.name,
     slug: record.slug,
     description: record.description,
+    thumbnailUrl: record.thumbnailUrl,
     pickupConfigurationId: record.pickupConfigurationId,
     pickupConfigurationName: record.pickupConfiguration.name,
     switchTypeId: record.switchTypeId,
@@ -90,6 +92,7 @@ export async function POST(request: Request) {
     name?: string;
     slug?: string | null;
     description?: string | null;
+    thumbnailUrl?: string | null;
     pickupConfigurationId?: string;
     switchTypeId?: string;
     volumeCount?: number;
@@ -132,6 +135,7 @@ export async function POST(request: Request) {
         name,
         slug: body.slug?.trim() || null,
         description: body.description?.trim() || null,
+        thumbnailUrl: body.thumbnailUrl?.trim() || null,
         pickupConfigurationId,
         switchTypeId,
         volumeCount: body.volumeCount,

@@ -12,6 +12,11 @@ enum UserLevel {
   MASTER
 }
 
+enum BuilderSavedSetupStatus {
+  DRAFT
+  PUBLISHED
+}
+
 model User {
   id              String    @id @default(cuid())
   name            String
@@ -24,6 +29,7 @@ model User {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
   customComponentDrafts CustomComponentDraft[]
+  builderSavedSetups   BuilderSavedSetup[]
 
   @@index([email])
   @@index([level])
@@ -55,6 +61,13 @@ model PickupType {
   coilCount   String? @map("coil_count")
   isActive    Boolean @default(true) @map("is_active")
   description String?
+  svgUrl      String? @map("svg_url")
+  thumbnailUrl String? @map("thumbnail_url")
+  width       Int?
+  height      Int?
+  anchorPointsJson Json? @map("anchor_points_json")
+  editorDocumentJson Json? @map("editor_document_json")
+  styleType   String? @map("style_type")
   pickupModels PickupModel[]
   wireColorSchemas WireColorSchema[]
 
@@ -180,6 +193,13 @@ model SwitchType {
   switchCategory String?  @map("switch_category")
   description    String?
   svgAssetId     String?  @map("svg_asset_id")
+  svgUrl         String?  @map("svg_url")
+  thumbnailUrl   String?  @map("thumbnail_url")
+  width          Int?
+  height         Int?
+  anchorPointsJson Json?  @map("anchor_points_json")
+  editorDocumentJson Json? @map("editor_document_json")
+  styleType      String?  @map("style_type")
   isActive       Boolean  @default(true) @map("is_active")
   wiringTemplates WiringTemplate[]
 
@@ -200,6 +220,13 @@ model PotType {
   isNoLoad    Boolean  @default(false) @map("is_no_load")
   shaftType   String?  @map("shaft_type")
   description String?
+  svgUrl      String?  @map("svg_url")
+  thumbnailUrl String? @map("thumbnail_url")
+  width       Int?
+  height      Int?
+  anchorPointsJson Json? @map("anchor_points_json")
+  editorDocumentJson Json? @map("editor_document_json")
+  styleType   String?  @map("style_type")
   isActive    Boolean  @default(true) @map("is_active")
 
   @@index([name])
@@ -214,6 +241,13 @@ model Capacitor {
   type          String?
   voltageRating String?  @map("voltage_rating")
   description   String?
+  svgUrl        String?  @map("svg_url")
+  thumbnailUrl  String?  @map("thumbnail_url")
+  width         Int?
+  height        Int?
+  anchorPointsJson Json? @map("anchor_points_json")
+  editorDocumentJson Json? @map("editor_document_json")
+  styleType     String?  @map("style_type")
   isActive      Boolean  @default(true) @map("is_active")
 
   @@index([valueLabel])
@@ -228,6 +262,13 @@ model Resistor {
   wattage     String?
   tolerance   String?
   description String?
+  svgUrl      String?  @map("svg_url")
+  thumbnailUrl String? @map("thumbnail_url")
+  width       Int?
+  height      Int?
+  anchorPointsJson Json? @map("anchor_points_json")
+  editorDocumentJson Json? @map("editor_document_json")
+  styleType   String?  @map("style_type")
   isActive    Boolean  @default(true) @map("is_active")
 
   @@index([valueLabel])
@@ -244,6 +285,13 @@ model Mod {
   requiresMiniToggle    Boolean  @default(false) @map("requires_mini_toggle")
   requiresSpecialSwitch Boolean  @default(false) @map("requires_special_switch")
   difficultyLevel       String?  @map("difficulty_level")
+  svgUrl                String?  @map("svg_url")
+  thumbnailUrl          String?  @map("thumbnail_url")
+  width                 Int?
+  height                Int?
+  anchorPointsJson      Json?    @map("anchor_points_json")
+  editorDocumentJson    Json?    @map("editor_document_json")
+  styleType             String?  @map("style_type")
   isActive              Boolean  @default(true) @map("is_active")
 
   @@index([name])
@@ -294,6 +342,28 @@ model CustomComponentDraft {
   @@map("custom_component_drafts")
 }
 
+model BuilderSavedSetup {
+  id                String                  @id @default(cuid())
+  userId            String                  @map("user_id")
+  name              String
+  slug              String?                 @unique
+  description       String?
+  status            BuilderSavedSetupStatus @default(DRAFT)
+  documentJson      Json                    @map("document_json")
+  publishedTemplateId String?               @map("published_template_id")
+  publishedAt       DateTime?               @map("published_at")
+  createdAt         DateTime                @default(now()) @map("created_at")
+  updatedAt         DateTime                @updatedAt @map("updated_at")
+  user              User                    @relation(fields: [userId], references: [id], onDelete: Restrict)
+  publishedTemplate WiringTemplate?         @relation(fields: [publishedTemplateId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([status])
+  @@index([publishedTemplateId])
+  @@index([updatedAt])
+  @@map("builder_saved_setups")
+}
+
 model ComponentConnectionPoint {
   id               String         @id @default(cuid())
   componentAssetId String         @map("component_asset_id")
@@ -332,6 +402,7 @@ model WiringTemplate {
   name                  String
   slug                  String?             @unique
   description           String?
+  thumbnailUrl          String?             @map("thumbnail_url")
   pickupConfigurationId String              @map("pickup_configuration_id")
   switchTypeId          String              @map("switch_type_id")
   volumeCount           Int                 @map("volume_count")
@@ -347,6 +418,7 @@ model WiringTemplate {
   updatedAt             DateTime            @updatedAt @map("updated_at")
   pickupConfiguration   PickupConfiguration @relation(fields: [pickupConfigurationId], references: [id], onDelete: Restrict)
   switchType            SwitchType          @relation(fields: [switchTypeId], references: [id], onDelete: Restrict)
+  publishedFromSetups   BuilderSavedSetup[]
   diagramSources        DiagramSource[]
   components            WiringTemplateComponent[]
   connections           WiringTemplateConnection[]
@@ -388,6 +460,8 @@ model WiringTemplateComponent {
   positionX        Float          @map("position_x")
   positionY        Float          @map("position_y")
   rotation         Float          @default(0)
+  scale            Float          @default(1)
+  showLabel        Boolean        @default(false) @map("show_label")
   metadataJson     Json?          @map("metadata_json")
   wiringTemplate   WiringTemplate @relation(fields: [wiringTemplateId], references: [id], onDelete: Restrict)
   asset            ComponentAsset @relation(fields: [assetId], references: [id], onDelete: Restrict)

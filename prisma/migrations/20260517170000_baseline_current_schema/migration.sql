@@ -1,0 +1,1 @@
+-- Baseline placeholder migration restored to satisfy Prisma migration history.

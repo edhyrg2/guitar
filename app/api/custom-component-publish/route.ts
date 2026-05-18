@@ -309,6 +309,114 @@ async function upsertOwner(
       });
 }
 
+async function syncOwnerVisualData(
+  tx: Prisma.TransactionClient,
+  publishType: PublishType,
+  ownerId: string,
+  data: {
+    svgUrl: string;
+    thumbnailUrl: string;
+    width: number | null;
+    height: number | null;
+    anchorPointsJson: Prisma.InputJsonValue;
+    editorDocumentJson: Prisma.InputJsonValue | typeof Prisma.JsonNull;
+    styleType: string | null;
+  }
+) {
+  if (publishType === "switch-type") {
+    await tx.switchType.update({
+      where: { id: ownerId },
+      data: {
+        svgUrl: data.svgUrl,
+        thumbnailUrl: data.thumbnailUrl,
+        width: data.width,
+        height: data.height,
+        anchorPointsJson: data.anchorPointsJson,
+        editorDocumentJson: data.editorDocumentJson,
+        styleType: data.styleType,
+      },
+    });
+    return;
+  }
+
+  if (publishType === "pot-type") {
+    await tx.potType.update({
+      where: { id: ownerId },
+      data: {
+        svgUrl: data.svgUrl,
+        thumbnailUrl: data.thumbnailUrl,
+        width: data.width,
+        height: data.height,
+        anchorPointsJson: data.anchorPointsJson,
+        editorDocumentJson: data.editorDocumentJson,
+        styleType: data.styleType,
+      },
+    });
+    return;
+  }
+
+  if (publishType === "capacitor") {
+    await tx.capacitor.update({
+      where: { id: ownerId },
+      data: {
+        svgUrl: data.svgUrl,
+        thumbnailUrl: data.thumbnailUrl,
+        width: data.width,
+        height: data.height,
+        anchorPointsJson: data.anchorPointsJson,
+        editorDocumentJson: data.editorDocumentJson,
+        styleType: data.styleType,
+      },
+    });
+    return;
+  }
+
+  if (publishType === "resistor") {
+    await tx.resistor.update({
+      where: { id: ownerId },
+      data: {
+        svgUrl: data.svgUrl,
+        thumbnailUrl: data.thumbnailUrl,
+        width: data.width,
+        height: data.height,
+        anchorPointsJson: data.anchorPointsJson,
+        editorDocumentJson: data.editorDocumentJson,
+        styleType: data.styleType,
+      },
+    });
+    return;
+  }
+
+  if (publishType === "pickup-type") {
+    await tx.pickupType.update({
+      where: { id: ownerId },
+      data: {
+        svgUrl: data.svgUrl,
+        thumbnailUrl: data.thumbnailUrl,
+        width: data.width,
+        height: data.height,
+        anchorPointsJson: data.anchorPointsJson,
+        editorDocumentJson: data.editorDocumentJson,
+        styleType: data.styleType,
+      },
+    });
+    return;
+  }
+
+  await tx.mod.update({
+    where: { id: ownerId },
+    data: {
+      svgUrl: data.svgUrl,
+      thumbnailUrl: data.thumbnailUrl,
+      width: data.width,
+      height: data.height,
+      anchorPointsJson: data.anchorPointsJson,
+      editorDocumentJson: data.editorDocumentJson,
+      styleType: data.styleType,
+    },
+  });
+}
+
 export async function POST(request: Request) {
   const prisma = await getPrismaClient();
 
@@ -466,6 +574,21 @@ export async function POST(request: Request) {
               isActive: true,
             },
           });
+
+      const ownerVisualData = {
+        svgUrl: uploadedPaths.svgUrl,
+        thumbnailUrl: uploadedPaths.thumbnailUrl,
+        width,
+        height,
+        anchorPointsJson: localizedConnectionPoints as Prisma.InputJsonValue,
+        editorDocumentJson:
+          editorDocument === null
+            ? Prisma.JsonNull
+            : (editorDocument as Prisma.InputJsonValue),
+        styleType,
+      };
+
+      await syncOwnerVisualData(tx, publishType, owner.id, ownerVisualData);
 
       await tx.componentConnectionPoint.deleteMany({
         where: { componentAssetId: componentAsset.id },

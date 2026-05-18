@@ -29,6 +29,7 @@ import {
   createTextObject,
   getObjectDimensions,
   isShapeTool,
+  withAutoSizedTextDimensions,
 } from "@/lib/custom-component-editor-utils";
 import { ShapeRenderer } from "@/components/custom-component-editor/shape-renderer";
 
@@ -233,16 +234,15 @@ export function CanvasEditor({ stageRef }: CanvasEditorProps) {
       }
 
       if (object.type === "text") {
-        replaceObject({
+        replaceObject(withAutoSizedTextDimensions({
           ...object,
           x: nextX,
           y: nextY,
           rotation: nextRotation,
-          width: Math.max(80, object.width * nextScaleX),
-          height: Math.max(40, object.height * nextScaleY),
+          fontSize: Math.max(8, object.fontSize * Math.max(nextScaleX, nextScaleY)),
           scaleX: 1,
           scaleY: 1,
-        });
+        }));
 
         node.scaleX(1);
         node.scaleY(1);

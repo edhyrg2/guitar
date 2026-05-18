@@ -65,6 +65,7 @@ type SidebarItem =
 
 const primaryItems: SidebarItem[] = [
   { title: "Overview", href: "/", icon: DashboardSquare01Icon, badge: "Live" },
+  { title: "Explore Wiring", href: "/explore", icon: ViewIcon, badge: "New" },
   { title: "Custom Builder", href: "/custom-builder", icon: PaintBrush02Icon },
   { title: "Custom Component", href: "/custom-component", icon: PaintBrush02Icon },
   { title: "Saved Setups", href: "#", icon: BookBookmark01Icon },

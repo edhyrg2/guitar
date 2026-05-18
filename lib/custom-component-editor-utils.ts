@@ -13,6 +13,7 @@ import type {
 
 const MIN_SHAPE_SIZE = 10;
 const DEFAULT_CANVAS_FONT_FAMILY = "Inter, Arial, sans-serif";
+const TEXT_LINE_HEIGHT_RATIO = 1.2;
 
 export function createEditorId(prefix: string) {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
@@ -177,7 +178,7 @@ export function createTextObject(position: {
   width?: number;
   height?: number;
 }): TextObject {
-  return {
+  return withAutoSizedTextDimensions({
     ...createBaseObject("text", position.x, position.y),
     type: "text",
     width: Math.max(MIN_SHAPE_SIZE, position.width ?? 260),
@@ -190,6 +191,62 @@ export function createTextObject(position: {
     fill: "#111827",
     stroke: "transparent",
     strokeWidth: 0,
+  });
+}
+
+export function measureTextObjectDimensions(object: TextObject) {
+  const lines = object.text.split("\n");
+  const fallbackWidth = Math.max(
+    MIN_SHAPE_SIZE,
+    ...lines.map((line) => Math.max(1, line.length) * object.fontSize * 0.62)
+  );
+  const fallbackHeight = Math.max(
+    MIN_SHAPE_SIZE,
+    lines.length * object.fontSize * TEXT_LINE_HEIGHT_RATIO
+  );
+
+  if (typeof document === "undefined") {
+    return {
+      width: Math.ceil(fallbackWidth),
+      height: Math.ceil(fallbackHeight),
+    };
+  }
+
+  const canvas = document.createElement("canvas");
+  const context = canvas.getContext("2d");
+
+  if (!context) {
+    return {
+      width: Math.ceil(fallbackWidth),
+      height: Math.ceil(fallbackHeight),
+    };
+  }
+
+  context.font = `${object.fontStyle ?? "normal"} ${object.fontSize}px ${object.fontFamily || DEFAULT_CANVAS_FONT_FAMILY}`;
+
+  const measuredWidth = Math.max(
+    MIN_SHAPE_SIZE,
+    ...lines.map((line) => Math.max(context.measureText(line || " ").width, 1))
+  );
+
+  return {
+    width: Math.ceil(measuredWidth + object.strokeWidth * 2 + 4),
+    height: Math.ceil(
+      Math.max(
+        MIN_SHAPE_SIZE,
+        lines.length * object.fontSize * TEXT_LINE_HEIGHT_RATIO + object.strokeWidth * 2 + 4
+      )
+    ),
+  };
+}
+
+export function withAutoSizedTextDimensions(object: TextObject): TextObject {
+  const dimensions = measureTextObjectDimensions(object);
+
+  return {
+    ...object,
+    width: dimensions.width,
+    height: dimensions.height,
   };
 }
 
@@ -232,10 +289,13 @@ export function getObjectDimensions(object: CanvasObject) {
   if (
     object.type === "rectangle" ||
     object.type === "ellipse" ||
-    object.type === "text" ||
     object.type === "image"
   ) {
     return { width: object.width, height: object.height };
+  }
+
+  if (object.type === "text") {
+    return measureTextObjectDimensions(object);
   }
 
   const xValues: number[] = [];
@@ -261,7 +321,6 @@ export function getObjectBounds(object: CanvasObject) {
   if (
     object.type === "rectangle" ||
     object.type === "ellipse" ||
-    object.type === "text" ||
     object.type === "image"
   ) {
     return {
@@ -269,6 +328,17 @@ export function getObjectBounds(object: CanvasObject) {
       y: object.y,
       width: object.width,
       height: object.height,
+    };
+  }
+
+  if (object.type === "text") {
+    const dimensions = measureTextObjectDimensions(object);
+
+    return {
+      x: object.x,
+      y: object.y,
+      width: dimensions.width,
+      height: dimensions.height,
     };
   }
 

@@ -5,11 +5,10 @@ import {
   NoteIcon,
   SecurityCheckIcon,
 } from "@hugeicons/core-free-icons";
-import { getServerSession } from "next-auth";
 
-import { authOptions } from "@/auth";
 import { GuitarIcon } from "@/components/guitar-icon";
 import { LoginForm } from "@/components/login-form";
+import { getSafeServerSession } from "@/lib/auth-session";
 
 type LoginPageProps = {
   searchParams?: Promise<{
@@ -18,7 +17,7 @@ type LoginPageProps = {
 };
 
 export default async function LoginPage({ searchParams }: LoginPageProps) {
-  const session = await getServerSession(authOptions);
+  const session = await getSafeServerSession();
 
   if (session) {
     redirect("/");

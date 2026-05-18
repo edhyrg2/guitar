@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
-import { getServerSession } from "next-auth";
 
-import { authOptions } from "@/auth";
+import { getSafeServerSession } from "@/lib/auth-session";
 import { normalizeEditorDocument } from "@/lib/custom-component-editor-utils";
 import { getPrismaClient } from "@/lib/prisma";
 
@@ -33,7 +32,7 @@ export async function PUT(
   request: Request,
   context: RouteContext<"/api/custom-component-drafts/[id]">
 ) {
-  const session = await getServerSession(authOptions);
+  const session = await getSafeServerSession();
 
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -95,7 +94,7 @@ export async function DELETE(
   _request: Request,
   context: RouteContext<"/api/custom-component-drafts/[id]">
 ) {
-  const session = await getServerSession(authOptions);
+  const session = await getSafeServerSession();
 
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

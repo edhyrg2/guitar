@@ -5,6 +5,7 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import { getPrismaClient } from "@/lib/prisma";
 
 type PrismaUserLevel = "USER" | "DEVELOPER" | "MASTER";
+const authSecret = process.env.NEXTAUTH_SECRET;
 
 function getUserPhoto(name: string, photoUrl: string | null) {
   if (photoUrl) {
@@ -20,6 +21,7 @@ function getUserPhoto(name: string, photoUrl: string | null) {
 }
 
 export const authOptions: NextAuthOptions = {
+  secret: authSecret,
   session: {
     strategy: "jwt",
   },

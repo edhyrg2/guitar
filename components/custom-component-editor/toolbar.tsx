@@ -44,19 +44,19 @@ export function Toolbar({ onTriggerImageUpload }: ToolbarProps) {
   const setTool = useEditorStore((state) => state.setTool);
 
   return (
-    <aside className="flex w-[112px] flex-col gap-3 border-r border-border/70 bg-background/95 p-3 backdrop-blur">
-      <div className="rounded-3xl border border-border/70 bg-card/70 p-2.5 shadow-sm">
+    <aside className="flex min-h-0 w-[112px] flex-col border-r border-border/70 bg-background/95 p-3 backdrop-blur">
+      <div className="flex min-h-0 flex-1 flex-col rounded-3xl border border-border/70 bg-card/70 p-2.5 shadow-sm">
         <div className="mb-2 px-1 text-[0.65rem] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
           Tools
         </div>
-        <div className="flex flex-col gap-2">
+        <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pr-1">
           {TOOL_BUTTONS.map((item) => (
             <button
               key={item.tool}
               type="button"
               onClick={() => setTool(item.tool)}
               className={cn(
-                "flex min-h-[82px] flex-col items-center justify-center gap-1 rounded-2xl border px-3 py-3 text-[0.65rem] font-medium transition",
+                "flex min-h-[68px] flex-col items-center justify-center gap-1 rounded-xl border px-2 py-2 text-[0.65rem] font-medium transition",
                 tool === item.tool
                   ? "border-primary/40 bg-primary/10 text-primary"
                   : "border-transparent bg-muted/35 text-muted-foreground hover:border-border hover:bg-muted/55 hover:text-foreground"
@@ -70,7 +70,7 @@ export function Toolbar({ onTriggerImageUpload }: ToolbarProps) {
           <button
             type="button"
             onClick={onTriggerImageUpload}
-            className="flex min-h-[82px] flex-col items-center justify-center gap-1 rounded-2xl border border-transparent bg-muted/35 px-3 py-3 text-[0.65rem] font-medium text-muted-foreground transition hover:border-border hover:bg-muted/55 hover:text-foreground"
+            className="flex min-h-[68px] flex-col items-center justify-center gap-1 rounded-xl border border-transparent bg-muted/35 px-2 py-2 text-[0.65rem] font-medium text-muted-foreground transition hover:border-border hover:bg-muted/55 hover:text-foreground"
             title="Upload image"
           >
             <HugeiconsIcon icon={AiImageIcon} strokeWidth={2} />
