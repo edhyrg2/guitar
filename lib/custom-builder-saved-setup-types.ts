@@ -1,4 +1,9 @@
 import type { Prisma } from "@prisma/client";
+import type {
+  EllipseObject,
+  LineObject,
+  RectangleObject,
+} from "@/lib/custom-component-editor-types";
 
 export type BuilderSavedSetupStatus = "DRAFT" | "PUBLISHED";
 
@@ -29,11 +34,14 @@ export type BuilderSetupConnection = {
   controlPoints: { x: number; y: number }[];
 };
 
+export type BuilderSetupShape = RectangleObject | EllipseObject | LineObject;
+
 export type BuilderSavedSetupDocument = {
   version: 1;
   selectedWireTypeId: string | null;
   instances: BuilderSetupInstance[];
   connections: BuilderSetupConnection[];
+  shapes: BuilderSetupShape[];
 };
 
 export type BuilderSavedSetupRow = {
@@ -59,6 +67,7 @@ export function normalizeBuilderSavedSetupDocument(
   const parsed = input as Partial<BuilderSavedSetupDocument>;
   const rawInstances = Array.isArray(parsed.instances) ? parsed.instances : [];
   const rawConnections = Array.isArray(parsed.connections) ? parsed.connections : [];
+  const rawShapes = Array.isArray(parsed.shapes) ? parsed.shapes : [];
 
   return {
     version: 1,
@@ -147,5 +156,112 @@ export function normalizeBuilderSavedSetupDocument(
         } satisfies BuilderSetupConnection;
       })
       .filter((connection): connection is BuilderSetupConnection => connection !== null),
+    shapes: rawShapes.reduce<BuilderSetupShape[]>((result, shape) => {
+      const value = shape as Partial<BuilderSetupShape>;
+
+      if (
+        typeof value.id !== "string" ||
+        typeof value.name !== "string" ||
+        !isFiniteNumber(value.x) ||
+        !isFiniteNumber(value.y) ||
+        !isFiniteNumber(value.rotation) ||
+        !isFiniteNumber(value.opacity) ||
+        typeof value.fill !== "string" ||
+        typeof value.stroke !== "string" ||
+        !isFiniteNumber(value.strokeWidth) ||
+        !isFiniteNumber(value.scaleX) ||
+        !isFiniteNumber(value.scaleY) ||
+        typeof value.visible !== "boolean" ||
+        typeof value.locked !== "boolean"
+      ) {
+        return result;
+      }
+
+      if (value.type === "rectangle") {
+        if (
+          !isFiniteNumber(value.width) ||
+          !isFiniteNumber(value.height) ||
+          !isFiniteNumber(value.cornerRadius)
+        ) {
+          return result;
+        }
+
+        result.push({
+          id: value.id,
+          groupId: value.groupId,
+          type: "rectangle",
+          name: value.name,
+          x: value.x!,
+          y: value.y!,
+          rotation: value.rotation!,
+          opacity: value.opacity!,
+          fill: value.fill,
+          stroke: value.stroke,
+          strokeWidth: value.strokeWidth!,
+          scaleX: value.scaleX!,
+          scaleY: value.scaleY!,
+          visible: value.visible,
+          locked: value.locked,
+          width: value.width!,
+          height: value.height!,
+          cornerRadius: value.cornerRadius!,
+        });
+        return result;
+      }
+
+      if (value.type === "ellipse") {
+        if (!isFiniteNumber(value.width) || !isFiniteNumber(value.height)) {
+          return result;
+        }
+
+        result.push({
+          id: value.id,
+          groupId: value.groupId,
+          type: "ellipse",
+          name: value.name,
+          x: value.x!,
+          y: value.y!,
+          rotation: value.rotation!,
+          opacity: value.opacity!,
+          fill: value.fill,
+          stroke: value.stroke,
+          strokeWidth: value.strokeWidth!,
+          scaleX: value.scaleX!,
+          scaleY: value.scaleY!,
+          visible: value.visible,
+          locked: value.locked,
+          width: value.width!,
+          height: value.height!,
+        });
+        return result;
+      }
+
+      if (
+        value.type === "line" &&
+        Array.isArray(value.points) &&
+        !value.points.some((point) => !isFiniteNumber(point))
+      ) {
+        result.push({
+          id: value.id,
+          groupId: value.groupId,
+          type: "line",
+          name: value.name,
+          x: value.x!,
+          y: value.y!,
+          rotation: value.rotation!,
+          opacity: value.opacity!,
+          fill: value.fill,
+          stroke: value.stroke,
+          strokeWidth: value.strokeWidth!,
+          scaleX: value.scaleX!,
+          scaleY: value.scaleY!,
+          visible: value.visible,
+          locked: value.locked,
+          points: [...value.points],
+        });
+      }
+
+      return result;
+    }, []),
   };
 }

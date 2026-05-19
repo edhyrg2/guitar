@@ -6,6 +6,7 @@ import Image from "next/image";
 import { useSession } from "next-auth/react";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
+  Edit01Icon,
   AlignBottomIcon,
   AlignHorizontalCenterIcon,
   AlignLeftIcon,
@@ -16,11 +17,14 @@ import {
   DatabaseIcon,
   Delete02Icon,
   FloppyDiskIcon,
+  Move01Icon,
+  OvalIcon,
   PaintBrush02Icon,
   PlusSignIcon,
   Redo02Icon,
   Rocket01Icon,
   SearchAddIcon,
+  SquareIcon,
   SearchMinusIcon,
   Undo02Icon,
   ViewIcon,
@@ -33,6 +37,7 @@ import {
   Layer,
   Line,
   Rect,
+  Shape,
   Stage,
   Text,
   Transformer,
@@ -67,8 +72,19 @@ import {
   normalizeBuilderSavedSetupDocument,
   type BuilderSavedSetupDocument,
   type BuilderSavedSetupRow,
+  type BuilderSetupShape,
   type BuilderSavedSetupStatus,
 } from "@/lib/custom-builder-saved-setup-types";
+import {
+  createEllipseObject,
+  createLineObject,
+  createRectangleObject,
+  getObjectDimensions,
+} from "@/lib/custom-component-editor-utils";
+import type {
+  EllipseObject,
+  RectangleObject,
+} from "@/lib/custom-component-editor-types";
 import type { WiringTemplateReference } from "@/lib/wiring-template-types";
 import type { WireTypeRow } from "@/lib/wire-type-types";
 
@@ -121,7 +137,27 @@ type BuilderConnection = {
   controlPoints: { x: number; y: number }[];
 };
 
+type PathSegment = {
+  connectionId: string;
+  segmentIndex: number;
+  orientation: "horizontal" | "vertical";
+  start: { x: number; y: number };
+  end: { x: number; y: number };
+};
+
+type WireBridge = {
+  segmentIndex: number;
+  x: number;
+  y: number;
+  orientation: "horizontal" | "vertical";
+};
+
 type SelectedPoint = {
+  instanceId: string;
+  pointKey: string;
+};
+
+type HoverPointTarget = {
   instanceId: string;
   pointKey: string;
 };
@@ -134,7 +170,42 @@ type SelectionBox = {
 type BuilderSnapshot = {
   instances: BuilderInstance[];
   connections: BuilderConnection[];
+  shapes: BuilderSetupShape[];
 };
+
+type BuilderTool = "select" | "rectangle" | "ellipse" | "line";
+
+type DraftBuilderShape =
+  | {
+      tool: "rectangle" | "ellipse" | "line";
+      start: { x: number; y: number };
+      current: { x: number; y: number };
+      constrainProportions?: boolean;
+    }
+  | null;
+
+type BuilderLayerEntry =
+  | {
+      id: string;
+      kind: "connection";
+      label: string;
+      meta: string;
+      selected: boolean;
+    }
+  | {
+      id: string;
+      kind: "shape";
+      label: string;
+      meta: string;
+      selected: boolean;
+    }
+  | {
+      id: string;
+      kind: "instance";
+      label: string;
+      meta: string;
+      selected: boolean;
+    };
 
 type BuilderPublishFormState = {
   name: string;
@@ -163,14 +234,43 @@ const CONNECTION_POINT_RADIUS = 6;
 const CONNECTION_POINT_ACTIVE_RADIUS = 8;
 const CONNECTION_POINT_RING_RADIUS = 11;
 const CONNECTION_POINT_ACTIVE_RING_RADIUS = 14;
+const CONNECTION_POINT_HIT_RADIUS = 24;
+const CONNECTION_POINT_SNAP_DISTANCE = 36;
 const WIRE_HIT_STROKE_WIDTH = 18;
 const WIRE_HANDLE_RADIUS = 7;
+const WIRE_BRIDGE_RADIUS = 10;
+const WIRE_BRIDGE_JOIN_TRIM = 0;
 const WIRE_GRID_SIZE = 12;
 const GRID_LINE_COLOR = "rgba(148, 163, 184, 0.18)";
 const MIN_CANVAS_SCALE = 0.4;
 const MAX_CANVAS_SCALE = 2.5;
 const CANVAS_SCALE_STEP = 0.2;
 const MIN_SELECTION_BOX_SIZE = 8;
+
+function isTransparentColor(value: string) {
+  const normalized = value.trim().toLowerCase();
+
+  return (
+    normalized === "transparent" ||
+    normalized === "rgba(0,0,0,0)" ||
+    normalized === "rgba(0, 0, 0, 0)" ||
+    normalized === "#00000000"
+  );
+}
+
+function getConstrainedPoint(
+  start: { x: number; y: number },
+  current: { x: number; y: number }
+) {
+  const deltaX = current.x - start.x;
+  const deltaY = current.y - start.y;
+  const size = Math.max(Math.abs(deltaX), Math.abs(deltaY));
+
+  return {
+    x: start.x + Math.sign(deltaX || 1) * size,
+    y: start.y + Math.sign(deltaY || 1) * size,
+  };
+}
 
 function useLoadedImage(src: string | null) {
   const [image, setImage] = React.useState<HTMLImageElement | null>(null);
@@ -281,8 +381,250 @@ function normalizeConnectionControlPoints(
   return points;
 }
 
-function flattenPathPoints(points: { x: number; y: number }[]) {
-  return points.flatMap((point) => [point.x, point.y]);
+function buildPathSegments(
+  connectionId: string,
+  points: { x: number; y: number }[]
+) {
+  const segments: PathSegment[] = [];
+
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const start = points[index];
+    const end = points[index + 1];
+
+    if (!start || !end) {
+      continue;
+    }
+
+    const deltaX = Math.abs(end.x - start.x);
+    const deltaY = Math.abs(end.y - start.y);
+
+    if (deltaX < 0.5 && deltaY < 0.5) {
+      continue;
+    }
+
+    segments.push({
+      connectionId,
+      segmentIndex: index,
+      orientation: deltaX >= deltaY ? "horizontal" : "vertical",
+      start,
+      end,
+    });
+  }
+
+  return segments;
+}
+
+function getStrictSegmentIntersection(
+  first: PathSegment,
+  second: PathSegment
+) {
+  if (first.orientation === second.orientation) {
+    return null;
+  }
+
+  const horizontal = first.orientation === "horizontal" ? first : second;
+  const vertical = first.orientation === "vertical" ? first : second;
+  const horizontalMinX = Math.min(horizontal.start.x, horizontal.end.x);
+  const horizontalMaxX = Math.max(horizontal.start.x, horizontal.end.x);
+  const verticalMinY = Math.min(vertical.start.y, vertical.end.y);
+  const verticalMaxY = Math.max(vertical.start.y, vertical.end.y);
+  const x = vertical.start.x;
+  const y = horizontal.start.y;
+  const epsilon = 0.5;
+
+  if (
+    x <= horizontalMinX + epsilon ||
+    x >= horizontalMaxX - epsilon ||
+    y <= verticalMinY + epsilon ||
+    y >= verticalMaxY - epsilon
+  ) {
+    return null;
+  }
+
+  return { x, y };
+}
+
+function computeWireBridges(
+  pathEntries: Array<{ connectionId: string; points: { x: number; y: number }[] }>
+) {
+  const bridgeMap = new Map<string, WireBridge[]>();
+  const allSegments = pathEntries.flatMap((entry) =>
+    buildPathSegments(entry.connectionId, entry.points)
+  );
+
+  for (const entry of pathEntries) {
+    bridgeMap.set(entry.connectionId, []);
+  }
+
+  for (let index = 0; index < allSegments.length; index += 1) {
+    const first = allSegments[index];
+
+    for (let comparisonIndex = index + 1; comparisonIndex < allSegments.length; comparisonIndex += 1) {
+      const second = allSegments[comparisonIndex];
+
+      if (first.connectionId === second.connectionId) {
+        continue;
+      }
+
+      const intersection = getStrictSegmentIntersection(first, second);
+
+      if (!intersection) {
+        continue;
+      }
+
+      const bridgeSegment =
+        first.orientation === "horizontal"
+          ? first
+          : second.orientation === "horizontal"
+            ? second
+            : null;
+
+      if (!bridgeSegment) {
+        continue;
+      }
+
+      const currentBridges = bridgeMap.get(bridgeSegment.connectionId) ?? [];
+      const exists = currentBridges.some(
+        (bridge) =>
+          bridge.segmentIndex === bridgeSegment.segmentIndex &&
+          Math.abs(bridge.x - intersection.x) < 0.5 &&
+          Math.abs(bridge.y - intersection.y) < 0.5
+      );
+
+      if (exists) {
+        continue;
+      }
+
+      currentBridges.push({
+        segmentIndex: bridgeSegment.segmentIndex,
+        x: intersection.x,
+        y: intersection.y,
+        orientation: bridgeSegment.orientation,
+      });
+      bridgeMap.set(bridgeSegment.connectionId, currentBridges);
+    }
+  }
+
+  return bridgeMap;
+}
+
+function renderWireSegmentWithBridges(params: {
+  connectionId: string;
+  segmentIndex: number;
+  start: { x: number; y: number };
+  end: { x: number; y: number };
+  bridges: WireBridge[];
+  color: string;
+  strokeWidth: number;
+}) {
+  const { connectionId, segmentIndex, start, end, bridges, color, strokeWidth } = params;
+  const deltaX = Math.abs(end.x - start.x);
+  const deltaY = Math.abs(end.y - start.y);
+  const isHorizontal = deltaX >= deltaY;
+  const gapHalfWidth = Math.max(
+    WIRE_BRIDGE_RADIUS - strokeWidth / 2 - WIRE_BRIDGE_JOIN_TRIM,
+    1
+  );
+  const segmentBridges = bridges
+    .filter((bridge) => bridge.segmentIndex === segmentIndex)
+    .sort((left, right) =>
+      isHorizontal ? left.x - right.x : left.y - right.y
+    );
+
+  if (segmentBridges.length === 0) {
+    return (
+      <Line
+        key={`${connectionId}-segment-visual-${segmentIndex}`}
+        name="builder-export-content"
+        points={[start.x, start.y, end.x, end.y]}
+        stroke={color}
+        strokeWidth={strokeWidth}
+        lineCap="round"
+        lineJoin="round"
+        listening={false}
+      />
+    );
+  }
+
+  const parts: React.ReactNode[] = [];
+
+  if (isHorizontal) {
+    const direction = end.x >= start.x ? 1 : -1;
+    let currentX = start.x;
+
+    for (const bridge of segmentBridges) {
+      const bridgeStartX = bridge.x - gapHalfWidth * direction;
+      const bridgeEndX = bridge.x + gapHalfWidth * direction;
+
+      parts.push(
+        <Line
+          key={`${connectionId}-segment-visual-${segmentIndex}-${bridge.x}-a`}
+          name="builder-export-content"
+          points={[currentX, start.y, bridgeStartX, start.y]}
+          stroke={color}
+          strokeWidth={strokeWidth}
+          lineCap="round"
+          lineJoin="round"
+          listening={false}
+        />
+      );
+
+      currentX = bridgeEndX;
+    }
+
+    parts.push(
+      <Line
+        key={`${connectionId}-segment-visual-${segmentIndex}-tail`}
+        name="builder-export-content"
+        points={[currentX, start.y, end.x, end.y]}
+        stroke={color}
+        strokeWidth={strokeWidth}
+        lineCap="round"
+        lineJoin="round"
+        listening={false}
+      />
+    );
+
+    return parts;
+  }
+
+  const direction = end.y >= start.y ? 1 : -1;
+  let currentY = start.y;
+
+  for (const bridge of segmentBridges) {
+    const bridgeStartY = bridge.y - gapHalfWidth * direction;
+    const bridgeEndY = bridge.y + gapHalfWidth * direction;
+
+    parts.push(
+      <Line
+        key={`${connectionId}-segment-visual-${segmentIndex}-${bridge.y}-a`}
+        name="builder-export-content"
+        points={[start.x, currentY, start.x, bridgeStartY]}
+        stroke={color}
+        strokeWidth={strokeWidth}
+        lineCap="round"
+        lineJoin="round"
+        listening={false}
+      />
+    );
+
+    currentY = bridgeEndY;
+  }
+
+  parts.push(
+    <Line
+      key={`${connectionId}-segment-visual-${segmentIndex}-tail`}
+      name="builder-export-content"
+      points={[start.x, currentY, end.x, end.y]}
+      stroke={color}
+      strokeWidth={strokeWidth}
+      lineCap="round"
+      lineJoin="round"
+      listening={false}
+    />
+  );
+
+  return parts;
 }
 
 function cloneInstances(instances: BuilderInstance[]) {
@@ -296,13 +638,26 @@ function cloneConnections(connections: BuilderConnection[]) {
   }));
 }
 
+function cloneShapes(shapes: BuilderSetupShape[]) {
+  return shapes.map((shape) =>
+    shape.type === "line"
+      ? {
+          ...shape,
+          points: [...shape.points],
+        }
+      : { ...shape }
+  );
+}
+
 function createBuilderSnapshot(
   instances: BuilderInstance[],
-  connections: BuilderConnection[]
+  connections: BuilderConnection[],
+  shapes: BuilderSetupShape[]
 ): BuilderSnapshot {
   return {
     instances: cloneInstances(instances),
     connections: cloneConnections(connections),
+    shapes: cloneShapes(shapes),
   };
 }
 
@@ -317,6 +672,7 @@ function slugifyBuilderSetupName(value: string) {
 function createBuilderSavedSetupDocument(
   instances: BuilderInstance[],
   connections: BuilderConnection[],
+  shapes: BuilderSetupShape[],
   selectedWireTypeId: string | null
 ): BuilderSavedSetupDocument {
   return {
@@ -324,6 +680,7 @@ function createBuilderSavedSetupDocument(
     selectedWireTypeId,
     instances: cloneInstances(instances),
     connections: cloneConnections(connections),
+    shapes: cloneShapes(shapes),
   };
 }
 
@@ -426,6 +783,8 @@ function BuilderAssetNode({
   isSelected,
   isDeleteMode,
   selectedPoint,
+  hoverPointTarget,
+  wiringSelectionActive = false,
   renderMode = "full",
   onSelect,
   onDragStart,
@@ -435,18 +794,20 @@ function BuilderAssetNode({
   onTransformEnd,
   onContextMenuSelect,
   onPointSelect,
-  }: {
+}: {
   asset: BuilderAssetDefinition;
   instance: BuilderInstance;
-  nodeRef: (node: React.ElementRef<typeof Group> | null) => void;
+  nodeRef: (node: Konva.Group | null) => void;
   isSelected: boolean;
   isDeleteMode: boolean;
   selectedPoint: SelectedPoint | null;
+  hoverPointTarget?: HoverPointTarget | null;
+  wiringSelectionActive?: boolean;
   renderMode?: "full" | "points-only";
-    onSelect: (instanceId: string, additive?: boolean) => void;
-    onDragStart: (instanceId: string, x: number, y: number) => void;
-    onMove: (instanceId: string, x: number, y: number) => void;
-    onDragEnd: () => void;
+  onSelect: (instanceId: string, additive?: boolean) => void;
+  onDragStart: (instanceId: string, x: number, y: number) => void;
+  onMove: (instanceId: string, x: number, y: number) => void;
+  onDragEnd: () => void;
   onImageReady: (instanceId: string, renderWidth: number, renderHeight: number) => void;
   onTransformEnd: (
     instanceId: string,
@@ -490,10 +851,10 @@ function BuilderAssetNode({
       rotation={instance.rotation}
       scaleX={instance.scale}
       scaleY={instance.scale}
-      draggable={renderMode === "full" && !isDeleteMode}
-      listening={renderMode === "full"}
+      draggable={renderMode === "full" && !isDeleteMode && !wiringSelectionActive}
+      listening={renderMode === "points-only" || !wiringSelectionActive}
       onClick={
-        renderMode === "full"
+        renderMode === "full" && !wiringSelectionActive
           ? (event) =>
               onSelect(
                 instance.id,
@@ -501,9 +862,11 @@ function BuilderAssetNode({
               )
           : undefined
       }
-      onTap={renderMode === "full" ? () => onSelect(instance.id) : undefined}
+      onTap={
+        renderMode === "full" && !wiringSelectionActive ? () => onSelect(instance.id) : undefined
+      }
       onDragStart={
-        renderMode === "full"
+        renderMode === "full" && !wiringSelectionActive
           ? (event) => {
               event.cancelBubble = true;
               onDragStart(instance.id, snapToGrid(event.target.x()), snapToGrid(event.target.y()));
@@ -511,7 +874,7 @@ function BuilderAssetNode({
           : undefined
       }
       onDragMove={
-        renderMode === "full"
+        renderMode === "full" && !wiringSelectionActive
           ? (event) => {
               event.cancelBubble = true;
               onMove(instance.id, snapToGrid(event.target.x()), snapToGrid(event.target.y()));
@@ -519,7 +882,7 @@ function BuilderAssetNode({
           : undefined
       }
       onDragEnd={
-        renderMode === "full"
+        renderMode === "full" && !wiringSelectionActive
           ? (event) => {
               event.cancelBubble = true;
               onDragEnd();
@@ -527,14 +890,14 @@ function BuilderAssetNode({
           : undefined
       }
       onContextMenu={
-        renderMode === "full"
+        renderMode === "full" && !wiringSelectionActive
           ? () => {
               onContextMenuSelect(instance.id);
             }
           : undefined
       }
       onTransformEnd={
-        renderMode === "full"
+        renderMode === "full" && !wiringSelectionActive
           ? (event) => {
               onTransformEnd(instance.id, {
                 x: snapToGrid(event.target.x()),
@@ -553,12 +916,14 @@ function BuilderAssetNode({
             height={sourceHeight}
             fill="rgba(0,0,0,0)"
             strokeEnabled={false}
+            listening={!wiringSelectionActive}
           />
           {image ? (
             <KonvaImage
               image={image}
               width={sourceWidth}
               height={sourceHeight}
+              listening={!wiringSelectionActive}
               shadowColor={isSelected ? "#0f172a" : undefined}
               shadowBlur={isSelected ? 8 : 0}
               shadowOpacity={isSelected ? 0.14 : 0}
@@ -570,6 +935,7 @@ function BuilderAssetNode({
               height={sourceHeight}
               fill="#e2e8f0"
               cornerRadius={12}
+              listening={!wiringSelectionActive}
               stroke={isSelected ? "#0f766e" : "#cbd5e1"}
               strokeWidth={isSelected ? 2 : 1}
             />
@@ -585,10 +951,18 @@ function BuilderAssetNode({
           listening={false}
         />
       ) : null}
-      {asset.connectionPoints.map((point) => {
+      {(renderMode === "points-only" || !wiringSelectionActive
+        ? asset.connectionPoints
+        : []
+      ).map((point) => {
         const active =
           selectedPoint?.instanceId === instance.id &&
           selectedPoint.pointKey === point.pointKey;
+        const hovered =
+          hoverPointTarget?.instanceId === instance.id &&
+          hoverPointTarget.pointKey === point.pointKey;
+        const visibleRadiusMultiplier = renderMode === "points-only" ? 1.25 : 1;
+        const hitRadiusMultiplier = renderMode === "points-only" ? 1.35 : 1;
 
         return (
           <Group
@@ -605,14 +979,35 @@ function BuilderAssetNode({
             }}
           >
             <Circle
-              radius={(active ? CONNECTION_POINT_ACTIVE_RADIUS : CONNECTION_POINT_RADIUS) * markerScale}
-              fill={active ? "#f97316" : point.color ?? "#0f766e"}
+              radius={CONNECTION_POINT_HIT_RADIUS * hitRadiusMultiplier * markerScale}
+              fill="rgba(0,0,0,0.01)"
+              strokeEnabled={false}
+            />
+            <Circle
+              radius={
+                (active
+                  ? CONNECTION_POINT_ACTIVE_RADIUS
+                  : hovered
+                    ? CONNECTION_POINT_ACTIVE_RADIUS
+                    : CONNECTION_POINT_RADIUS) *
+                visibleRadiusMultiplier *
+                markerScale
+              }
+              fill={active ? "#f97316" : hovered ? "#fb923c" : point.color ?? "#0f766e"}
               stroke="#ffffff"
               strokeWidth={2 * markerScale}
             />
             <Circle
-              radius={(active ? CONNECTION_POINT_ACTIVE_RING_RADIUS : CONNECTION_POINT_RING_RADIUS) * markerScale}
-              stroke={point.color ?? "#0f766e"}
+              radius={
+                (active
+                  ? CONNECTION_POINT_ACTIVE_RING_RADIUS
+                  : hovered
+                    ? CONNECTION_POINT_ACTIVE_RING_RADIUS
+                    : CONNECTION_POINT_RING_RADIUS) *
+                visibleRadiusMultiplier *
+                markerScale
+              }
+              stroke={hovered ? "#fb923c" : point.color ?? "#0f766e"}
               strokeWidth={markerScale}
               dash={[3 * markerScale, 3 * markerScale]}
             />
@@ -635,7 +1030,150 @@ function BuilderAssetNode({
   );
 }
 
+function BuilderShapeNode({
+  shape,
+  nodeRef,
+  isSelected,
+  onSelect,
+  onDragStart,
+  onDragMove,
+  onDragEnd,
+  onTransformEnd,
+}: {
+  shape: BuilderSetupShape;
+  nodeRef: (node: Konva.Group | null) => void;
+  isSelected: boolean;
+  onSelect: (shapeId: string, additive?: boolean) => void;
+  onDragStart: (shapeId: string) => void;
+  onDragMove: (shapeId: string, x: number, y: number) => void;
+  onDragEnd: () => void;
+  onTransformEnd: (shapeId: string, node: Konva.Group) => void;
+}) {
+  const dimensions = getObjectDimensions(shape);
+
+  return (
+    <Group
+      ref={nodeRef}
+      x={shape.x}
+      y={shape.y}
+      rotation={shape.rotation}
+      scaleX={shape.scaleX}
+      scaleY={shape.scaleY}
+      visible={shape.visible}
+      draggable={!shape.locked}
+      onClick={(event) => {
+        if (event.evt.button === 2) {
+          return;
+        }
+
+        event.cancelBubble = true;
+        onSelect(shape.id, event.evt.shiftKey || event.evt.ctrlKey || event.evt.metaKey);
+      }}
+      onTap={(event) => {
+        event.cancelBubble = true;
+        onSelect(shape.id);
+      }}
+      onDragStart={() => onDragStart(shape.id)}
+      onDragMove={(event) => onDragMove(shape.id, event.target.x(), event.target.y())}
+      onDragEnd={() => onDragEnd()}
+      onTransformEnd={(event) => onTransformEnd(shape.id, event.target as Konva.Group)}
+    >
+      {shape.type === "rectangle" ? (
+        <Rect
+          name="builder-export-content"
+          width={shape.width}
+          height={shape.height}
+          cornerRadius={shape.cornerRadius}
+          fill={shape.fill}
+          stroke={shape.stroke}
+          strokeWidth={shape.strokeWidth}
+          opacity={shape.opacity}
+        />
+      ) : null}
+      {shape.type === "ellipse" ? (
+        <Shape
+          name="builder-export-content"
+          fill={shape.fill}
+          stroke={shape.stroke}
+          strokeWidth={shape.strokeWidth}
+          opacity={shape.opacity}
+          sceneFunc={(context, renderedShape) => {
+            const centerX = shape.width / 2;
+            const centerY = shape.height / 2;
+            const radiusX = Math.max(shape.width / 2, 1);
+            const radiusY = Math.max(shape.height / 2, 1);
+
+            context.beginPath();
+            context.save();
+            context.translate(centerX, centerY);
+            context.scale(radiusX, radiusY);
+            context.arc(0, 0, 1, 0, Math.PI * 2, false);
+            context.restore();
+            context.closePath();
+            context.fillStrokeShape(renderedShape);
+          }}
+        />
+      ) : null}
+      {shape.type === "line" ? (
+        <Line
+          name="builder-export-content"
+          points={shape.points}
+          stroke={shape.stroke}
+          strokeWidth={shape.strokeWidth}
+          lineCap="round"
+          lineJoin="round"
+          opacity={shape.opacity}
+        />
+      ) : null}
+      {isSelected ? (
+        <Rect
+          name="builder-export-hidden"
+          width={dimensions.width}
+          height={dimensions.height}
+          fill="rgba(0,0,0,0)"
+          stroke="#0f766e"
+          strokeWidth={1}
+          dash={[8, 5]}
+          listening={false}
+        />
+      ) : null}
+    </Group>
+  );
+}
+
+function createBuilderShapeFromDraft(draft: NonNullable<DraftBuilderShape>) {
+  switch (draft.tool) {
+    case "rectangle":
+      return createRectangleObject(draft.start, draft.current);
+    case "ellipse":
+      return createEllipseObject(draft.start, draft.current);
+    case "line":
+      return createLineObject(draft.start, draft.current);
+  }
+}
+
+function moveItemBefore<T extends { id: string }>(items: T[], draggedId: string, targetId: string) {
+  const draggedIndex = items.findIndex((item) => item.id === draggedId);
+  const targetIndex = items.findIndex((item) => item.id === targetId);
+
+  if (
+    draggedIndex < 0 ||
+    targetIndex < 0 ||
+    draggedIndex === targetIndex
+  ) {
+    return items;
+  }
+
+  const nextItems = [...items];
+  const [draggedItem] = nextItems.splice(draggedIndex, 1);
+  const insertionIndex = nextItems.findIndex((item) => item.id === targetId);
+  nextItems.splice(insertionIndex < 0 ? nextItems.length : insertionIndex, 0, draggedItem);
+
+  return nextItems;
+}
+
 function BuilderTopbar({
+  activeTool,
   selectedWireTypeId,
   wireTypes,
   canUndo,
@@ -650,6 +1188,7 @@ function BuilderTopbar({
   publishBusy,
   currentSetupLabel,
   statusText,
+  onToolChange,
   onWireTypeChange,
   onUndo,
   onRedo,
@@ -665,6 +1204,7 @@ function BuilderTopbar({
   onPublish,
   onOpenSavedSetups,
 }: {
+  activeTool: BuilderTool;
   selectedWireTypeId: string;
   wireTypes: WireTypeRow[];
   canUndo: boolean;
@@ -679,6 +1219,7 @@ function BuilderTopbar({
   publishBusy: boolean;
   currentSetupLabel?: string | null;
   statusText?: string | null;
+  onToolChange: (tool: BuilderTool) => void;
   onWireTypeChange: (wireTypeId: string) => void;
   onUndo: () => void;
   onRedo: () => void;
@@ -695,127 +1236,151 @@ function BuilderTopbar({
   onOpenSavedSetups: () => void;
 }) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/70 bg-background/95 px-4 py-3 backdrop-blur">
-      <div className="flex flex-wrap items-center gap-2">
-        <Button variant="secondary" size="sm" disabled={!canUndo} onClick={onUndo}>
-          <HugeiconsIcon icon={Undo02Icon} strokeWidth={2} data-icon="inline-start" />
-          Undo
-        </Button>
-        <Button variant="secondary" size="sm" disabled={!canRedo} onClick={onRedo}>
-          <HugeiconsIcon icon={Redo02Icon} strokeWidth={2} data-icon="inline-start" />
-          Redo
-        </Button>
-        <select
-          value={selectedWireTypeId}
-          onChange={(event) => onWireTypeChange(event.target.value)}
-          className="h-9 min-w-56 rounded-md border border-border bg-background px-3 text-sm outline-none"
-        >
-          {wireTypes.map((wireType) => (
-            <option key={wireType.id} value={wireType.id}>
-              {wireType.name}
-            </option>
-          ))}
-        </select>
-        <div className="flex items-center gap-1 rounded-full border border-border/70 bg-card px-1 py-1 shadow-sm">
-          <Button variant="ghost" size="sm" disabled={!canAlign} onClick={() => onAlign("left")}>
-            <HugeiconsIcon icon={AlignLeftIcon} strokeWidth={2} />
-          </Button>
-          <Button variant="ghost" size="sm" disabled={!canAlign} onClick={() => onAlign("center")}>
-            <HugeiconsIcon icon={AlignHorizontalCenterIcon} strokeWidth={2} />
-          </Button>
-          <Button variant="ghost" size="sm" disabled={!canAlign} onClick={() => onAlign("right")}>
-            <HugeiconsIcon icon={AlignRightIcon} strokeWidth={2} />
-          </Button>
-          <Button variant="ghost" size="sm" disabled={!canAlign} onClick={() => onAlign("top")}>
-            <HugeiconsIcon icon={AlignTopIcon} strokeWidth={2} />
-          </Button>
-          <Button variant="ghost" size="sm" disabled={!canAlign} onClick={() => onAlign("middle")}>
-            <HugeiconsIcon icon={AlignVerticalCenterIcon} strokeWidth={2} />
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            disabled={!canAlign}
-            onClick={() => onAlign("bottom")}
-          >
-            <HugeiconsIcon icon={AlignBottomIcon} strokeWidth={2} />
-          </Button>
+    <div className="border-b border-border/70 bg-background/95 px-4 py-3 backdrop-blur">
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={!canSaveSetup || saveBusy}
+              onClick={onSaveDraft}
+            >
+              <HugeiconsIcon icon={FloppyDiskIcon} strokeWidth={2} data-icon="inline-start" />
+              {saveBusy ? "Saving..." : "Save Draft"}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={!canSaveSetup || publishBusy}
+              onClick={onPublish}
+            >
+              <HugeiconsIcon icon={Rocket01Icon} strokeWidth={2} data-icon="inline-start" />
+              {publishBusy ? "Publishing..." : "Publish"}
+            </Button>
+            <Button variant="outline" size="sm" onClick={onOpenSavedSetups}>
+              <HugeiconsIcon icon={DatabaseIcon} strokeWidth={2} data-icon="inline-start" />
+              Saved Setups
+            </Button>
+            <Button variant="outline" size="sm" onClick={onCancelWiring} disabled={!hasSelectedPoint}>
+              <HugeiconsIcon icon={Cancel01Icon} strokeWidth={2} data-icon="inline-start" />
+              Cancel Wiring
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onStraightenWire}
+              disabled={!canStraightenWire}
+            >
+              Straighten Wire
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={onDeleteSelection}
+              disabled={!hasSelection}
+            >
+              <HugeiconsIcon icon={Delete02Icon} strokeWidth={2} data-icon="inline-start" />
+              Delete Selected
+            </Button>
+            <Button variant="outline" size="sm" onClick={onClearCanvas}>
+              Clear Canvas
+            </Button>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {currentSetupLabel ? (
+              <div className="rounded-full border border-border/70 bg-card px-3 py-1 text-xs text-muted-foreground shadow-sm">
+                Setup: <span className="font-medium text-foreground">{currentSetupLabel}</span>
+              </div>
+            ) : null}
+            {statusText ? (
+              <div className="rounded-full border border-border/70 bg-card px-3 py-1 text-xs text-muted-foreground shadow-sm">
+                {statusText}
+              </div>
+            ) : null}
+            <div className="flex items-center gap-2 rounded-full border border-border/70 bg-card px-2 py-1 shadow-sm">
+              <Button variant="ghost" size="sm" onClick={onZoomOut}>
+                <HugeiconsIcon icon={SearchMinusIcon} strokeWidth={2} />
+              </Button>
+              <button
+                type="button"
+                onClick={onResetZoom}
+                className="min-w-16 rounded-full px-3 py-1 text-sm font-medium text-foreground transition hover:bg-muted"
+              >
+                {Math.round(zoom * 100)}%
+              </button>
+              <Button variant="ghost" size="sm" onClick={onZoomIn}>
+                <HugeiconsIcon icon={SearchAddIcon} strokeWidth={2} />
+              </Button>
+            </div>
+          </div>
         </div>
-      </div>
 
-      <div className="flex items-center gap-2 rounded-full border border-border/70 bg-card px-2 py-1 shadow-sm">
-        <Button variant="ghost" size="sm" onClick={onZoomOut}>
-          <HugeiconsIcon icon={SearchMinusIcon} strokeWidth={2} />
-        </Button>
-        <button
-          type="button"
-          onClick={onResetZoom}
-          className="min-w-16 rounded-full px-3 py-1 text-sm font-medium text-foreground transition hover:bg-muted"
-        >
-          {Math.round(zoom * 100)}%
-        </button>
-        <Button variant="ghost" size="sm" onClick={onZoomIn}>
-          <HugeiconsIcon icon={SearchAddIcon} strokeWidth={2} />
-        </Button>
-      </div>
-
-      <div className="flex flex-wrap items-center justify-end gap-2">
-        {currentSetupLabel ? (
-          <div className="rounded-full border border-border/70 bg-card px-3 py-1 text-xs text-muted-foreground shadow-sm">
-            Setup: <span className="font-medium text-foreground">{currentSetupLabel}</span>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-1 rounded-full border border-border/70 bg-card px-1 py-1 shadow-sm">
+            {[
+              { tool: "select" as const, label: "Select", icon: PlusSignIcon },
+              { tool: "rectangle" as const, label: "Rectangle", icon: SquareIcon },
+              { tool: "ellipse" as const, label: "Ellipse", icon: OvalIcon },
+              { tool: "line" as const, label: "Line", icon: Edit01Icon },
+            ].map((item) => (
+              <Button
+                key={item.tool}
+                variant={activeTool === item.tool ? "secondary" : "ghost"}
+                size="sm"
+                onClick={() => onToolChange(item.tool)}
+                title={item.label}
+              >
+                <HugeiconsIcon icon={item.icon} strokeWidth={2} />
+              </Button>
+            ))}
           </div>
-        ) : null}
-        {statusText ? (
-          <div className="rounded-full border border-border/70 bg-card px-3 py-1 text-xs text-muted-foreground shadow-sm">
-            {statusText}
+          <Button variant="secondary" size="sm" disabled={!canUndo} onClick={onUndo}>
+            <HugeiconsIcon icon={Undo02Icon} strokeWidth={2} data-icon="inline-start" />
+            Undo
+          </Button>
+          <Button variant="secondary" size="sm" disabled={!canRedo} onClick={onRedo}>
+            <HugeiconsIcon icon={Redo02Icon} strokeWidth={2} data-icon="inline-start" />
+            Redo
+          </Button>
+          <select
+            value={selectedWireTypeId}
+            onChange={(event) => onWireTypeChange(event.target.value)}
+            className="h-9 min-w-56 rounded-md border border-border bg-background px-3 text-sm outline-none"
+          >
+            {wireTypes.map((wireType) => (
+              <option key={wireType.id} value={wireType.id}>
+                {wireType.name}
+              </option>
+            ))}
+          </select>
+          <div className="flex items-center gap-1 rounded-full border border-border/70 bg-card px-1 py-1 shadow-sm">
+            <Button variant="ghost" size="sm" disabled={!canAlign} onClick={() => onAlign("left")}>
+              <HugeiconsIcon icon={AlignLeftIcon} strokeWidth={2} />
+            </Button>
+            <Button variant="ghost" size="sm" disabled={!canAlign} onClick={() => onAlign("center")}>
+              <HugeiconsIcon icon={AlignHorizontalCenterIcon} strokeWidth={2} />
+            </Button>
+            <Button variant="ghost" size="sm" disabled={!canAlign} onClick={() => onAlign("right")}>
+              <HugeiconsIcon icon={AlignRightIcon} strokeWidth={2} />
+            </Button>
+            <Button variant="ghost" size="sm" disabled={!canAlign} onClick={() => onAlign("top")}>
+              <HugeiconsIcon icon={AlignTopIcon} strokeWidth={2} />
+            </Button>
+            <Button variant="ghost" size="sm" disabled={!canAlign} onClick={() => onAlign("middle")}>
+              <HugeiconsIcon icon={AlignVerticalCenterIcon} strokeWidth={2} />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={!canAlign}
+              onClick={() => onAlign("bottom")}
+            >
+              <HugeiconsIcon icon={AlignBottomIcon} strokeWidth={2} />
+            </Button>
           </div>
-        ) : null}
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={!canSaveSetup || saveBusy}
-          onClick={onSaveDraft}
-        >
-          <HugeiconsIcon icon={FloppyDiskIcon} strokeWidth={2} data-icon="inline-start" />
-          {saveBusy ? "Saving..." : "Save Draft"}
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={!canSaveSetup || publishBusy}
-          onClick={onPublish}
-        >
-          <HugeiconsIcon icon={Rocket01Icon} strokeWidth={2} data-icon="inline-start" />
-          {publishBusy ? "Publishing..." : "Publish"}
-        </Button>
-        <Button variant="outline" size="sm" onClick={onOpenSavedSetups}>
-          <HugeiconsIcon icon={DatabaseIcon} strokeWidth={2} data-icon="inline-start" />
-          Saved Setups
-        </Button>
-        <Button variant="outline" size="sm" onClick={onCancelWiring} disabled={!hasSelectedPoint}>
-          <HugeiconsIcon icon={Cancel01Icon} strokeWidth={2} data-icon="inline-start" />
-          Cancel Wiring
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={onStraightenWire}
-          disabled={!canStraightenWire}
-        >
-          Straighten Wire
-        </Button>
-        <Button
-          variant="destructive"
-          size="sm"
-          onClick={onDeleteSelection}
-          disabled={!hasSelection}
-        >
-          <HugeiconsIcon icon={Delete02Icon} strokeWidth={2} data-icon="inline-start" />
-          Delete Selected
-        </Button>
-        <Button variant="outline" size="sm" onClick={onClearCanvas}>
-          Clear Canvas
-        </Button>
+        </div>
       </div>
     </div>
   );
@@ -830,10 +1395,15 @@ export function CustomBuilderContent({
   const { data: session, status: sessionStatus } = useSession();
   const [instances, setInstances] = React.useState<BuilderInstance[]>([]);
   const [connections, setConnections] = React.useState<BuilderConnection[]>([]);
+  const [shapes, setShapes] = React.useState<BuilderSetupShape[]>([]);
+  const [activeTool, setActiveTool] = React.useState<BuilderTool>("select");
   const [selectedInstanceId, setSelectedInstanceId] = React.useState<string | null>(null);
   const [selectedInstanceIds, setSelectedInstanceIds] = React.useState<string[]>([]);
   const [selectedConnectionId, setSelectedConnectionId] = React.useState<string | null>(null);
+  const [selectedShapeId, setSelectedShapeId] = React.useState<string | null>(null);
+  const [selectedShapeIds, setSelectedShapeIds] = React.useState<string[]>([]);
   const [selectedPoint, setSelectedPoint] = React.useState<SelectedPoint | null>(null);
+  const [hoverPointTarget, setHoverPointTarget] = React.useState<HoverPointTarget | null>(null);
   const [selectedWireTypeId, setSelectedWireTypeId] = React.useState<string>(
     wireTypes[0]?.id ?? ""
   );
@@ -846,7 +1416,9 @@ export function CustomBuilderContent({
   );
   const [stageSize, setStageSize] = React.useState({ width: 960, height: 720 });
   const [canvasScale, setCanvasScale] = React.useState(1);
+  const [canvasOffset, setCanvasOffset] = React.useState({ x: 0, y: 0 });
   const [selectionBox, setSelectionBox] = React.useState<SelectionBox>(null);
+  const [draftShape, setDraftShape] = React.useState<DraftBuilderShape>(null);
   const [pointerPosition, setPointerPosition] = React.useState<{ x: number; y: number } | null>(
     null
   );
@@ -859,6 +1431,10 @@ export function CustomBuilderContent({
   const [activePublishedTemplateId, setActivePublishedTemplateId] = React.useState<string | null>(
     null
   );
+  const [draggedLayer, setDraggedLayer] = React.useState<{
+    id: string;
+    kind: BuilderLayerEntry["kind"];
+  } | null>(null);
   const [savedSetupDescription, setSavedSetupDescription] = React.useState("");
   const [saveDialogOpen, setSaveDialogOpen] = React.useState(false);
   const [savedSetupBrowserOpen, setSavedSetupBrowserOpen] = React.useState(false);
@@ -884,12 +1460,20 @@ export function CustomBuilderContent({
   const [savedSetupActionId, setSavedSetupActionId] = React.useState<string | null>(null);
   const deferredAssetQuery = React.useDeferredValue(assetQuery);
   const stageWrapperRef = React.useRef<HTMLDivElement | null>(null);
-  const transformerRef = React.useRef<React.ElementRef<typeof Transformer> | null>(null);
-  const nodeRefs = React.useRef(new Map<string, React.ElementRef<typeof Group>>());
+  const transformerRef = React.useRef<Konva.Transformer | null>(null);
+  const shapeTransformerRef = React.useRef<Konva.Transformer | null>(null);
+  const nodeRefs = React.useRef(new Map<string, Konva.Group>());
+  const shapeNodeRefs = React.useRef(new Map<string, Konva.Group>());
   const dragSelectionRef = React.useRef<{
     lastX: number;
     lastY: number;
     selectedIds: string[];
+  } | null>(null);
+  const panDragRef = React.useRef<{
+    startClientX: number;
+    startClientY: number;
+    startOffsetX: number;
+    startOffsetY: number;
   } | null>(null);
   const transformSelectionRef = React.useRef<
     Map<
@@ -908,15 +1492,21 @@ export function CustomBuilderContent({
   const lastSnapshotRef = React.useRef<BuilderSnapshot | null>(null);
   const latestInstancesRef = React.useRef<BuilderInstance[]>([]);
   const latestConnectionsRef = React.useRef<BuilderConnection[]>([]);
+  const latestShapesRef = React.useRef<BuilderSetupShape[]>([]);
   const historyTransactionDepthRef = React.useRef(0);
   const historyTransactionSnapshotRef = React.useRef<BuilderSnapshot | null>(null);
-  const stageRef = React.useRef<React.ElementRef<typeof Stage> | null>(null);
+  const stageRef = React.useRef<Konva.Stage | null>(null);
   const nextIdRef = React.useRef(1);
   const worldViewportWidth = stageSize.width / canvasScale;
   const worldViewportHeight = stageSize.height / canvasScale;
+  const visibleWorldMinX = -canvasOffset.x / canvasScale;
+  const visibleWorldMinY = -canvasOffset.y / canvasScale;
+  const visibleWorldMaxX = visibleWorldMinX + worldViewportWidth;
+  const visibleWorldMaxY = visibleWorldMinY + worldViewportHeight;
   const canPersistSavedSetups = sessionStatus === "authenticated";
   latestInstancesRef.current = instances;
   latestConnectionsRef.current = connections;
+  latestShapesRef.current = shapes;
 
   React.useEffect(() => {
     const element = stageWrapperRef.current;
@@ -974,16 +1564,98 @@ export function CustomBuilderContent({
     () => instances.filter((instance) => selectedInstanceIds.includes(instance.id)),
     [instances, selectedInstanceIds]
   );
+  const selectedShape = shapes.find((shape) => shape.id === selectedShapeId) ?? null;
   const selectedConnection =
     connections.find((connection) => connection.id === selectedConnectionId) ?? null;
+  const connectionRenderData = React.useMemo(() => {
+    const entries = connections
+      .map((connection) => {
+        const from = getPoint(connection.fromInstanceId, connection.fromPointKey);
+        const to = getPoint(connection.toInstanceId, connection.toPointKey);
+
+        if (!from || !to) {
+          return null;
+        }
+
+        const renderedControlPoints = normalizeConnectionControlPoints(
+          connection.controlPoints,
+          from,
+          to
+        );
+        const pathPoints = [from, ...renderedControlPoints, to];
+
+        return {
+          connection,
+          pathPoints,
+          color:
+            wireTypes.find((item) => item.id === connection.wireTypeId)?.hexColor ?? "#334155",
+        };
+      })
+      .filter(
+        (
+          entry
+        ): entry is {
+          connection: BuilderConnection;
+          pathPoints: { x: number; y: number }[];
+          color: string;
+        } => Boolean(entry)
+      );
+    const bridgeMap = computeWireBridges(
+      entries.map((entry) => ({
+        connectionId: entry.connection.id,
+        points: entry.pathPoints,
+      }))
+    );
+
+    return entries.map((entry) => ({
+      ...entry,
+      bridges: bridgeMap.get(entry.connection.id) ?? [],
+    }));
+  }, [connections, instances, wireTypes]);
+  const visibleLayers = React.useMemo<BuilderLayerEntry[]>(
+    () => [
+      ...[...connections].reverse().map((connection) => ({
+        id: connection.id,
+        kind: "connection" as const,
+        label:
+          wireTypes.find((item) => item.id === connection.wireTypeId)?.name ?? "Wire",
+        meta: "wiring",
+        selected: selectedConnectionId === connection.id,
+      })),
+      ...[...shapes].reverse().map((shape) => ({
+        id: shape.id,
+        kind: "shape" as const,
+        label: shape.name,
+        meta: shape.type,
+        selected: selectedShapeIds.includes(shape.id),
+      })),
+      ...[...instances].reverse().map((instance) => ({
+        id: instance.id,
+        kind: "instance" as const,
+        label: instance.name,
+        meta: instance.componentType,
+        selected: selectedInstanceIds.includes(instance.id),
+      })),
+    ],
+    [
+      connections,
+      instances,
+      selectedConnectionId,
+      selectedInstanceIds,
+      selectedShapeIds,
+      shapes,
+      wireTypes,
+    ]
+  );
   const persistedDocument = React.useMemo(
     () =>
       createBuilderSavedSetupDocument(
         instances,
         connections,
+        shapes,
         selectedWireTypeId || null
       ),
-    [connections, instances, selectedWireTypeId]
+    [connections, instances, selectedWireTypeId, shapes]
   );
 
   const persistSavedSetupListEntry = React.useCallback((nextSetup: BuilderSavedSetupRow) => {
@@ -1168,7 +1840,7 @@ export function CustomBuilderContent({
 
     const nodes = selectedInstanceIds
       .map((instanceId) => nodeRefs.current.get(instanceId))
-      .filter((node): node is React.ElementRef<typeof Group> => Boolean(node));
+      .filter((node): node is Konva.Group => Boolean(node));
 
     if (nodes.length === 0) {
       transformer.nodes([]);
@@ -1181,7 +1853,46 @@ export function CustomBuilderContent({
   }, [instances, selectedInstanceIds]);
 
   React.useEffect(() => {
-    const snapshot = createBuilderSnapshot(instances, connections);
+    function handleWindowMouseUp() {
+      panDragRef.current = null;
+    }
+
+    window.addEventListener("mouseup", handleWindowMouseUp);
+
+    return () => {
+      window.removeEventListener("mouseup", handleWindowMouseUp);
+    };
+  }, []);
+
+  React.useEffect(() => {
+    const transformer = shapeTransformerRef.current;
+
+    if (!transformer) {
+      return;
+    }
+
+    if (selectedShapeIds.length === 0) {
+      transformer.nodes([]);
+      transformer.getLayer()?.batchDraw();
+      return;
+    }
+
+    const nodes = selectedShapeIds
+      .map((shapeId) => shapeNodeRefs.current.get(shapeId))
+      .filter((node): node is Konva.Group => Boolean(node));
+
+    if (nodes.length === 0) {
+      transformer.nodes([]);
+      transformer.getLayer()?.batchDraw();
+      return;
+    }
+
+    transformer.nodes(nodes);
+    transformer.getLayer()?.batchDraw();
+  }, [selectedShapeIds, shapes]);
+
+  React.useEffect(() => {
+    const snapshot = createBuilderSnapshot(instances, connections, shapes);
 
     if (lastSnapshotRef.current === null) {
       lastSnapshotRef.current = snapshot;
@@ -1209,12 +1920,13 @@ export function CustomBuilderContent({
     setPastSnapshots((current) => [...current, previousSnapshot].slice(-80));
     setFutureSnapshots([]);
     lastSnapshotRef.current = snapshot;
-  }, [connections, instances]);
+  }, [connections, instances, shapes]);
 
   function getCurrentSnapshot() {
     return createBuilderSnapshot(
       latestInstancesRef.current,
-      latestConnectionsRef.current
+      latestConnectionsRef.current,
+      latestShapesRef.current
     );
   }
 
@@ -1324,15 +2036,76 @@ export function CustomBuilderContent({
     return getPointForInstances(instances, instanceId, pointKey);
   }
 
+  function getNearestConnectionPointTarget(pointer: { x: number; y: number }) {
+    if (!selectedPoint) {
+      return null;
+    }
+
+    let nearestTarget: (HoverPointTarget & { distance: number }) | null = null;
+
+    for (const instance of instances) {
+      const asset = getAsset(instance.assetId);
+
+      if (!asset) {
+        continue;
+      }
+
+      for (const point of asset.connectionPoints) {
+        if (
+          instance.id === selectedPoint.instanceId &&
+          point.pointKey === selectedPoint.pointKey
+        ) {
+          continue;
+        }
+
+        const resolvedPoint = getPointForInstances(instances, instance.id, point.pointKey);
+
+        if (!resolvedPoint) {
+          continue;
+        }
+
+        const distance = Math.hypot(
+          resolvedPoint.x - pointer.x,
+          resolvedPoint.y - pointer.y
+        );
+
+        if (
+          distance <= CONNECTION_POINT_SNAP_DISTANCE &&
+          (!nearestTarget || distance < nearestTarget.distance)
+        ) {
+          nearestTarget = {
+            instanceId: instance.id,
+            pointKey: point.pointKey,
+            distance,
+          };
+        }
+      }
+    }
+
+    if (!nearestTarget) {
+      return null;
+    }
+
+    return {
+      instanceId: nearestTarget.instanceId,
+      pointKey: nearestTarget.pointKey,
+    };
+  }
+
   function applySnapshot(snapshot: BuilderSnapshot) {
     isRestoringHistoryRef.current = true;
     setInstances(cloneInstances(snapshot.instances));
     setConnections(cloneConnections(snapshot.connections));
+    setShapes(cloneShapes(snapshot.shapes));
     setSelectedInstanceId(null);
     setSelectedInstanceIds([]);
     setSelectedConnectionId(null);
+    setSelectedShapeId(null);
+    setSelectedShapeIds([]);
     setSelectedPoint(null);
+    setHoverPointTarget(null);
     setSelectionBox(null);
+    setDraftShape(null);
     dragSelectionRef.current = null;
     transformSelectionRef.current.clear();
     historyTransactionDepthRef.current = 0;
@@ -1357,6 +2130,7 @@ export function CustomBuilderContent({
       const value = match ? Number(match[1]) : 0;
       return Number.isFinite(value) ? Math.max(currentMax, value) : currentMax;
     }, 0);
+    const nextShapes = cloneShapes(normalized.shapes);
 
     nextIdRef.current = Math.max(nextIdRef.current, maxInstanceSequence, maxConnectionSequence) + 1;
     setSelectedWireTypeId(
@@ -1367,6 +2141,7 @@ export function CustomBuilderContent({
     applySnapshot({
       instances: nextInstances,
       connections: nextConnections,
+      shapes: nextShapes,
     });
   }
 
@@ -1420,13 +2195,13 @@ export function CustomBuilderContent({
       }
 
       setFutureSnapshots((future) => [
-        createBuilderSnapshot(instances, connections),
+        createBuilderSnapshot(instances, connections, shapes),
         ...future,
       ].slice(0, 80));
       applySnapshot(previous);
       return current.slice(0, -1);
     });
-  }, [connections, instances]);
+  }, [connections, instances, shapes]);
 
   const redoBuilder = React.useCallback(() => {
     setFutureSnapshots((current) => {
@@ -1436,11 +2211,11 @@ export function CustomBuilderContent({
         return current;
       }
 
-      setPastSnapshots((past) => [...past, createBuilderSnapshot(instances, connections)].slice(-80));
+      setPastSnapshots((past) => [...past, createBuilderSnapshot(instances, connections, shapes)].slice(-80));
       applySnapshot(next);
       return current.slice(1);
     });
-  }, [connections, instances]);
+  }, [connections, instances, shapes]);
 
   function getPointerInWorld() {
     const stage = stageRef.current;
@@ -1451,8 +2226,8 @@ export function CustomBuilderContent({
     }
 
     return {
-      x: pointer.x / canvasScale,
-      y: pointer.y / canvasScale,
+      x: (pointer.x - canvasOffset.x) / canvasScale,
+      y: (pointer.y - canvasOffset.y) / canvasScale,
     };
   }
 
@@ -1474,10 +2249,14 @@ export function CustomBuilderContent({
       setSelectedInstanceId(instanceId);
       setSelectedInstanceIds([instanceId]);
       setSelectedConnectionId(null);
+      setSelectedShapeId(null);
+      setSelectedShapeIds([]);
       return;
     }
 
     setSelectedConnectionId(null);
+    setSelectedShapeId(null);
+    setSelectedShapeIds([]);
     setSelectedInstanceIds((current) => {
       const exists = current.includes(instanceId);
       const nextIds = exists
@@ -1498,6 +2277,96 @@ export function CustomBuilderContent({
 
       return nextIds;
     });
+  }
+
+  function selectShape(shapeId: string, additive = false) {
+    if (!additive) {
+      setSelectedShapeId(shapeId);
+      setSelectedShapeIds([shapeId]);
+      setSelectedInstanceId(null);
+      setSelectedInstanceIds([]);
+      setSelectedConnectionId(null);
+      return;
+    }
+
+    setSelectedInstanceId(null);
+    setSelectedInstanceIds([]);
+    setSelectedConnectionId(null);
+    setSelectedShapeIds((current) => {
+      const exists = current.includes(shapeId);
+      const nextIds = exists ? current.filter((id) => id !== shapeId) : [...current, shapeId];
+
+      setSelectedShapeId((currentId) => {
+        if (!exists) {
+          return currentId ?? shapeId;
+        }
+
+        if (currentId && nextIds.includes(currentId)) {
+          return currentId;
+        }
+
+        return nextIds[0] ?? null;
+      });
+
+      return nextIds;
+    });
+  }
+
+  function beginDraftShape(tool: Exclude<BuilderTool, "select">) {
+    const pointer = getPointerInWorld();
+
+    if (!pointer) {
+      return;
+    }
+
+    setDraftShape({
+      tool,
+      start: pointer,
+      current: pointer,
+      constrainProportions: false,
+    });
+  }
+
+  function updateDraftShape(ctrlKey = false) {
+    const pointer = getPointerInWorld();
+
+    if (!pointer || !draftShape) {
+      return;
+    }
+
+    setDraftShape({
+      ...draftShape,
+      current:
+        (draftShape.tool === "rectangle" || draftShape.tool === "ellipse") && ctrlKey
+          ? getConstrainedPoint(draftShape.start, pointer)
+          : pointer,
+      constrainProportions:
+        (draftShape.tool === "rectangle" || draftShape.tool === "ellipse") && ctrlKey,
+    });
+  }
+
+  function commitDraftShape() {
+    if (!draftShape) {
+      return;
+    }
+
+    const shape = createBuilderShapeFromDraft(draftShape);
+    const dimensions = getObjectDimensions(shape);
+
+    if (dimensions.width < MIN_SELECTION_BOX_SIZE && dimensions.height < MIN_SELECTION_BOX_SIZE) {
+      setDraftShape(null);
+      return;
+    }
+
+    setShapes((current) => [...current, shape]);
+    setSelectedShapeId(shape.id);
+    setSelectedShapeIds([shape.id]);
+    setSelectedInstanceId(null);
+    setSelectedInstanceIds([]);
+    setSelectedConnectionId(null);
+    setActiveTool("select");
+    setDraftShape(null);
+    setCanvasMessage(`${shape.name} ditambahkan ke canvas builder.`);
   }
 
   function addInstance(assetId: string, dropX?: number, dropY?: number) {
@@ -1583,18 +2452,21 @@ export function CustomBuilderContent({
       selectedPoint.pointKey === pointKey
     ) {
       setSelectedPoint(null);
+      setHoverPointTarget(null);
       setCanvasMessage("Connection point dibatalkan.");
       return;
     }
 
     if (!selectedPoint) {
       setSelectedPoint({ instanceId, pointKey });
+      setHoverPointTarget(null);
       setCanvasMessage("Titik pertama dipilih. Klik titik tujuan untuk menyambungkan wiring.");
       return;
     }
 
     if (selectedPoint.instanceId === instanceId && selectedPoint.pointKey === pointKey) {
       setSelectedPoint(null);
+      setHoverPointTarget(null);
       return;
     }
 
@@ -1615,6 +2487,7 @@ export function CustomBuilderContent({
 
     if (duplicate) {
       setSelectedPoint(null);
+      setHoverPointTarget(null);
       setCanvasMessage("Koneksi itu sudah ada di canvas.");
       return;
     }
@@ -1626,6 +2499,7 @@ export function CustomBuilderContent({
 
     if (!from || !to) {
       setSelectedPoint(null);
+      setHoverPointTarget(null);
       setCanvasMessage("Gagal membuat koneksi karena titik referensi tidak ditemukan.");
       return;
     }
@@ -1647,6 +2521,7 @@ export function CustomBuilderContent({
       },
     ]);
     setSelectedPoint(null);
+    setHoverPointTarget(null);
     setSelectedInstanceId(null);
     setSelectedInstanceIds([]);
     setSelectedConnectionId(connectionId);
@@ -1689,6 +2564,27 @@ export function CustomBuilderContent({
     setCanvasScale(Math.min(MAX_CANVAS_SCALE, Math.max(MIN_CANVAS_SCALE, nextScale)));
   }
 
+  function zoomCanvasAroundPoint(
+    nextScale: number,
+    anchor?: { x: number; y: number } | null
+  ) {
+    const clampedScale = Math.min(MAX_CANVAS_SCALE, Math.max(MIN_CANVAS_SCALE, nextScale));
+
+    if (!anchor || Math.abs(clampedScale - canvasScale) < 0.0001) {
+      setCanvasScale(clampedScale);
+      return;
+    }
+
+    const worldX = (anchor.x - canvasOffset.x) / canvasScale;
+    const worldY = (anchor.y - canvasOffset.y) / canvasScale;
+
+    setCanvasScale(clampedScale);
+    setCanvasOffset({
+      x: anchor.x - worldX * clampedScale,
+      y: anchor.y - worldY * clampedScale,
+    });
+  }
+
   function setSelectedInstanceLabelVisibility(checked: boolean) {
     if (selectedInstanceIds.length === 0) {
       return;
@@ -1706,6 +2602,7 @@ export function CustomBuilderContent({
 
   function resetCanvasView() {
     setCanvasScale(1);
+    setCanvasOffset({ x: 0, y: 0 });
     setCanvasMessage("Zoom canvas direset ke 100%.");
   }
 
@@ -1727,19 +2624,38 @@ export function CustomBuilderContent({
     setSelectedPoint((current) =>
       current && selectedInstanceIds.includes(current.instanceId) ? null : current
     );
+    setHoverPointTarget((current) =>
+      current && selectedInstanceIds.includes(current.instanceId) ? null : current
+    );
     setCanvasMessage("Komponen terpilih dihapus dari canvas.");
     setSelectedInstanceId(null);
     setSelectedInstanceIds([]);
     setSelectedConnectionId(null);
   }
 
+  function removeSelectedShapes() {
+    if (selectedShapeIds.length === 0) {
+      return;
+    }
+
+    setShapes((current) => current.filter((shape) => !selectedShapeIds.includes(shape.id)));
+    setSelectedShapeId(null);
+    setSelectedShapeIds([]);
+    setCanvasMessage("Shape terpilih dihapus dari canvas.");
+  }
+
   function clearCanvas() {
     setInstances([]);
     setConnections([]);
+    setShapes([]);
     setSelectedInstanceId(null);
     setSelectedInstanceIds([]);
     setSelectedConnectionId(null);
+    setSelectedShapeId(null);
+    setSelectedShapeIds([]);
     setSelectedPoint(null);
+    setHoverPointTarget(null);
+    setDraftShape(null);
     setCanvasMessage("Canvas dibersihkan.");
   }
 
@@ -2062,6 +2978,79 @@ export function CustomBuilderContent({
     });
   }
 
+  function updateShape(shapeId: string, patch: Partial<BuilderSetupShape>) {
+    setShapes((current) =>
+      current.map((shape) => (shape.id === shapeId ? ({ ...shape, ...patch } as BuilderSetupShape) : shape))
+    );
+  }
+
+  function updateShapes(
+    shapeIds: string[],
+    updater: (shape: BuilderSetupShape) => BuilderSetupShape
+  ) {
+    if (shapeIds.length === 0) {
+      return;
+    }
+
+    setShapes((current) =>
+      current.map((shape) => (shapeIds.includes(shape.id) ? updater(shape) : shape))
+    );
+  }
+
+  function commitTransformedShapes(shapeIds: string[]) {
+    if (shapeIds.length === 0) {
+      return;
+    }
+
+    setShapes((current) =>
+      current.map((shape) => {
+        if (!shapeIds.includes(shape.id)) {
+          return shape;
+        }
+
+        const node = shapeNodeRefs.current.get(shape.id);
+
+        if (!node) {
+          return shape;
+        }
+
+        const nextX = snapToGrid(node.x());
+        const nextY = snapToGrid(node.y());
+        const nextRotation = node.rotation();
+        const nextScaleX = node.scaleX();
+        const nextScaleY = node.scaleY();
+
+        node.scaleX(1);
+        node.scaleY(1);
+
+        if (shape.type === "rectangle" || shape.type === "ellipse") {
+          return {
+            ...shape,
+            x: nextX,
+            y: nextY,
+            rotation: nextRotation,
+            width: Math.max(10, shape.width * nextScaleX),
+            height: Math.max(10, shape.height * nextScaleY),
+            scaleX: 1,
+            scaleY: 1,
+          };
+        }
+
+        return {
+          ...shape,
+          x: nextX,
+          y: nextY,
+          rotation: nextRotation,
+          points: shape.points.map((point, index) =>
+            index % 2 === 0 ? point * nextScaleX : point * nextScaleY
+          ),
+          scaleX: 1,
+          scaleY: 1,
+        };
+      })
+    );
+  }
+
   function updateInstances(
     instanceIds: string[],
     updater: (instance: BuilderInstance) => BuilderInstance
@@ -2206,7 +3195,12 @@ export function CustomBuilderContent({
           height: maxY - minY,
         };
       },
-      { ...bounds[0] }
+      {
+        x: bounds[0].x,
+        y: bounds[0].y,
+        width: bounds[0].width,
+        height: bounds[0].height,
+      }
     );
 
     updateInstances(selectedInstanceIds, (instance) => {
@@ -2236,9 +3230,38 @@ export function CustomBuilderContent({
     setCanvasMessage("Komponen dirapikan sesuai alignment yang dipilih.");
   }
 
+  function moveBuilderLayer(
+    dragged: { id: string; kind: BuilderLayerEntry["kind"] },
+    target: { id: string; kind: BuilderLayerEntry["kind"] }
+  ) {
+    if (dragged.id === target.id || dragged.kind !== target.kind) {
+      return;
+    }
+
+    if (dragged.kind === "connection") {
+      setConnections((current) => moveItemBefore(current, dragged.id, target.id));
+      setCanvasMessage("Urutan wiring layer diperbarui.");
+      return;
+    }
+
+    if (dragged.kind === "shape") {
+      setShapes((current) => moveItemBefore(current, dragged.id, target.id));
+      setCanvasMessage("Urutan shape layer diperbarui.");
+      return;
+    }
+
+    setInstances((current) => moveItemBefore(current, dragged.id, target.id));
+    setCanvasMessage("Urutan component layer diperbarui.");
+  }
+
   const handleShortcutDeleteSelection = React.useEffectEvent(() => {
     if (selectedConnectionId) {
       removeSelectedConnection();
+      return;
+    }
+
+    if (selectedShapeIds.length > 0) {
+      removeSelectedShapes();
       return;
     }
 
@@ -2247,7 +3270,16 @@ export function CustomBuilderContent({
     }
   });
 
-  const handleShortcutMoveSelectedInstance = React.useEffectEvent((deltaX: number, deltaY: number) => {
+  const handleShortcutMoveSelection = React.useEffectEvent((deltaX: number, deltaY: number) => {
+    if (selectedShapeIds.length > 0) {
+      updateShapes(selectedShapeIds, (shape) => ({
+        ...shape,
+        x: snapToGrid(shape.x + deltaX),
+        y: snapToGrid(shape.y + deltaY),
+      }));
+      return;
+    }
+
     if (selectedInstanceIds.length === 0) {
       return;
     }
@@ -2306,44 +3338,55 @@ export function CustomBuilderContent({
       if (event.key === "Escape") {
         event.preventDefault();
         setSelectedPoint(null);
+        setHoverPointTarget(null);
         setSelectedInstanceId(null);
         setSelectedInstanceIds([]);
         setSelectedConnectionId(null);
+        setSelectedShapeId(null);
+        setSelectedShapeIds([]);
+        setDraftShape(null);
+        setActiveTool("select");
         setCanvasMessage("Seleksi dibersihkan.");
         return;
       }
 
-      if (selectedInstanceIds.length > 0) {
+      if (selectedInstanceIds.length > 0 || selectedShapeIds.length > 0) {
         const step = event.shiftKey ? WIRE_GRID_SIZE * 2 : WIRE_GRID_SIZE;
 
         if (event.key === "ArrowLeft") {
           event.preventDefault();
-          handleShortcutMoveSelectedInstance(-step, 0);
+          handleShortcutMoveSelection(-step, 0);
           return;
         }
 
         if (event.key === "ArrowRight") {
           event.preventDefault();
-          handleShortcutMoveSelectedInstance(step, 0);
+          handleShortcutMoveSelection(step, 0);
           return;
         }
 
         if (event.key === "ArrowUp") {
           event.preventDefault();
-          handleShortcutMoveSelectedInstance(0, -step);
+          handleShortcutMoveSelection(0, -step);
           return;
         }
 
         if (event.key === "ArrowDown") {
           event.preventDefault();
-          handleShortcutMoveSelectedInstance(0, step);
+          handleShortcutMoveSelection(0, step);
           return;
         }
       }
 
       if (modifier && (event.key === "=" || event.key === "+")) {
         event.preventDefault();
-        updateCanvasScale(canvasScale + CANVAS_SCALE_STEP);
+        zoomCanvasAroundPoint(
+          canvasScale + CANVAS_SCALE_STEP,
+          stageRef.current?.getPointerPosition() ?? {
+            x: stageSize.width / 2,
+            y: stageSize.height / 2,
+          }
+        );
         return;
       }
 
@@ -2387,7 +3430,13 @@ export function CustomBuilderContent({
 
       if (modifier && event.key === "-") {
         event.preventDefault();
-        updateCanvasScale(canvasScale - CANVAS_SCALE_STEP);
+        zoomCanvasAroundPoint(
+          canvasScale - CANVAS_SCALE_STEP,
+          stageRef.current?.getPointerPosition() ?? {
+            x: stageSize.width / 2,
+            y: stageSize.height / 2,
+          }
+        );
         return;
       }
 
@@ -2412,6 +3461,7 @@ export function CustomBuilderContent({
       if (key === "c" && selectedPoint) {
         event.preventDefault();
         setSelectedPoint(null);
+        setHoverPointTarget(null);
         setCanvasMessage("Mode wiring dibatalkan.");
       }
     }
@@ -2426,13 +3476,13 @@ export function CustomBuilderContent({
     selectedConnectionId,
     selectedInstanceIds,
     selectedInstances,
+    selectedShapeIds,
     selectedPoint,
     copySelectedInstances,
     pasteCopiedInstances,
     redoBuilder,
     undoBuilder,
-    connections,
-    instances,
+    shapes,
   ]);
 
   return (
@@ -2525,6 +3575,7 @@ export function CustomBuilderContent({
         <div className="min-h-0 overflow-hidden bg-[linear-gradient(135deg,rgba(15,23,42,0.03),rgba(15,118,110,0.07))] p-4">
           <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-[2rem] border border-border/70 bg-background/95 shadow-[0_30px_80px_rgba(15,23,42,0.10)]">
             <BuilderTopbar
+              activeTool={activeTool}
               selectedWireTypeId={selectedWireTypeId}
               wireTypes={wireTypes}
               canUndo={pastSnapshots.length > 0}
@@ -2533,7 +3584,11 @@ export function CustomBuilderContent({
               canAlign={selectedInstanceIds.length > 0}
               canStraightenWire={Boolean(selectedConnectionId)}
               hasSelectedPoint={Boolean(selectedPoint)}
-              hasSelection={Boolean(selectedInstanceIds.length > 0 || selectedConnectionId)}
+              hasSelection={Boolean(
+                selectedInstanceIds.length > 0 ||
+                  selectedShapeIds.length > 0 ||
+                  selectedConnectionId
+              )}
               canSaveSetup={canPersistSavedSetups}
               saveBusy={isSavingSetup && saveDialogOpen}
               publishBusy={isSavingSetup && publishDialogOpen}
@@ -2556,18 +3611,42 @@ export function CustomBuilderContent({
                     ? null
                     : "Saved setups require sign-in."
               }
+              onToolChange={setActiveTool}
               onWireTypeChange={setSelectedWireTypeId}
               onUndo={undoBuilder}
               onRedo={redoBuilder}
               onAlign={alignSelectedInstance}
-              onZoomOut={() => updateCanvasScale(canvasScale - CANVAS_SCALE_STEP)}
-              onZoomIn={() => updateCanvasScale(canvasScale + CANVAS_SCALE_STEP)}
+              onZoomOut={() =>
+                zoomCanvasAroundPoint(
+                  canvasScale - CANVAS_SCALE_STEP,
+                  stageRef.current?.getPointerPosition() ?? {
+                    x: stageSize.width / 2,
+                    y: stageSize.height / 2,
+                  }
+                )
+              }
+              onZoomIn={() =>
+                zoomCanvasAroundPoint(
+                  canvasScale + CANVAS_SCALE_STEP,
+                  stageRef.current?.getPointerPosition() ?? {
+                    x: stageSize.width / 2,
+                    y: stageSize.height / 2,
+                  }
+                )
+              }
               onResetZoom={resetCanvasView}
-              onCancelWiring={() => setSelectedPoint(null)}
+              onCancelWiring={() => {
+                setSelectedPoint(null);
+                setHoverPointTarget(null);
+              }}
               onStraightenWire={straightenSelectedConnection}
               onDeleteSelection={() => {
                 if (selectedConnectionId) {
                   removeSelectedConnection();
+                  return;
+                }
+                if (selectedShapeIds.length > 0) {
+                  removeSelectedShapes();
                   return;
                 }
                 removeSelectedInstances();
@@ -2606,15 +3685,39 @@ export function CustomBuilderContent({
                       ref={stageRef}
                       width={stageSize.width}
                       height={stageSize.height}
+                      x={canvasOffset.x}
+                      y={canvasOffset.y}
                       scaleX={canvasScale}
                       scaleY={canvasScale}
                       onMouseMove={(event) => {
                         const position = event.target.getStage()?.getPointerPosition();
-                        setPointerPosition(
-                          position
-                            ? { x: position.x / canvasScale, y: position.y / canvasScale }
-                            : null
-                        );
+                        if (panDragRef.current && position) {
+                          setCanvasOffset({
+                            x:
+                              panDragRef.current.startOffsetX +
+                              (position.x - panDragRef.current.startClientX),
+                            y:
+                              panDragRef.current.startOffsetY +
+                              (position.y - panDragRef.current.startClientY),
+                          });
+                          return;
+                        }
+
+                        const nextPointerPosition = position
+                          ? {
+                              x: (position.x - canvasOffset.x) / canvasScale,
+                              y: (position.y - canvasOffset.y) / canvasScale,
+                            }
+                          : null;
+                        setPointerPosition(nextPointerPosition);
+
+                        if (selectedPoint && nextPointerPosition) {
+                          setHoverPointTarget(
+                            getNearestConnectionPointTarget(nextPointerPosition)
+                          );
+                        } else if (selectedPoint) {
+                          setHoverPointTarget(null);
+                        }
 
                         if (selectionBox) {
                           const pointer = getPointerInWorld();
@@ -2631,10 +3734,52 @@ export function CustomBuilderContent({
                                 }
                               : current
                           );
+                          return;
+                        }
+
+                        if (draftShape) {
+                          updateDraftShape(event.evt.ctrlKey);
                         }
                       }}
                       onMouseDown={(event) => {
                         if (event.target === event.target.getStage()) {
+                          if (event.evt.shiftKey) {
+                            const position = event.target.getStage()?.getPointerPosition();
+
+                            if (!position) {
+                              return;
+                            }
+
+                            panDragRef.current = {
+                              startClientX: position.x,
+                              startClientY: position.y,
+                              startOffsetX: canvasOffset.x,
+                              startOffsetY: canvasOffset.y,
+                            };
+                            setSelectionBox(null);
+                            return;
+                          }
+
+                          if (selectedPoint && hoverPointTarget) {
+                            handlePointSelect(
+                              hoverPointTarget.instanceId,
+                              hoverPointTarget.pointKey
+                            );
+                            return;
+                          }
+
+                          if (activeTool !== "select") {
+                            setSelectedPoint(null);
+                            setHoverPointTarget(null);
+                            setSelectedInstanceId(null);
+                            setSelectedInstanceIds([]);
+                            setSelectedConnectionId(null);
+                            setSelectedShapeId(null);
+                            setSelectedShapeIds([]);
+                            beginDraftShape(activeTool);
+                            return;
+                          }
+
                           const pointer = getPointerInWorld();
 
                           if (!pointer) {
@@ -2654,11 +3799,24 @@ export function CustomBuilderContent({
                             setSelectedInstanceId(null);
                             setSelectedInstanceIds([]);
                             setSelectedConnectionId(null);
+                            setSelectedShapeId(null);
+                            setSelectedShapeIds([]);
                             setSelectedPoint(null);
+                            setHoverPointTarget(null);
                           }
                         }
                       }}
                       onMouseUp={() => {
+                        if (panDragRef.current) {
+                          panDragRef.current = null;
+                          return;
+                        }
+
+                        if (draftShape) {
+                          commitDraftShape();
+                          return;
+                        }
+
                         if (!selectionBox) {
                           return;
                         }
@@ -2671,7 +3829,7 @@ export function CustomBuilderContent({
                           (rect.width >= MIN_SELECTION_BOX_SIZE ||
                             rect.height >= MIN_SELECTION_BOX_SIZE)
                         ) {
-                          const intersectingIds = instances
+                          const intersectingInstances = instances
                             .map((instance) => ({
                               id: instance.id,
                               node: nodeRefs.current.get(instance.id),
@@ -2691,15 +3849,43 @@ export function CustomBuilderContent({
                               );
                             })
                             .map((entry) => entry.id);
+                          const intersectingShapes = shapes
+                            .map((shape) => ({
+                              id: shape.id,
+                              node: shapeNodeRefs.current.get(shape.id),
+                            }))
+                            .filter((entry) => entry.node)
+                            .filter(({ node }) => {
+                              const bounds = node!.getClientRect({
+                                skipShadow: false,
+                                skipStroke: false,
+                              });
 
-                          const nextSelectedIds = additive
-                            ? Array.from(new Set([...selectedInstanceIds, ...intersectingIds]))
-                            : intersectingIds;
+                              return !(
+                                bounds.x > rect.x + rect.width ||
+                                bounds.x + bounds.width < rect.x ||
+                                bounds.y > rect.y + rect.height ||
+                                bounds.y + bounds.height < rect.y
+                              );
+                            })
+                            .map((entry) => entry.id);
 
-                          setSelectedInstanceIds(nextSelectedIds);
-                          setSelectedInstanceId(nextSelectedIds[0] ?? null);
+                          const nextSelectedInstanceIds = additive
+                            ? Array.from(new Set([...selectedInstanceIds, ...intersectingInstances]))
+                            : intersectingInstances;
+                          const nextSelectedShapeIds = additive
+                            ? Array.from(new Set([...selectedShapeIds, ...intersectingShapes]))
+                            : intersectingShapes;
 
-                          if (nextSelectedIds.length > 0) {
+                          setSelectedInstanceIds(nextSelectedInstanceIds);
+                          setSelectedInstanceId(nextSelectedInstanceIds[0] ?? null);
+                          setSelectedShapeIds(nextSelectedShapeIds);
+                          setSelectedShapeId(nextSelectedShapeIds[0] ?? null);
+
+                          if (
+                            nextSelectedInstanceIds.length > 0 ||
+                            nextSelectedShapeIds.length > 0
+                          ) {
                             setSelectedConnectionId(null);
                           }
                         }
@@ -2709,33 +3895,47 @@ export function CustomBuilderContent({
                       }}
                       onWheel={(event) => {
                         event.evt.preventDefault();
-                        updateCanvasScale(
-                          canvasScale + (event.evt.deltaY < 0 ? CANVAS_SCALE_STEP : -CANVAS_SCALE_STEP)
+                        const pointer = event.target.getStage()?.getPointerPosition();
+                        zoomCanvasAroundPoint(
+                          canvasScale + (event.evt.deltaY < 0 ? CANVAS_SCALE_STEP : -CANVAS_SCALE_STEP),
+                          pointer
                         );
                       }}
                     >
                       <Layer>
                         {Array.from(
-                          { length: Math.ceil(worldViewportWidth / WIRE_GRID_SIZE) + 1 },
-                          (_, index) => index * WIRE_GRID_SIZE
+                          {
+                            length:
+                              Math.ceil(
+                                (visibleWorldMaxX - visibleWorldMinX) / WIRE_GRID_SIZE
+                              ) + 2,
+                          },
+                          (_, index) =>
+                            snapToGrid(visibleWorldMinX) + index * WIRE_GRID_SIZE
                         ).map((x) => (
                           <Line
                             key={`grid-v-${x}`}
                             name="builder-export-hidden"
-                            points={[x, 0, x, worldViewportHeight]}
+                            points={[x, visibleWorldMinY, x, visibleWorldMaxY]}
                             stroke={GRID_LINE_COLOR}
                             strokeWidth={1}
                             listening={false}
                           />
                         ))}
                         {Array.from(
-                          { length: Math.ceil(worldViewportHeight / WIRE_GRID_SIZE) + 1 },
-                          (_, index) => index * WIRE_GRID_SIZE
+                          {
+                            length:
+                              Math.ceil(
+                                (visibleWorldMaxY - visibleWorldMinY) / WIRE_GRID_SIZE
+                              ) + 2,
+                          },
+                          (_, index) =>
+                            snapToGrid(visibleWorldMinY) + index * WIRE_GRID_SIZE
                         ).map((y) => (
                           <Line
                             key={`grid-h-${y}`}
                             name="builder-export-hidden"
-                            points={[0, y, worldViewportWidth, y]}
+                            points={[visibleWorldMinX, y, visibleWorldMaxX, y]}
                             stroke={GRID_LINE_COLOR}
                             strokeWidth={1}
                             listening={false}
@@ -2763,6 +3963,56 @@ export function CustomBuilderContent({
                             />
                           );
                         })() : null}
+                        {draftShape ? (
+                          <BuilderShapeNode
+                            shape={createBuilderShapeFromDraft(draftShape)}
+                            nodeRef={() => undefined}
+                            isSelected={false}
+                            onSelect={() => undefined}
+                            onDragStart={() => undefined}
+                            onDragMove={() => undefined}
+                            onDragEnd={() => undefined}
+                            onTransformEnd={() => undefined}
+                          />
+                        ) : null}
+                        {shapes.map((shape) => (
+                          <BuilderShapeNode
+                            key={shape.id}
+                            shape={shape}
+                            nodeRef={(node) => {
+                              if (node) {
+                                shapeNodeRefs.current.set(shape.id, node);
+                              } else {
+                                shapeNodeRefs.current.delete(shape.id);
+                              }
+                            }}
+                            isSelected={selectedShapeIds.includes(shape.id)}
+                            onSelect={selectShape}
+                            onDragStart={(shapeId) => {
+                              beginHistoryTransaction();
+
+                              if (!selectedShapeIds.includes(shapeId)) {
+                                setSelectedShapeId(shapeId);
+                                setSelectedShapeIds([shapeId]);
+                                setSelectedInstanceId(null);
+                                setSelectedInstanceIds([]);
+                                setSelectedConnectionId(null);
+                              }
+                            }}
+                            onDragMove={(shapeId, x, y) => {
+                              updateShape(shapeId, {
+                                x: snapToGrid(x),
+                                y: snapToGrid(y),
+                              });
+                            }}
+                            onDragEnd={() => {
+                              commitHistoryTransaction();
+                            }}
+                            onTransformEnd={() => {
+                              commitTransformedShapes(selectedShapeIds);
+                            }}
+                          />
+                        ))}
                         {instances.map((instance) => {
                           const asset = getAsset(instance.assetId);
 
@@ -2785,6 +4035,8 @@ export function CustomBuilderContent({
                               isSelected={selectedInstanceIds.includes(instance.id)}
                               isDeleteMode={false}
                               selectedPoint={selectedPoint}
+                              hoverPointTarget={hoverPointTarget}
+                              wiringSelectionActive={Boolean(selectedPoint)}
                               onSelect={selectInstance}
                               onDragStart={(instanceId, x, y) => {
                                 beginHistoryTransaction();
@@ -2851,45 +4103,33 @@ export function CustomBuilderContent({
                             />
                           );
                         })}
-                        {connections.map((connection) => {
-                          const from = getPoint(connection.fromInstanceId, connection.fromPointKey);
-                          const to = getPoint(connection.toInstanceId, connection.toPointKey);
-                          const wireType = wireTypes.find((item) => item.id === connection.wireTypeId);
+                        {connectionRenderData.map(({ connection, pathPoints, color, bridges }) => {
                           const isSelected = connection.id === selectedConnectionId;
                           const wiringSelectionActive = Boolean(selectedPoint);
-
-                          if (!from || !to) {
-                            return null;
-                          }
-
-                          const renderedControlPoints = normalizeConnectionControlPoints(
-                            connection.controlPoints,
-                            from,
-                            to
-                          );
-                          const pathPoints = [from, ...renderedControlPoints, to];
+                          const from = pathPoints[0];
+                          const to = pathPoints[pathPoints.length - 1];
+                          const renderedControlPoints = pathPoints.slice(1, -1);
+                          const visualStrokeWidth = isSelected ? 5 : 4;
 
                           return (
                             <React.Fragment key={connection.id}>
-                              <Line
-                                name="builder-export-content"
-                                points={flattenPathPoints(pathPoints)}
-                                stroke={wireType?.hexColor ?? "#334155"}
-                                strokeWidth={isSelected ? 5 : 4}
-                                lineCap="round"
-                                lineJoin="round"
-                                listening={!wiringSelectionActive}
-                                onClick={() => {
-                                  setSelectedConnectionId(connection.id);
-                                  setSelectedInstanceId(null);
-                                  setSelectedInstanceIds([]);
-                                }}
-                                onTap={() => {
-                                  setSelectedConnectionId(connection.id);
-                                  setSelectedInstanceId(null);
-                                  setSelectedInstanceIds([]);
-                                }}
-                              />
+                              {pathPoints.slice(0, -1).map((point, index) => {
+                                const nextPoint = pathPoints[index + 1];
+
+                                if (!nextPoint) {
+                                  return null;
+                                }
+
+                                return renderWireSegmentWithBridges({
+                                  connectionId: connection.id,
+                                  segmentIndex: index,
+                                  start: point,
+                                  end: nextPoint,
+                                  bridges,
+                                  color,
+                                  strokeWidth: visualStrokeWidth,
+                                });
+                              })}
                               {pathPoints.slice(0, -1).map((point, index) => {
                                 const nextPoint = pathPoints[index + 1];
                                 const isVertical =
@@ -2967,7 +4207,7 @@ export function CustomBuilderContent({
                                       y={controlPoint.y}
                                       radius={WIRE_HANDLE_RADIUS}
                                       fill="#ffffff"
-                                      stroke={wireType?.hexColor ?? "#334155"}
+                                      stroke={color}
                                       strokeWidth={2}
                                       listening={!wiringSelectionActive}
                                       draggable
@@ -3007,7 +4247,7 @@ export function CustomBuilderContent({
                                 x={from.x}
                                 y={from.y}
                                 radius={4}
-                                fill={wireType?.hexColor ?? "#334155"}
+                                fill={color}
                                 listening={false}
                               />
                               <Circle
@@ -3015,11 +4255,61 @@ export function CustomBuilderContent({
                                 x={to.x}
                                 y={to.y}
                                 radius={4}
-                                fill={wireType?.hexColor ?? "#334155"}
+                                fill={color}
                                 listening={false}
                               />
                             </React.Fragment>
                           );
+                        })}
+                        {connectionRenderData.map(({ connection, color, bridges }) => {
+                          const isSelected = connection.id === selectedConnectionId;
+                          const bridgeStrokeWidth = isSelected ? 5 : 4;
+
+                          return bridges.map((bridge) => (
+                            <React.Fragment
+                              key={`${connection.id}-bridge-${bridge.segmentIndex}-${bridge.x}-${bridge.y}`}
+                            >
+                              {bridge.orientation === "horizontal" ? (
+                                <Shape
+                                  name="builder-export-content"
+                                  stroke={color}
+                                  strokeWidth={bridgeStrokeWidth}
+                                  sceneFunc={(context, shape) => {
+                                    context.beginPath();
+                                    context.arc(
+                                      bridge.x,
+                                      bridge.y,
+                                      WIRE_BRIDGE_RADIUS,
+                                      Math.PI,
+                                      0,
+                                      false
+                                    );
+                                    context.strokeShape(shape);
+                                  }}
+                                  listening={false}
+                                />
+                              ) : (
+                                <Shape
+                                  name="builder-export-content"
+                                  stroke={color}
+                                  strokeWidth={bridgeStrokeWidth}
+                                  sceneFunc={(context, shape) => {
+                                    context.beginPath();
+                                    context.arc(
+                                      bridge.x,
+                                      bridge.y,
+                                      WIRE_BRIDGE_RADIUS,
+                                      -Math.PI / 2,
+                                      Math.PI / 2,
+                                      false
+                                    );
+                                    context.strokeShape(shape);
+                                  }}
+                                  listening={false}
+                                />
+                              )}
+                            </React.Fragment>
+                          ));
                         })}
                         {instances.map((instance) => {
                           const asset = getAsset(instance.assetId);
@@ -3037,6 +4327,8 @@ export function CustomBuilderContent({
                               isSelected={selectedInstanceIds.includes(instance.id)}
                               isDeleteMode={false}
                               selectedPoint={selectedPoint}
+                              hoverPointTarget={hoverPointTarget}
+                              wiringSelectionActive
                               renderMode="points-only"
                               onSelect={selectInstance}
                               onDragStart={() => undefined}
@@ -3051,6 +4343,10 @@ export function CustomBuilderContent({
                         })}
                         {selectedPoint && pointerPosition ? (() => {
                           const point = getPoint(selectedPoint.instanceId, selectedPoint.pointKey);
+                          const hoverPoint =
+                            hoverPointTarget
+                              ? getPoint(hoverPointTarget.instanceId, hoverPointTarget.pointKey)
+                              : null;
 
                           if (!point) {
                             return null;
@@ -3059,7 +4355,12 @@ export function CustomBuilderContent({
                           return (
                             <Line
                               name="builder-export-hidden"
-                              points={[point.x, point.y, pointerPosition.x, pointerPosition.y]}
+                              points={[
+                                point.x,
+                                point.y,
+                                hoverPoint?.x ?? pointerPosition.x,
+                                hoverPoint?.y ?? pointerPosition.y,
+                              ]}
                               stroke="#f97316"
                               strokeWidth={3}
                               dash={[10, 8]}
@@ -3106,9 +4407,35 @@ export function CustomBuilderContent({
                             commitHistoryTransaction();
                           }}
                         />
+                        <Transformer
+                          name="builder-export-hidden"
+                          ref={shapeTransformerRef}
+                          rotateEnabled
+                          enabledAnchors={[
+                            "top-left",
+                            "top-center",
+                            "top-right",
+                            "middle-left",
+                            "middle-right",
+                            "bottom-left",
+                            "bottom-center",
+                            "bottom-right",
+                          ]}
+                          borderStroke="#0f766e"
+                          anchorStroke="#0f766e"
+                          anchorFill="#ffffff"
+                          anchorSize={8}
+                          onTransformStart={() => {
+                            beginHistoryTransaction();
+                          }}
+                          onTransformEnd={() => {
+                            commitTransformedShapes(selectedShapeIds);
+                            commitHistoryTransaction();
+                          }}
+                        />
                       </Layer>
                     </Stage>
-                    {instances.length === 0 ? (
+                    {instances.length === 0 && shapes.length === 0 ? (
                       <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
                         <div className="max-w-sm rounded-3xl border border-border/70 bg-background/92 px-6 py-5 text-center shadow-sm">
                           <div className="mx-auto mb-3 flex size-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
@@ -3116,7 +4443,7 @@ export function CustomBuilderContent({
                           </div>
                           <div className="font-medium text-foreground">Canvas masih kosong</div>
                           <div className="mt-1 text-sm text-muted-foreground">
-                            Drag asset dari kiri atau klik asset untuk menempatkannya ke builder.
+                            Drag asset dari kiri atau pilih tool shape untuk mulai gambar di builder.
                           </div>
                         </div>
                       </div>
@@ -3248,6 +4575,142 @@ export function CustomBuilderContent({
                       {selectedInstance.showLabel ? "Hide Label" : "Show Label"}
                     </Button>
                   </>
+                ) : selectedShape ? (
+                  <>
+                    <div>
+                      <div className="font-medium text-foreground">{selectedShape.name}</div>
+                      <div className="text-muted-foreground capitalize">{selectedShape.type}</div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <label className="grid gap-1.5">
+                        <span className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">X</span>
+                        <Input
+                          type="number"
+                          value={Math.round(selectedShape.x)}
+                          onChange={(event) =>
+                            updateShape(selectedShape.id, {
+                              x: snapToGrid(Number(event.target.value || 0)),
+                            })
+                          }
+                        />
+                      </label>
+                      <label className="grid gap-1.5">
+                        <span className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Y</span>
+                        <Input
+                          type="number"
+                          value={Math.round(selectedShape.y)}
+                          onChange={(event) =>
+                            updateShape(selectedShape.id, {
+                              y: snapToGrid(Number(event.target.value || 0)),
+                            })
+                          }
+                        />
+                      </label>
+                      <label className="grid gap-1.5">
+                        <span className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Rotate</span>
+                        <Input
+                          type="number"
+                          step="1"
+                          value={Math.round(selectedShape.rotation)}
+                          onChange={(event) =>
+                            updateShape(selectedShape.id, {
+                              rotation: Number(event.target.value || 0),
+                            })
+                          }
+                        />
+                      </label>
+                      <label className="grid gap-1.5">
+                        <span className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Stroke</span>
+                        <Input
+                          type="number"
+                          min="1"
+                          step="1"
+                          value={selectedShape.strokeWidth}
+                          onChange={(event) =>
+                            updateShape(selectedShape.id, {
+                              strokeWidth: Math.max(1, Number(event.target.value || 1)),
+                            })
+                          }
+                        />
+                      </label>
+                      <label className="grid gap-1.5">
+                        <span className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Outline Color</span>
+                        <input
+                          type="color"
+                          value={selectedShape.stroke}
+                          onChange={(event) =>
+                            updateShape(selectedShape.id, {
+                              stroke: event.target.value,
+                            })
+                          }
+                          className="h-9 w-full rounded-md border border-input bg-input/20 px-1.5 py-1 outline-none"
+                        />
+                      </label>
+                      {selectedShape.type !== "line" ? (
+                        <>
+                          <div className="grid gap-1.5">
+                            <span className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Fill Color</span>
+                            <div className="flex items-center gap-3">
+                              <input
+                                type="color"
+                                value={
+                                  isTransparentColor(selectedShape.fill)
+                                    ? "#ffffff"
+                                    : selectedShape.fill
+                                }
+                                disabled={isTransparentColor(selectedShape.fill)}
+                                onChange={(event) =>
+                                  updateShape(selectedShape.id, {
+                                    fill: event.target.value,
+                                  } as Partial<RectangleObject | EllipseObject>)
+                                }
+                                className="h-9 min-w-0 flex-1 rounded-md border border-input bg-input/20 px-1.5 py-1 outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                              />
+                              <label className="flex shrink-0 items-center gap-2 rounded-md border border-input bg-input/10 px-3 py-2 text-sm">
+                                <input
+                                  type="checkbox"
+                                  checked={isTransparentColor(selectedShape.fill)}
+                                  onChange={(event) =>
+                                    updateShape(selectedShape.id, {
+                                      fill: event.target.checked ? "transparent" : "#f59e0b",
+                                    } as Partial<RectangleObject | EllipseObject>)
+                                  }
+                                  className="size-4"
+                                />
+                                <span>No Fill</span>
+                              </label>
+                            </div>
+                          </div>
+                          <label className="grid gap-1.5">
+                            <span className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Width</span>
+                            <Input
+                              type="number"
+                              min="10"
+                              value={Math.round(selectedShape.width)}
+                              onChange={(event) =>
+                                updateShape(selectedShape.id, {
+                                  width: Math.max(10, Number(event.target.value || 10)),
+                                } as Partial<RectangleObject | EllipseObject>)
+                              }
+                            />
+                          </label>
+                          <label className="grid gap-1.5">
+                            <span className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Height</span>
+                            <Input
+                              type="number"
+                              min="10"
+                              value={Math.round(selectedShape.height)}
+                              onChange={(event) =>
+                                updateShape(selectedShape.id, {
+                                  height: Math.max(10, Number(event.target.value || 10)),
+                                } as Partial<RectangleObject | EllipseObject>)
+                              }
+                            />
+                          </label>
+                        </>
+                      ) : null}
+                    </div>
+                  </>
                 ) : selectedConnection ? (
                   <>
                     <div className="font-medium text-foreground">Wire Connection</div>
@@ -3280,51 +4743,80 @@ export function CustomBuilderContent({
               <CardHeader>
                 <CardTitle className="text-base">Layers</CardTitle>
               </CardHeader>
-              <CardContent className="grid gap-2">
-                {[...connections].reverse().map((connection) => {
-                  const wireType = wireTypes.find((item) => item.id === connection.wireTypeId);
+              <CardContent className="grid gap-3">
+                <div className="rounded-2xl border border-dashed border-border/70 bg-muted/15 px-3 py-2 text-xs text-muted-foreground">
+                  Drag layer card untuk mengubah urutan depan-belakang pada kategori yang sama.
+                </div>
+                <div className="grid gap-2">
+                  {visibleLayers.map((layer) => (
+                    <div
+                      key={`${layer.kind}-${layer.id}`}
+                      draggable
+                      onDragStart={() => setDraggedLayer({ id: layer.id, kind: layer.kind })}
+                      onDragEnd={() => setDraggedLayer(null)}
+                      onDragOver={(event) => {
+                        event.preventDefault();
+                      }}
+                      onDrop={(event) => {
+                        event.preventDefault();
 
-                  return (
-                    <button
-                      key={connection.id}
-                      type="button"
-                      onClick={() => {
-                        setSelectedConnectionId(connection.id);
-                        setSelectedInstanceId(null);
-                        setSelectedInstanceIds([]);
+                        if (!draggedLayer) {
+                          return;
+                        }
+
+                        moveBuilderLayer(draggedLayer, {
+                          id: layer.id,
+                          kind: layer.kind,
+                        });
+                        setDraggedLayer(null);
                       }}
                       className={`rounded-2xl border px-3 py-3 text-left transition ${
-                        selectedConnectionId === connection.id
+                        layer.selected
                           ? "border-primary/40 bg-primary/10"
                           : "border-border/70 bg-muted/25 hover:bg-muted/40"
-                      }`}
+                      } ${draggedLayer?.id === layer.id && draggedLayer.kind === layer.kind ? "opacity-55" : ""}`}
                     >
-                      <div className="font-medium text-foreground">{wireType?.name ?? "Wire"}</div>
-                      <div className="mt-1 text-xs uppercase tracking-[0.16em] text-muted-foreground">wiring</div>
-                    </button>
-                  );
-                })}
-                {[...instances].reverse().map((instance) => (
-                  <button
-                    key={instance.id}
-                    type="button"
-                    onClick={(event) => {
-                      selectInstance(
-                        instance.id,
-                        event.shiftKey || event.ctrlKey || event.metaKey
-                      );
-                    }}
-                    className={`rounded-2xl border px-3 py-3 text-left transition ${
-                      selectedInstanceIds.includes(instance.id)
-                        ? "border-primary/40 bg-primary/10"
-                        : "border-border/70 bg-muted/25 hover:bg-muted/40"
-                    }`}
-                  >
-                    <div className="font-medium text-foreground">{instance.name}</div>
-                    <div className="mt-1 text-xs uppercase tracking-[0.16em] text-muted-foreground">{instance.componentType}</div>
-                  </button>
-                ))}
-                {instances.length === 0 && connections.length === 0 ? (
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          if (layer.kind === "connection") {
+                            setSelectedConnectionId(layer.id);
+                            setSelectedInstanceId(null);
+                            setSelectedInstanceIds([]);
+                            setSelectedShapeId(null);
+                            setSelectedShapeIds([]);
+                            return;
+                          }
+
+                          if (layer.kind === "shape") {
+                            selectShape(
+                              layer.id,
+                              event.shiftKey || event.ctrlKey || event.metaKey
+                            );
+                            return;
+                          }
+
+                          selectInstance(
+                            layer.id,
+                            event.shiftKey || event.ctrlKey || event.metaKey
+                          );
+                        }}
+                        className="flex w-full items-start gap-3 text-left"
+                      >
+                        <div className="mt-0.5 text-muted-foreground">
+                          <HugeiconsIcon icon={Move01Icon} strokeWidth={2} />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="font-medium text-foreground">{layer.label}</div>
+                          <div className="mt-1 text-xs uppercase tracking-[0.16em] text-muted-foreground">
+                            {layer.meta}
+                          </div>
+                        </div>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                {visibleLayers.length === 0 ? (
                   <div className="rounded-2xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
                     Belum ada layer aktif di builder.
                   </div>
@@ -3339,6 +4831,7 @@ export function CustomBuilderContent({
                 <div>Delete / Backspace untuk hapus seleksi.</div>
                 <div>Arrow Keys untuk geser komponen per grid.</div>
                 <div>Shift + Arrow Keys untuk geser lebih jauh.</div>
+                <div>Shift + Drag di area kosong untuk menggeser canvas.</div>
                 <div>Shift/Ctrl/Cmd + Click untuk multi-select komponen.</div>
                 <div>Drag mouse di area kosong canvas untuk box select.</div>
                 <div>Ctrl/Cmd + C dan Ctrl/Cmd + V untuk copy paste komponen.</div>

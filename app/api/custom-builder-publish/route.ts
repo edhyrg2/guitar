@@ -155,6 +155,7 @@ function createDiagramJson(document: BuilderSavedSetupDocument, roleMap: Map<str
     builder: {
       version: document.version,
       selectedWireTypeId: document.selectedWireTypeId,
+      shapes: document.shapes,
     },
     components: document.instances.map((instance) => ({
       id: instance.id,
@@ -625,6 +626,7 @@ export async function POST(request: Request) {
         publishedCounts: {
           components: document.instances.length,
           connections: document.connections.length,
+          shapes: document.shapes.length,
         },
       },
       { status: 201 }
