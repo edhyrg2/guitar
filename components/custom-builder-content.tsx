@@ -16,7 +16,9 @@ import {
   Cancel01Icon,
   DatabaseIcon,
   Delete02Icon,
+  Download01Icon,
   FloppyDiskIcon,
+  Menu01Icon,
   Move01Icon,
   OvalIcon,
   PaintBrush02Icon,
@@ -31,6 +33,7 @@ import {
   TextIcon,
   SearchMinusIcon,
   Undo02Icon,
+  Upload01Icon,
   ViewIcon,
   ViewOffIcon,
 } from "@hugeicons/core-free-icons";
@@ -253,10 +256,10 @@ type CustomBuilderContentProps = {
 
 const INITIAL_MAX_COMPONENT_WIDTH = 280;
 const INITIAL_MAX_COMPONENT_HEIGHT = 180;
-const CONNECTION_POINT_RADIUS = 5;
-const CONNECTION_POINT_ACTIVE_RADIUS = 5.5;
-const CONNECTION_POINT_RING_RADIUS = 6.5;
-const CONNECTION_POINT_ACTIVE_RING_RADIUS = 7.5;
+const CONNECTION_POINT_RADIUS = 3.5;
+const CONNECTION_POINT_ACTIVE_RADIUS = 4;
+const CONNECTION_POINT_RING_RADIUS = 5;
+const CONNECTION_POINT_ACTIVE_RING_RADIUS = 5.75;
 const CONNECTION_POINT_HIT_RADIUS = 12;
 const CONNECTION_POINT_SNAP_DISTANCE = 10;
 const CONNECTION_POINT_SNAP_PRIORITY_DELTA = 6;
@@ -708,6 +711,32 @@ function createBuilderSavedSetupDocument(
   };
 }
 
+function downloadJsonFile(filename: string, payload: unknown) {
+  const blob = new Blob([JSON.stringify(payload, null, 2)], {
+    type: "application/json",
+  });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
+function slugifyJsonFilename(value: string) {
+  const normalized = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+  return normalized || "builder-setup";
+}
+
+function getFilenameBase(filename: string) {
+  return filename.replace(/\.[^/.]+$/, "").trim() || "Imported Setup";
+}
+
 function getBuilderExportBounds(nodes: Konva.Node[]) {
   if (nodes.length === 0) {
     return null;
@@ -860,6 +889,12 @@ function BuilderAssetNode({
   const widthRatio = sourceWidth / Math.max(asset.width, 1);
   const heightRatio = sourceHeight / Math.max(asset.height, 1);
   const markerScale = 1 / Math.max(instance.scale, 0.2);
+  const compactPointScale = Math.max(
+    0.68,
+    Math.min(1, Math.min(sourceWidth, sourceHeight) / 120)
+  );
+  const pointVisualScale = markerScale * compactPointScale;
+  const pointHitScale = markerScale * Math.max(0.62, compactPointScale * 0.9);
 
   React.useEffect(() => {
     if (!image) {
@@ -1036,7 +1071,7 @@ function BuilderAssetNode({
             }}
           >
             <Circle
-              radius={CONNECTION_POINT_HIT_RADIUS * hitRadiusMultiplier * markerScale}
+              radius={CONNECTION_POINT_HIT_RADIUS * hitRadiusMultiplier * pointHitScale}
               fill="rgba(0,0,0,0.01)"
               strokeEnabled={false}
             />
@@ -1048,11 +1083,11 @@ function BuilderAssetNode({
                     ? CONNECTION_POINT_ACTIVE_RADIUS
                     : CONNECTION_POINT_RADIUS) *
                 visibleRadiusMultiplier *
-                markerScale
+                pointVisualScale
               }
               fill={active ? "#f97316" : hovered ? "#fb923c" : point.color ?? "#0f766e"}
               stroke="#ffffff"
-              strokeWidth={2 * markerScale}
+              strokeWidth={2 * pointVisualScale}
             />
             <Circle
               radius={
@@ -1062,11 +1097,11 @@ function BuilderAssetNode({
                     ? CONNECTION_POINT_ACTIVE_RING_RADIUS
                     : CONNECTION_POINT_RING_RADIUS) *
                 visibleRadiusMultiplier *
-                markerScale
+                pointVisualScale
               }
               stroke={hovered ? "#fb923c" : point.color ?? "#0f766e"}
-              strokeWidth={markerScale}
-              dash={[3 * markerScale, 3 * markerScale]}
+              strokeWidth={pointVisualScale}
+              dash={[3 * pointVisualScale, 3 * pointVisualScale]}
             />
           </Group>
         );
@@ -1462,7 +1497,11 @@ function BuilderTopbar({
   onStraightenWire,
   onDeleteSelection,
   onClearCanvas,
-  onSaveDraft,
+  onSave,
+  onSaveAs,
+  onNewComponent,
+  onImportJson,
+  onExportJson,
   onPublish,
   onOpenSavedSetups,
 }: {
@@ -1493,24 +1532,142 @@ function BuilderTopbar({
   onStraightenWire: () => void;
   onDeleteSelection: () => void;
   onClearCanvas: () => void;
-  onSaveDraft: () => void;
+  onSave: () => void;
+  onSaveAs: () => void;
+  onNewComponent: () => void;
+  onImportJson: () => void;
+  onExportJson: () => void;
   onPublish: () => void;
   onOpenSavedSetups: () => void;
 }) {
+  const [menuOpen, setMenuOpen] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!menuOpen) {
+      return;
+    }
+
+    function handleWindowPointerDown() {
+      setMenuOpen(false);
+    }
+
+    window.addEventListener("pointerdown", handleWindowPointerDown);
+
+    return () => {
+      window.removeEventListener("pointerdown", handleWindowPointerDown);
+    };
+  }, [menuOpen]);
+
+  function runMenuAction(action: () => void) {
+    setMenuOpen(false);
+    action();
+  }
+
   return (
-    <div className="border-b border-border/70 bg-background/95 px-4 py-3 backdrop-blur">
+    <div className="relative z-40 border-b border-border/70 bg-background/95 px-4 py-3 backdrop-blur">
       <div className="flex flex-col gap-3">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={!canSaveSetup || saveBusy}
-              onClick={onSaveDraft}
-            >
-              <HugeiconsIcon icon={FloppyDiskIcon} strokeWidth={2} data-icon="inline-start" />
-              {saveBusy ? "Saving..." : "Save Draft"}
-            </Button>
+            <div className="relative">
+              <Button
+                variant="outline"
+                size="sm"
+                type="button"
+                aria-expanded={menuOpen}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setMenuOpen((current) => !current);
+                }}
+              >
+                <HugeiconsIcon
+                  icon={Menu01Icon}
+                  strokeWidth={2}
+                  data-icon="inline-start"
+                />
+                Menu
+              </Button>
+              {menuOpen ? (
+                <div
+                  className="absolute left-0 top-full z-50 mt-2 min-w-52 rounded-2xl border border-border/70 bg-background p-2 shadow-xl"
+                  onPointerDown={(event) => event.stopPropagation()}
+                >
+                  <button
+                    type="button"
+                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm transition hover:bg-muted"
+                    onClick={() => runMenuAction(onNewComponent)}
+                  >
+                    <HugeiconsIcon
+                      icon={PlusSignIcon}
+                      strokeWidth={2}
+                      data-icon="inline-start"
+                    />
+                    New Component
+                  </button>
+                  <button
+                    type="button"
+                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm transition hover:bg-muted"
+                    onClick={() => runMenuAction(onOpenSavedSetups)}
+                  >
+                    <HugeiconsIcon
+                      icon={DatabaseIcon}
+                      strokeWidth={2}
+                      data-icon="inline-start"
+                    />
+                    Open
+                  </button>
+                  <button
+                    type="button"
+                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+                    disabled={!canSaveSetup || saveBusy}
+                    onClick={() => runMenuAction(onSave)}
+                  >
+                    <HugeiconsIcon
+                      icon={FloppyDiskIcon}
+                      strokeWidth={2}
+                      data-icon="inline-start"
+                    />
+                    {saveBusy ? "Saving..." : "Save"}
+                  </button>
+                  <button
+                    type="button"
+                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+                    disabled={!canSaveSetup || saveBusy}
+                    onClick={() => runMenuAction(onSaveAs)}
+                  >
+                    <HugeiconsIcon
+                      icon={FloppyDiskIcon}
+                      strokeWidth={2}
+                      data-icon="inline-start"
+                    />
+                    Save As
+                  </button>
+                  <button
+                    type="button"
+                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm transition hover:bg-muted"
+                    onClick={() => runMenuAction(onImportJson)}
+                  >
+                    <HugeiconsIcon
+                      icon={Upload01Icon}
+                      strokeWidth={2}
+                      data-icon="inline-start"
+                    />
+                    Import JSON
+                  </button>
+                  <button
+                    type="button"
+                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm transition hover:bg-muted"
+                    onClick={() => runMenuAction(onExportJson)}
+                  >
+                    <HugeiconsIcon
+                      icon={Download01Icon}
+                      strokeWidth={2}
+                      data-icon="inline-start"
+                    />
+                    Export JSON
+                  </button>
+                </div>
+              ) : null}
+            </div>
             <Button
               variant="outline"
               size="sm"
@@ -1519,10 +1676,6 @@ function BuilderTopbar({
             >
               <HugeiconsIcon icon={Rocket01Icon} strokeWidth={2} data-icon="inline-start" />
               {publishBusy ? "Publishing..." : "Publish"}
-            </Button>
-            <Button variant="outline" size="sm" onClick={onOpenSavedSetups}>
-              <HugeiconsIcon icon={DatabaseIcon} strokeWidth={2} data-icon="inline-start" />
-              Saved Setups
             </Button>
             <Button variant="outline" size="sm" onClick={onCancelWiring} disabled={!hasSelectedPoint}>
               <HugeiconsIcon icon={Cancel01Icon} strokeWidth={2} data-icon="inline-start" />
@@ -1702,6 +1855,7 @@ export function CustomBuilderContent({
   } | null>(null);
   const [savedSetupDescription, setSavedSetupDescription] = React.useState("");
   const [saveDialogOpen, setSaveDialogOpen] = React.useState(false);
+  const [saveDialogMode, setSaveDialogMode] = React.useState<"save" | "saveAs">("save");
   const [savedSetupBrowserOpen, setSavedSetupBrowserOpen] = React.useState(false);
   const [inlineTextEditor, setInlineTextEditor] =
     React.useState<InlineBuilderTextEditorState>(null);
@@ -1726,6 +1880,7 @@ export function CustomBuilderContent({
   const [isLoadingSavedSetups, setIsLoadingSavedSetups] = React.useState(false);
   const [savedSetupActionId, setSavedSetupActionId] = React.useState<string | null>(null);
   const deferredAssetQuery = React.useDeferredValue(assetQuery);
+  const importJsonInputRef = React.useRef<HTMLInputElement | null>(null);
   const stageWrapperRef = React.useRef<HTMLDivElement | null>(null);
   const transformerRef = React.useRef<Konva.Transformer | null>(null);
   const shapeTransformerRef = React.useRef<Konva.Transformer | null>(null);
@@ -3245,14 +3400,20 @@ export function CustomBuilderContent({
   }, [canPersistSavedSetups]);
 
   const saveSetupDraft = React.useCallback(
-    async () => {
+    async (options?: {
+      forceCreateNew?: boolean;
+      name?: string;
+      description?: string;
+      closeDialog?: boolean;
+    }) => {
       if (!canPersistSavedSetups) {
         setCanvasMessage("Sign in to save builder setups.");
         return;
       }
 
-      const name = setupNameInput.trim();
-      const description = setupDescriptionInput.trim();
+      const name = (options?.name ?? setupNameInput).trim();
+      const description = (options?.description ?? setupDescriptionInput).trim();
+      const targetSetupId = options?.forceCreateNew ? null : activeSavedSetupId;
 
       if (!name) {
         setCanvasMessage("Setup name is required.");
@@ -3263,9 +3424,11 @@ export function CustomBuilderContent({
 
       try {
         const response = await fetch(
-          activeSavedSetupId ? `/api/builder-saved-setups/${activeSavedSetupId}` : "/api/builder-saved-setups",
+          targetSetupId
+            ? `/api/builder-saved-setups/${targetSetupId}`
+            : "/api/builder-saved-setups",
           {
-            method: activeSavedSetupId ? "PUT" : "POST",
+            method: targetSetupId ? "PUT" : "POST",
             headers: {
               "content-type": "application/json",
             },
@@ -3297,7 +3460,10 @@ export function CustomBuilderContent({
         setSavedSetupDescription(payload.description ?? "");
         persistSavedSetupListEntry(payload);
         setCanvasMessage(`Draft "${payload.name}" saved.`);
-        setSaveDialogOpen(false);
+
+        if (options?.closeDialog !== false) {
+          setSaveDialogOpen(false);
+        }
       } catch (error) {
         setCanvasMessage(error instanceof Error ? error.message : "Failed to save setup.");
       } finally {
@@ -3305,8 +3471,8 @@ export function CustomBuilderContent({
       }
     },
     [
-      activeSavedSetupId,
       canPersistSavedSetups,
+      activeSavedSetupId,
       persistSavedSetupListEntry,
       persistedDocument,
       setupDescriptionInput,
@@ -3354,10 +3520,117 @@ export function CustomBuilderContent({
       return;
     }
 
+    setSaveDialogMode("save");
     setSetupNameInput(activeSavedSetupName ?? "Untitled Builder Setup");
     setSetupDescriptionInput(savedSetupDescription);
     setSaveDialogOpen(true);
   }, [activeSavedSetupName, canPersistSavedSetups, savedSetupDescription]);
+
+  const openSaveAsDialog = React.useCallback(() => {
+    if (!canPersistSavedSetups) {
+      setCanvasMessage("Sign in to save builder setups.");
+      return;
+    }
+
+    setSaveDialogMode("saveAs");
+    setSetupNameInput(
+      activeSavedSetupName ? `${activeSavedSetupName} Copy` : "Untitled Builder Setup"
+    );
+    setSetupDescriptionInput(savedSetupDescription);
+    setSaveDialogOpen(true);
+  }, [activeSavedSetupName, canPersistSavedSetups, savedSetupDescription]);
+
+  const saveCurrentSetup = React.useCallback(() => {
+    if (!canPersistSavedSetups) {
+      setCanvasMessage("Sign in to save builder setups.");
+      return;
+    }
+
+    if (!activeSavedSetupId || !activeSavedSetupName) {
+      openSaveDraftDialog();
+      return;
+    }
+
+    void saveSetupDraft({
+      name: activeSavedSetupName,
+      description: savedSetupDescription,
+      closeDialog: false,
+    });
+  }, [
+    activeSavedSetupId,
+    activeSavedSetupName,
+    canPersistSavedSetups,
+    openSaveDraftDialog,
+    saveSetupDraft,
+    savedSetupDescription,
+  ]);
+
+  const createNewComponent = React.useCallback(() => {
+    clearCanvas();
+    setActiveSavedSetupId(null);
+    setActiveSavedSetupName(null);
+    setSavedSetupStatus(null);
+    setActivePublishedTemplateId(null);
+    setSavedSetupDescription("");
+    setSetupNameInput("");
+    setSetupDescriptionInput("");
+    setCanvasMessage("Canvas baru siap digunakan.");
+  }, []);
+
+  const exportJsonDocument = React.useCallback(() => {
+    const payload = {
+      kind: "custom-builder-setup",
+      version: 1,
+      name: activeSavedSetupName,
+      description: savedSetupDescription || null,
+      document: createBuilderSavedSetupDocument(
+        latestInstancesRef.current,
+        latestConnectionsRef.current,
+        latestShapesRef.current,
+        selectedWireTypeId
+      ),
+    };
+
+    downloadJsonFile(
+      `${slugifyJsonFilename(activeSavedSetupName ?? "builder-setup")}.json`,
+      payload
+    );
+    setCanvasMessage("JSON exported.");
+  }, [activeSavedSetupName, savedSetupDescription, selectedWireTypeId]);
+
+  async function importJsonDocument(file: File) {
+    try {
+      const raw = await file.text();
+      const parsed = JSON.parse(raw) as {
+        name?: unknown;
+        description?: unknown;
+        document?: unknown;
+      };
+      const documentSource =
+        parsed && typeof parsed === "object" && "document" in parsed
+          ? parsed.document
+          : parsed;
+      const normalized = normalizeBuilderSavedSetupDocument(documentSource);
+      const importedName =
+        typeof parsed?.name === "string" && parsed.name.trim()
+          ? parsed.name
+          : getFilenameBase(file.name);
+      const importedDescription =
+        typeof parsed?.description === "string" ? parsed.description : "";
+
+      applySavedSetupDocument(normalized);
+      setActiveSavedSetupId(null);
+      setActiveSavedSetupName(importedName);
+      setSavedSetupStatus(null);
+      setActivePublishedTemplateId(null);
+      setSavedSetupDescription(importedDescription);
+      setSetupNameInput(importedName);
+      setSetupDescriptionInput(importedDescription);
+      setCanvasMessage(`Imported JSON "${file.name}".`);
+    } catch (error) {
+      setCanvasMessage(error instanceof Error ? error.message : "Failed to import JSON.");
+    }
+  }
 
   const openPublishDialog = React.useCallback(() => {
     if (!canPersistSavedSetups) {
@@ -4047,6 +4320,12 @@ export function CustomBuilderContent({
         return;
       }
 
+      if (modifier && key === "s") {
+        event.preventDefault();
+        saveCurrentSetup();
+        return;
+      }
+
       if (modifier && key === "c") {
         if (selectedInstances.length === 0) {
           return;
@@ -4120,22 +4399,39 @@ export function CustomBuilderContent({
     copySelectedInstances,
     pasteCopiedInstances,
     redoBuilder,
+    saveCurrentSetup,
     undoBuilder,
     shapes,
   ]);
 
   return (
-    <div className="flex flex-1 flex-col overflow-hidden">
+    <div className="flex flex-1 flex-col overflow-visible">
+      <input
+        ref={importJsonInputRef}
+        type="file"
+        accept=".json,application/json"
+        className="hidden"
+        onChange={async (event) => {
+          const file = event.target.files?.[0];
+
+          if (!file) {
+            return;
+          }
+
+          await importJsonDocument(file);
+          event.target.value = "";
+        }}
+      />
       <div className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden xl:grid-cols-[320px_minmax(0,1fr)_340px]">
-        <div className="min-h-0 overflow-auto border-r border-border/70 bg-background/95 p-4">
-          <Card className="rounded-3xl border-border/70 shadow-sm">
+        <div className="min-h-0 overflow-hidden border-r border-border/70 bg-background/95 p-4">
+          <Card className="flex h-full min-h-0 flex-col overflow-hidden rounded-3xl border-border/70 shadow-sm">
             <CardHeader>
               <CardTitle>Component Palette</CardTitle>
               <CardDescription>
                 Asset aktif dengan connection point siap di-drop ke canvas builder.
               </CardDescription>
             </CardHeader>
-            <CardContent className="flex flex-col gap-4">
+            <CardContent className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden">
               <Input
                 value={assetQuery}
                 onChange={(event) => setAssetQuery(event.target.value)}
@@ -4153,66 +4449,72 @@ export function CustomBuilderContent({
                   </option>
                 ))}
               </select>
-              <div className="grid gap-3">
-                {filteredAssets.map((asset) => (
-                  <button
-                    key={asset.id}
-                    type="button"
-                    draggable
-                    onDragStart={(event) => {
-                      event.dataTransfer.setData("application/x-builder-asset", asset.id);
-                      event.dataTransfer.effectAllowed = "copy";
-                    }}
-                    onClick={() => addInstance(asset.id)}
-                    className="rounded-2xl border border-border/70 bg-card p-3 text-left transition hover:border-primary/50 hover:bg-muted/40"
-                  >
-                    <div className="flex items-start gap-3">
-                      <div className="flex size-20 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-border/70 bg-muted/30">
-                        {asset.previewUrl ? (
-                          <Image
-                            src={asset.previewUrl}
-                            alt={asset.name}
-                            width={asset.width}
-                            height={asset.height}
-                            unoptimized
-                            className="h-full w-full object-contain"
-                          />
-                        ) : (
-                          <div className="flex flex-col items-center gap-1 text-[0.65rem] text-muted-foreground">
-                            <HugeiconsIcon icon={PaintBrush02Icon} strokeWidth={1.8} />
-                            <span>No preview</span>
-                          </div>
-                        )}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <div className="truncate font-medium text-foreground">{asset.name}</div>
-                            <div className="text-xs text-muted-foreground">{asset.componentType}</div>
-                          </div>
-                          <HugeiconsIcon icon={PlusSignIcon} strokeWidth={2} className="mt-0.5 shrink-0" />
+              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1">
+                <div className="grid gap-3">
+                  {filteredAssets.map((asset) => (
+                    <button
+                      key={asset.id}
+                      type="button"
+                      draggable
+                      onDragStart={(event) => {
+                        event.dataTransfer.setData("application/x-builder-asset", asset.id);
+                        event.dataTransfer.effectAllowed = "copy";
+                      }}
+                      onClick={() => addInstance(asset.id)}
+                      className="w-full rounded-2xl border border-border/70 bg-card p-3 text-left transition hover:border-primary/50 hover:bg-muted/40"
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className="flex size-20 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-border/70 bg-muted/30">
+                          {asset.previewUrl ? (
+                            <Image
+                              src={asset.previewUrl}
+                              alt={asset.name}
+                              width={asset.width}
+                              height={asset.height}
+                              unoptimized
+                              className="h-full w-full object-contain"
+                            />
+                          ) : (
+                            <div className="flex flex-col items-center gap-1 text-[0.65rem] text-muted-foreground">
+                              <HugeiconsIcon icon={PaintBrush02Icon} strokeWidth={1.8} />
+                              <span>No preview</span>
+                            </div>
+                          )}
                         </div>
-                        {asset.styleType ? (
-                          <div className="mt-2 text-[0.7rem] uppercase tracking-[0.14em] text-muted-foreground">
-                            {asset.styleType}
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="truncate font-medium text-foreground">{asset.name}</div>
+                              <div className="text-xs text-muted-foreground">{asset.componentType}</div>
+                            </div>
+                            <HugeiconsIcon
+                              icon={PlusSignIcon}
+                              strokeWidth={2}
+                              className="mt-0.5 shrink-0"
+                            />
                           </div>
-                        ) : null}
+                          {asset.styleType ? (
+                            <div className="mt-2 text-[0.7rem] uppercase tracking-[0.14em] text-muted-foreground">
+                              {asset.styleType}
+                            </div>
+                          ) : null}
+                        </div>
                       </div>
+                    </button>
+                  ))}
+                  {filteredAssets.length === 0 ? (
+                    <div className="rounded-2xl border border-dashed border-border px-4 py-8 text-center text-muted-foreground">
+                      Tidak ada asset yang cocok dengan pencarian.
                     </div>
-                  </button>
-                ))}
-                {filteredAssets.length === 0 ? (
-                  <div className="rounded-2xl border border-dashed border-border px-4 py-8 text-center text-muted-foreground">
-                    Tidak ada asset yang cocok dengan pencarian.
-                  </div>
-                ) : null}
+                  ) : null}
+                </div>
               </div>
             </CardContent>
           </Card>
         </div>
 
-        <div className="min-h-0 overflow-hidden bg-[linear-gradient(135deg,rgba(15,23,42,0.03),rgba(15,118,110,0.07))] p-4">
-          <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-[2rem] border border-border/70 bg-background/95 shadow-[0_30px_80px_rgba(15,23,42,0.10)]">
+        <div className="min-h-0 overflow-visible bg-[linear-gradient(135deg,rgba(15,23,42,0.03),rgba(15,118,110,0.07))] p-4">
+          <div className="flex h-full min-h-0 flex-col overflow-visible rounded-[2rem] border border-border/70 bg-background/95 shadow-[0_30px_80px_rgba(15,23,42,0.10)]">
             <BuilderTopbar
               activeTool={activeTool}
               selectedWireTypeId={selectedWireTypeId}
@@ -4291,7 +4593,11 @@ export function CustomBuilderContent({
                 removeSelectedInstances();
               }}
               onClearCanvas={clearCanvas}
-              onSaveDraft={openSaveDraftDialog}
+              onSave={saveCurrentSetup}
+              onSaveAs={openSaveAsDialog}
+              onNewComponent={createNewComponent}
+              onImportJson={() => importJsonInputRef.current?.click()}
+              onExportJson={exportJsonDocument}
               onPublish={openPublishDialog}
               onOpenSavedSetups={openSavedSetupBrowser}
             />
@@ -5765,9 +6071,11 @@ export function CustomBuilderContent({
       <Dialog open={saveDialogOpen} onOpenChange={setSaveDialogOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Save Draft</DialogTitle>
+            <DialogTitle>{saveDialogMode === "saveAs" ? "Save As" : "Save Draft"}</DialogTitle>
             <DialogDescription>
-              Simpan setup builder saat ini sebagai draft.
+              {saveDialogMode === "saveAs"
+                ? "Simpan setup builder saat ini sebagai draft baru."
+                : "Simpan setup builder saat ini sebagai draft."}
             </DialogDescription>
           </DialogHeader>
 
@@ -5807,12 +6115,29 @@ export function CustomBuilderContent({
             <Button
               disabled={isSavingSetup}
               onClick={() => {
-                void saveSetupDraft();
+                void saveSetupDraft({
+                  forceCreateNew: saveDialogMode === "saveAs",
+                });
               }}
             >
-              {isSavingSetup ? "Saving..." : "Save Draft"}
+              {isSavingSetup
+                ? "Saving..."
+                : saveDialogMode === "saveAs"
+                  ? "Save As"
+                  : "Save Draft"}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isSavingSetup && !publishDialogOpen} onOpenChange={() => undefined}>
+        <DialogContent className="max-w-sm" showCloseButton={false}>
+          <DialogHeader className="items-center text-center">
+            <DialogTitle>Saving Draft</DialogTitle>
+            <DialogDescription>
+              Mohon tunggu. Draft builder sedang disimpan.
+            </DialogDescription>
+          </DialogHeader>
         </DialogContent>
       </Dialog>
 

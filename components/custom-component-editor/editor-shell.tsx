@@ -47,6 +47,32 @@ function downloadDataUrl(filename: string, url: string) {
   anchor.click();
 }
 
+function downloadJsonFile(filename: string, payload: unknown) {
+  const blob = new Blob([JSON.stringify(payload, null, 2)], {
+    type: "application/json",
+  });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
+function slugifyFilename(value: string) {
+  const normalized = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+  return normalized || "document";
+}
+
+function getFilenameBase(filename: string) {
+  return filename.replace(/\.[^/.]+$/, "").trim() || "Imported Draft";
+}
+
 function getErrorMessage(error: unknown) {
   if (error instanceof Error) {
     return error.message;
@@ -121,6 +147,7 @@ type EditorShellProps = {
 export function EditorShell({ initialTarget = null }: EditorShellProps) {
   const stageRef = React.useRef<Konva.Stage | null>(null);
   const imageInputRef = React.useRef<HTMLInputElement | null>(null);
+  const importJsonInputRef = React.useRef<HTMLInputElement | null>(null);
   const clipboardRef = React.useRef<CanvasObject[]>([]);
   const { data: session, status: sessionStatus } = useSession();
 
@@ -478,6 +505,60 @@ export function EditorShell({ initialTarget = null }: EditorShellProps) {
     }
   }, [canPersistDraft, loadDrafts]);
 
+  const exportJsonDocument = React.useCallback(() => {
+    const payload = {
+      kind: "custom-component-editor",
+      version: 1,
+      name: activeDraftName,
+      description: activeDraftDescription || null,
+      document: serializeEditorDocument(objects, background, connectionPoints),
+    };
+
+    downloadJsonFile(
+      `${slugifyFilename(activeDraftName ?? "custom-component")}.json`,
+      payload
+    );
+    setDraftStatus("JSON exported.");
+  }, [activeDraftDescription, activeDraftName, background, connectionPoints, objects]);
+
+  const importJsonDocument = React.useCallback(
+    async (file: File) => {
+      try {
+        const raw = await file.text();
+        const parsed = JSON.parse(raw) as {
+          name?: unknown;
+          description?: unknown;
+          document?: unknown;
+        };
+        const documentSource =
+          parsed && typeof parsed === "object" && "document" in parsed
+            ? parsed.document
+            : parsed;
+        const normalized = normalizeEditorDocument(documentSource);
+        const importedName =
+          typeof parsed?.name === "string" && parsed.name.trim()
+            ? parsed.name
+            : getFilenameBase(file.name);
+        const importedDescription =
+          typeof parsed?.description === "string" ? parsed.description : null;
+
+        handleDocumentLoaded(normalized, {
+          id: null,
+          name: importedName,
+          description: importedDescription,
+        });
+        setDraftName(importedName);
+        setDraftDescription(importedDescription ?? "");
+        setAutosaveEnabled(false);
+        setPendingAutosaveEnable(false);
+        setDraftStatus(`Imported JSON "${file.name}".`);
+      } catch (error) {
+        setDraftStatus(getErrorMessage(error));
+      }
+    },
+    [handleDocumentLoaded]
+  );
+
   const handleAutosaveToggle = React.useCallback(
     (checked: boolean) => {
       if (!checked) {
@@ -635,6 +716,12 @@ export function EditorShell({ initialTarget = null }: EditorShellProps) {
         return;
       }
 
+      if (key === "s") {
+        event.preventDefault();
+        void saveCurrentDraft();
+        return;
+      }
+
       if (key === "c") {
         if (selectedObjects.length === 0) {
           return;
@@ -747,6 +834,7 @@ export function EditorShell({ initialTarget = null }: EditorShellProps) {
     groupSelectedObjects,
     moveSelectedObjects,
     redo,
+    saveCurrentDraft,
     selectedConnectionPointIds,
     selectedIds,
     selectedObjects,
@@ -910,7 +998,7 @@ export function EditorShell({ initialTarget = null }: EditorShellProps) {
   );
 
   return (
-    <div className="flex flex-1 flex-col overflow-hidden">
+    <div className="flex flex-1 flex-col overflow-visible">
       <input
         ref={imageInputRef}
         type="file"
@@ -923,6 +1011,22 @@ export function EditorShell({ initialTarget = null }: EditorShellProps) {
           }
 
           await handleImageUpload(file);
+          event.target.value = "";
+        }}
+      />
+      <input
+        ref={importJsonInputRef}
+        type="file"
+        accept=".json,application/json"
+        className="hidden"
+        onChange={async (event) => {
+          const file = event.target.files?.[0];
+
+          if (!file) {
+            return;
+          }
+
+          await importJsonDocument(file);
           event.target.value = "";
         }}
       />
@@ -948,6 +1052,8 @@ export function EditorShell({ initialTarget = null }: EditorShellProps) {
           void saveCurrentDraft();
         }}
         onSaveAsDraft={saveAsDraft}
+        onImportJson={() => importJsonInputRef.current?.click()}
+        onExportJson={exportJsonDocument}
         onPublish={() => setPublishDialogOpen(true)}
         onOpenDrafts={openDraftBrowser}
         canSaveDraft={canPersistDraft}
@@ -1073,6 +1179,17 @@ export function EditorShell({ initialTarget = null }: EditorShellProps) {
               {isSavingDraft ? "Saving..." : saveDialogMode === "save-as" ? "Save As" : "Save Draft"}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isSavingDraft} onOpenChange={() => undefined}>
+        <DialogContent className="max-w-sm" showCloseButton={false}>
+          <DialogHeader className="items-center text-center">
+            <DialogTitle>Saving Draft</DialogTitle>
+            <DialogDescription>
+              Mohon tunggu. Draft custom component sedang disimpan.
+            </DialogDescription>
+          </DialogHeader>
         </DialogContent>
       </Dialog>
 
