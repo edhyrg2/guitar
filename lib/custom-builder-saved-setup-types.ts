@@ -3,6 +3,7 @@ import type {
   EllipseObject,
   LineObject,
   RectangleObject,
+  TextObject,
 } from "@/lib/custom-component-editor-types";
 
 export type BuilderSavedSetupStatus = "DRAFT" | "PUBLISHED";
@@ -22,6 +23,8 @@ export type BuilderSetupInstance = {
   scale: number;
   rotation: number;
   showLabel: boolean;
+  labelOffsetX: number;
+  labelOffsetY: number;
 };
 
 export type BuilderSetupConnection = {
@@ -34,7 +37,7 @@ export type BuilderSetupConnection = {
   controlPoints: { x: number; y: number }[];
 };
 
-export type BuilderSetupShape = RectangleObject | EllipseObject | LineObject;
+export type BuilderSetupShape = RectangleObject | EllipseObject | LineObject | TextObject;
 
 export type BuilderSavedSetupDocument = {
   version: 1;
@@ -114,6 +117,8 @@ export function normalizeBuilderSavedSetupDocument(
           scale: value.scale!,
           rotation: value.rotation!,
           showLabel: Boolean(value.showLabel),
+          labelOffsetX: isFiniteNumber(value.labelOffsetX) ? value.labelOffsetX : 0,
+          labelOffsetY: isFiniteNumber(value.labelOffsetY) ? value.labelOffsetY : 0,
         } satisfies BuilderSetupInstance;
       })
       .filter((instance): instance is BuilderSetupInstance => instance !== null),
@@ -258,6 +263,50 @@ export function normalizeBuilderSavedSetupDocument(
           visible: value.visible,
           locked: value.locked,
           points: [...value.points],
+        });
+      }
+
+      if (value.type === "text") {
+        if (
+          !isFiniteNumber(value.width) ||
+          !isFiniteNumber(value.height) ||
+          typeof value.text !== "string" ||
+          !isFiniteNumber(value.fontSize) ||
+          typeof value.fontFamily !== "string" ||
+          (value.fontStyle !== "normal" &&
+            value.fontStyle !== "bold" &&
+            value.fontStyle !== "italic" &&
+            value.fontStyle !== "bold italic") ||
+          (value.textAlign !== "left" &&
+            value.textAlign !== "center" &&
+            value.textAlign !== "right")
+        ) {
+          return result;
+        }
+
+        result.push({
+          id: value.id,
+          groupId: value.groupId,
+          type: "text",
+          name: value.name,
+          x: value.x!,
+          y: value.y!,
+          rotation: value.rotation!,
+          opacity: value.opacity!,
+          fill: value.fill,
+          stroke: value.stroke,
+          strokeWidth: value.strokeWidth!,
+          scaleX: value.scaleX!,
+          scaleY: value.scaleY!,
+          visible: value.visible,
+          locked: value.locked,
+          width: value.width!,
+          height: value.height!,
+          text: value.text,
+          fontSize: value.fontSize!,
+          fontFamily: value.fontFamily,
+          fontStyle: value.fontStyle,
+          textAlign: value.textAlign,
         });
       }
 

@@ -12,6 +12,7 @@ import {
   PaintBrush02Icon,
   SquareIcon,
   TextIcon,
+  TriangleIcon,
 } from "@hugeicons/core-free-icons";
 
 import type { EditorTool } from "@/lib/custom-component-editor-types";
@@ -28,6 +29,7 @@ const TOOL_BUTTONS: ToolButton[] = [
   { label: "Select", tool: "select", icon: CursorPointer01Icon },
   { label: "Pan", tool: "pan", icon: MoveIcon },
   { label: "Rectangle", tool: "rectangle", icon: SquareIcon },
+  { label: "Triangle", tool: "triangle", icon: TriangleIcon },
   { label: "Ellipse", tool: "ellipse", icon: OvalIcon },
   { label: "Line", tool: "line", icon: Edit01Icon },
   { label: "Text", tool: "text", icon: TextIcon },

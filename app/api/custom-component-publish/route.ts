@@ -23,6 +23,77 @@ function slugify(value: string) {
     .replace(/^-+|-+$/g, "");
 }
 
+async function ensureUniqueComponentAssetSlug(
+  tx: Prisma.TransactionClient,
+  baseSlug: string,
+  currentAssetId: string | null
+) {
+  const normalizedBase = slugify(baseSlug) || "custom-component";
+  let candidate = normalizedBase;
+  let suffix = 2;
+
+  while (true) {
+    const existing = await tx.componentAsset.findUnique({
+      where: { slug: candidate },
+      select: { id: true },
+    });
+
+    if (!existing || existing.id === currentAssetId) {
+      return candidate;
+    }
+
+    candidate = `${normalizedBase}-${suffix}`;
+    suffix += 1;
+  }
+}
+
+async function ensureUniqueOwnerSlug(params: {
+  tx: Prisma.TransactionClient;
+  model: "switchType" | "pickupType" | "mod";
+  baseSlug: string | null;
+  currentOwnerId: string | null;
+}) {
+  const { tx, model, baseSlug, currentOwnerId } = params;
+
+  if (!baseSlug?.trim()) {
+    return null;
+  }
+
+  const normalizedBase = slugify(baseSlug);
+
+  if (!normalizedBase) {
+    return null;
+  }
+
+  let candidate = normalizedBase;
+  let suffix = 2;
+
+  while (true) {
+    const existing =
+      model === "switchType"
+        ? await tx.switchType.findUnique({
+            where: { slug: candidate },
+            select: { id: true },
+          })
+        : model === "pickupType"
+          ? await tx.pickupType.findUnique({
+              where: { slug: candidate },
+              select: { id: true },
+            })
+          : await tx.mod.findUnique({
+              where: { slug: candidate },
+              select: { id: true },
+            });
+
+    if (!existing || existing.id === currentOwnerId) {
+      return candidate;
+    }
+
+    candidate = `${normalizedBase}-${suffix}`;
+    suffix += 1;
+  }
+}
+
 function parseNullableNumber(value: string | null) {
   if (!value?.trim()) {
     return null;
@@ -45,7 +116,7 @@ function normalizeConnectionPoints(value: unknown) {
     throw new Error("connectionPointsJson must be an array.");
   }
 
-  return value.map((point, index) => {
+  const normalized = value.map((point, index) => {
     const item = point as PublishConnectionPoint;
     const key = item.key?.trim();
     const label = item.label?.trim();
@@ -69,6 +140,24 @@ function normalizeConnectionPoints(value: unknown) {
       description: item.description?.trim() || null,
     };
   });
+
+  const seenKeys = new Set<string>();
+
+  for (const point of normalized) {
+    const originalKey = point.pointKey.trim().toLowerCase();
+    let nextKey = originalKey || "point";
+    let suffix = 2;
+
+    while (seenKeys.has(nextKey)) {
+      nextKey = `${originalKey || "point"}-${suffix}`;
+      suffix += 1;
+    }
+
+    point.pointKey = nextKey;
+    seenKeys.add(nextKey);
+  }
+
+  return normalized;
 }
 
 function localizeConnectionPoints(
@@ -131,9 +220,16 @@ async function upsertOwner(
       throw new Error("Switch type requires name, position count, pole count, and lug count.");
     }
 
+    const ownerSlug = await ensureUniqueOwnerSlug({
+      tx,
+      model: "switchType",
+      baseSlug: String(payload.slug ?? "").trim() || null,
+      currentOwnerId: editingOwnerId,
+    });
+
     const data = {
       name,
-      slug: String(payload.slug ?? "").trim() || null,
+      slug: ownerSlug,
       positionCount,
       poleCount,
       lugCount,
@@ -260,9 +356,16 @@ async function upsertOwner(
       throw new Error("Pickup type requires name.");
     }
 
+    const ownerSlug = await ensureUniqueOwnerSlug({
+      tx,
+      model: "pickupType",
+      baseSlug: String(payload.slug ?? "").trim() || null,
+      currentOwnerId: editingOwnerId,
+    });
+
     const data = {
       name,
-      slug: String(payload.slug ?? "").trim() || null,
+      slug: ownerSlug,
       coilCount: String(payload.coilCount ?? "").trim() || null,
       description: String(payload.description ?? "").trim() || null,
       isActive: payload.isActive === false ? false : true,
@@ -286,9 +389,16 @@ async function upsertOwner(
     throw new Error("Accessory / mod requires name.");
   }
 
+  const ownerSlug = await ensureUniqueOwnerSlug({
+    tx,
+    model: "mod",
+    baseSlug: String(payload.slug ?? "").trim() || null,
+    currentOwnerId: editingOwnerId,
+  });
+
   const data = {
     name,
-    slug: String(payload.slug ?? "").trim() || null,
+    slug: ownerSlug,
     description: String(payload.description ?? "").trim() || null,
     difficultyLevel: String(payload.difficultyLevel ?? "").trim() || null,
     requiresPushPull: Boolean(payload.requiresPushPull),
@@ -477,7 +587,6 @@ export async function POST(request: Request) {
     );
   }
 
-  const assetSlug = requestedSlug || slugify(assetName);
   const localizedConnectionPoints = localizeConnectionPoints(connectionPoints, {
     x: originX,
     y: originY,
@@ -501,6 +610,11 @@ export async function POST(request: Request) {
         },
         select: { id: true },
       });
+      const assetSlug = await ensureUniqueComponentAssetSlug(
+        tx,
+        requestedSlug || assetName,
+        existingAsset?.id ?? null
+      );
 
       const componentAsset = existingAsset
         ? await tx.componentAsset.update({
@@ -639,8 +753,18 @@ export async function POST(request: Request) {
       error instanceof Prisma.PrismaClientKnownRequestError &&
       error.code === "P2002"
     ) {
+      const target = Array.isArray(error.meta?.target)
+        ? error.meta.target.join(", ")
+        : typeof error.meta?.target === "string"
+          ? error.meta.target
+          : "unknown field";
+      const message =
+        target === "unknown field"
+          ? "A record with the same unique value already exists. Check asset slug, owner slug, or duplicate connection point keys."
+          : `A record with the same unique value already exists (${target}).`;
+
       return NextResponse.json(
-        { error: "A record with the same unique value already exists." },
+        { error: message },
         { status: 409 }
       );
     }
@@ -649,6 +773,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
-    throw error;
+    return NextResponse.json(
+      { error: "Unexpected server error while publishing custom component." },
+      { status: 500 }
+    );
   }
 }

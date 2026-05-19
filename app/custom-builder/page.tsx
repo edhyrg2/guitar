@@ -33,6 +33,7 @@ type AssetAnchorPoint = {
 type NamedOwnerRecord = {
   id: string;
   name: string;
+  componentType?: string | null;
   slug?: string | null;
   svgUrl?: string | null;
   thumbnailUrl?: string | null;
@@ -116,6 +117,48 @@ function buildBuilderAssets(
     .filter((asset): asset is BuilderAssetDefinition => asset !== null);
 }
 
+function buildGenericBuilderAssets(assets: NamedOwnerRecord[]) {
+  return assets
+    .filter((asset) => asset.isActive)
+    .map((asset) => {
+      const connectionPoints = parseAssetConnectionPoints(asset.anchorPointsJson);
+
+      if (connectionPoints.length === 0 || !asset.componentType?.trim()) {
+        return null;
+      }
+
+      return {
+        id: asset.id,
+        componentAssetId: asset.id,
+        componentType: asset.componentType,
+        name: asset.name,
+        slug: asset.slug ?? null,
+        width: asset.width ?? 220,
+        height: asset.height ?? 140,
+        previewUrl: asset.svgUrl ?? asset.thumbnailUrl ?? null,
+        styleType: asset.styleType ?? null,
+        connectionPoints,
+      } satisfies BuilderAssetDefinition;
+    })
+    .filter((asset): asset is BuilderAssetDefinition => asset !== null);
+}
+
+function mergeBuilderAssets(...groups: BuilderAssetDefinition[][]) {
+  const registry = new Map<string, BuilderAssetDefinition>();
+
+  for (const group of groups) {
+    for (const asset of group) {
+      const key = asset.componentAssetId ?? asset.id;
+
+      if (!registry.has(key)) {
+        registry.set(key, asset);
+      }
+    }
+  }
+
+  return Array.from(registry.values());
+}
+
 async function getBuilderAssets(): Promise<BuilderAssetDefinition[]> {
   const prisma = await getPrismaClient();
 
@@ -130,6 +173,7 @@ async function getBuilderAssets(): Promise<BuilderAssetDefinition[]> {
     resistors,
     pickupTypes,
     mods,
+    genericAssets,
   ] = await Promise.all([
     prisma.switchType.findMany({
       orderBy: [{ isActive: "desc" }, { name: "asc" }],
@@ -219,10 +263,29 @@ async function getBuilderAssets(): Promise<BuilderAssetDefinition[]> {
         isActive: true,
       },
     }),
+    prisma.componentAsset.findMany({
+      where: {
+        ownerType: null,
+      },
+      orderBy: [{ isActive: "desc" }, { componentType: "asc" }, { name: "asc" }],
+      select: {
+        id: true,
+        name: true,
+        componentType: true,
+        slug: true,
+        svgUrl: true,
+        thumbnailUrl: true,
+        width: true,
+        height: true,
+        anchorPointsJson: true,
+        styleType: true,
+        isActive: true,
+      },
+    }),
   ]);
 
-  return [
-    ...buildBuilderAssets(
+  return mergeBuilderAssets(
+    buildBuilderAssets(
       switchTypes.map((item) => ({
         id: item.id,
         name: item.name,
@@ -239,7 +302,7 @@ async function getBuilderAssets(): Promise<BuilderAssetDefinition[]> {
       "switch-type",
       "Switch"
     ),
-    ...buildBuilderAssets(
+    buildBuilderAssets(
       potTypes.map((item) => ({
         id: item.id,
         name: item.name,
@@ -254,7 +317,7 @@ async function getBuilderAssets(): Promise<BuilderAssetDefinition[]> {
       "pot-type",
       "Potentiometer"
     ),
-    ...buildBuilderAssets(
+    buildBuilderAssets(
       capacitors.map((item) => ({
         id: item.id,
         name: item.valueLabel,
@@ -269,7 +332,7 @@ async function getBuilderAssets(): Promise<BuilderAssetDefinition[]> {
       "capacitor",
       "Capacitor"
     ),
-    ...buildBuilderAssets(
+    buildBuilderAssets(
       resistors.map((item) => ({
         id: item.id,
         name: item.valueLabel,
@@ -284,7 +347,7 @@ async function getBuilderAssets(): Promise<BuilderAssetDefinition[]> {
       "resistor",
       "Resistor"
     ),
-    ...buildBuilderAssets(
+    buildBuilderAssets(
       pickupTypes.map((item) => ({
         id: item.id,
         name: item.name,
@@ -300,7 +363,7 @@ async function getBuilderAssets(): Promise<BuilderAssetDefinition[]> {
       "pickup-type",
       "Pickup"
     ),
-    ...buildBuilderAssets(
+    buildBuilderAssets(
       mods.map((item) => ({
         id: item.id,
         name: item.name,
@@ -316,7 +379,22 @@ async function getBuilderAssets(): Promise<BuilderAssetDefinition[]> {
       "mod",
       "Accessory / Mod"
     ),
-  ];
+    buildGenericBuilderAssets(
+      genericAssets.map((item) => ({
+        id: item.id,
+        name: item.name,
+        componentType: item.componentType,
+        slug: item.slug,
+        svgUrl: item.svgUrl,
+        thumbnailUrl: item.thumbnailUrl,
+        width: item.width,
+        height: item.height,
+        anchorPointsJson: item.anchorPointsJson,
+        styleType: item.styleType,
+        isActive: item.isActive,
+      }))
+    )
+  );
 }
 
 export default async function CustomBuilderPage() {

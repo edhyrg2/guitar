@@ -14,6 +14,41 @@ import {
 import type { CanvasObject, ImageObject } from "@/lib/custom-component-editor-types";
 import { getObjectDimensions } from "@/lib/custom-component-editor-utils";
 
+function drawRoundedTrianglePath(
+  context: Konva.Context,
+  width: number,
+  height: number,
+  cornerRadius: number
+) {
+  const maxRadius = Math.min(cornerRadius, width / 4, height / 4);
+  const top = { x: width / 2, y: 0 };
+  const right = { x: width, y: height };
+  const left = { x: 0, y: height };
+
+  if (maxRadius <= 0.5) {
+    context.moveTo(top.x, top.y);
+    context.lineTo(right.x, right.y);
+    context.lineTo(left.x, left.y);
+    context.closePath();
+    return;
+  }
+
+  const topLeft = { x: top.x - maxRadius, y: top.y + maxRadius };
+  const topRight = { x: top.x + maxRadius, y: top.y + maxRadius };
+  const rightTop = { x: right.x - maxRadius, y: right.y - maxRadius };
+  const rightBottom = { x: right.x - maxRadius * 1.4, y: right.y };
+  const leftBottom = { x: left.x + maxRadius * 1.4, y: left.y };
+  const leftTop = { x: left.x + maxRadius, y: left.y - maxRadius };
+
+  context.moveTo(topLeft.x, topLeft.y);
+  context.quadraticCurveTo(top.x, top.y, topRight.x, topRight.y);
+  context.lineTo(rightTop.x, rightTop.y);
+  context.quadraticCurveTo(right.x, right.y, rightBottom.x, rightBottom.y);
+  context.lineTo(leftBottom.x, leftBottom.y);
+  context.quadraticCurveTo(left.x, left.y, leftTop.x, leftTop.y);
+  context.closePath();
+}
+
 function useLoadedImage(source: string) {
   const [image, setImage] = React.useState<HTMLImageElement | null>(null);
 
@@ -63,6 +98,7 @@ type ShapeRendererProps = {
   object: CanvasObject;
   isSelected: boolean;
   onSelect: (id: string, additive?: boolean) => void;
+  onDoubleClick?: (id: string) => void;
   onContextMenu: (id: string, x: number, y: number) => void;
   onDragStart: (id: string, node: Konva.Group) => void;
   onDragMove: (id: string, node: Konva.Group, shiftKey: boolean) => void;
@@ -75,6 +111,7 @@ export function ShapeRenderer({
   object,
   isSelected,
   onSelect,
+  onDoubleClick,
   onContextMenu,
   onDragStart,
   onDragMove,
@@ -113,6 +150,22 @@ export function ShapeRenderer({
         event.cancelBubble = true;
         onSelect(object.id);
       }}
+      onDblClick={(event) => {
+        if (object.type !== "text" || !onDoubleClick) {
+          return;
+        }
+
+        event.cancelBubble = true;
+        onDoubleClick(object.id);
+      }}
+      onDblTap={(event) => {
+        if (object.type !== "text" || !onDoubleClick) {
+          return;
+        }
+
+        event.cancelBubble = true;
+        onDoubleClick(object.id);
+      }}
       onContextMenu={(event) => {
         event.evt.preventDefault();
         event.cancelBubble = true;
@@ -134,6 +187,25 @@ export function ShapeRenderer({
           stroke={object.stroke}
           strokeWidth={object.strokeWidth}
           opacity={object.opacity}
+        />
+      ) : null}
+
+      {object.type === "triangle" ? (
+        <Shape
+          fill={object.fill}
+          stroke={object.stroke}
+          strokeWidth={object.strokeWidth}
+          opacity={object.opacity}
+          sceneFunc={(context, shape) => {
+            context.beginPath();
+            drawRoundedTrianglePath(
+              context,
+              object.width,
+              object.height,
+              object.cornerRadius
+            );
+            context.fillStrokeShape(shape);
+          }}
         />
       ) : null}
 

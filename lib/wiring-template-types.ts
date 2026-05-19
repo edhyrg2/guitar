@@ -3,6 +3,34 @@ export type WiringTemplateReference = {
   name: string;
 };
 
+export type WiringTemplateDetailComponent = {
+  id: string;
+  componentRole: string;
+  componentType: string;
+  assetId: string;
+  assetName: string;
+  positionX: number;
+  positionY: number;
+  rotation: number;
+  scale: number;
+  showLabel: boolean;
+  metadataJson: string | null;
+};
+
+export type WiringTemplateDetailConnection = {
+  id: string;
+  fromComponentRole: string;
+  fromPointKey: string;
+  toComponentRole: string;
+  toPointKey: string;
+  wireTypeId: string;
+  wireTypeName: string;
+  wireColor: string | null;
+  pathJson: string | null;
+  label: string | null;
+  notes: string | null;
+};
+
 export type WiringTemplateRow = {
   id: string;
   name: string;
@@ -24,6 +52,11 @@ export type WiringTemplateRow = {
   createdBy: string;
   createdAt: string;
   updatedAt: string;
+};
+
+export type WiringTemplateDetail = WiringTemplateRow & {
+  components: WiringTemplateDetailComponent[];
+  connections: WiringTemplateDetailConnection[];
 };
 
 export type WiringTemplateInput = Omit<

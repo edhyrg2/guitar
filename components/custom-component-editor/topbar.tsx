@@ -2,6 +2,7 @@
 
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
+  AddSquareIcon,
   AlignBottomIcon,
   AlignHorizontalCenterIcon,
   AlignLeftIcon,
@@ -33,7 +34,9 @@ type EditorTopbarProps = {
   onZoomOut: () => void;
   onResetZoom: () => void;
   onExportPng: () => void;
+  onNewCanvas: () => void;
   onSaveDraft: () => void;
+  onSaveAsDraft: () => void;
   onPublish: () => void;
   onOpenDrafts: () => void;
   canSaveDraft: boolean;
@@ -58,7 +61,9 @@ export function EditorTopbar({
   onZoomOut,
   onResetZoom,
   onExportPng,
+  onNewCanvas,
   onSaveDraft,
+  onSaveAsDraft,
   onPublish,
   onOpenDrafts,
   canSaveDraft,
@@ -145,6 +150,10 @@ export function EditorTopbar({
             {statusText}
           </div>
         ) : null}
+        <Button variant="outline" size="sm" onClick={onNewCanvas}>
+          <HugeiconsIcon icon={AddSquareIcon} strokeWidth={2} data-icon="inline-start" />
+          New Components
+        </Button>
         <label className="flex items-center gap-2 rounded-full border border-border/70 bg-card px-3 py-1.5 text-xs text-muted-foreground shadow-sm">
           <Switch checked={autosaveEnabled} onCheckedChange={onToggleAutosave} />
           Autosave
@@ -157,6 +166,15 @@ export function EditorTopbar({
         >
           <HugeiconsIcon icon={FloppyDiskIcon} strokeWidth={2} data-icon="inline-start" />
           Save Draft
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={!canSaveDraft || draftBusy}
+          onClick={onSaveAsDraft}
+        >
+          <HugeiconsIcon icon={FloppyDiskIcon} strokeWidth={2} data-icon="inline-start" />
+          Save As
         </Button>
         <Button
           variant="outline"

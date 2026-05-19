@@ -18,6 +18,10 @@ import { Button } from "@/components/ui/button";
 import { TableCell, TableHead, TableRow } from "@/components/ui/table";
 import { WiringTemplateFormDialog } from "@/components/wiring-template-form-dialog";
 import {
+  formatWiringTemplateInventorySummary,
+  parseWiringTemplateInventory,
+} from "@/lib/wiring-template-inventory";
+import {
   type WiringTemplateInput,
   type WiringTemplateReference,
   type WiringTemplateRow,
@@ -41,6 +45,17 @@ export function WiringTemplateManagementContent({
   const [editTarget, setEditTarget] = React.useState<WiringTemplateRow | null>(null);
   const [deleteTarget, setDeleteTarget] = React.useState<WiringTemplateRow | null>(
     null
+  );
+  const templatesWithInventory = React.useMemo(
+    () =>
+      templates.map((template) => ({
+        ...template,
+        inventory: parseWiringTemplateInventory(
+          template.diagramJson,
+          template.switchLogicJson
+        ),
+      })),
+    [templates]
   );
 
   const stats = [
@@ -125,7 +140,7 @@ export function WiringTemplateManagementContent({
         <DataTableCard
           title="Master wiring template"
           description="Manage reusable wiring blueprints with diagram JSON, switch logic, and metadata for validation."
-          rows={templates}
+          rows={templatesWithInventory}
           searchPlaceholder="Search template, config, switch, source, creator"
           summaryLabel="wiring templates"
           getSearchText={(item) =>
@@ -140,6 +155,7 @@ export function WiringTemplateManagementContent({
               item.sourceUrl,
               item.createdBy,
               item.isVerified ? "verified" : "draft",
+              formatWiringTemplateInventorySummary(item.inventory),
             ]
               .filter(Boolean)
               .join(" ")
@@ -156,6 +172,7 @@ export function WiringTemplateManagementContent({
               <TableHead>Name</TableHead>
               <TableHead>Pickup Config</TableHead>
               <TableHead>Switch Type</TableHead>
+              <TableHead>Inventory</TableHead>
               <TableHead>Controls</TableHead>
               <TableHead>Difficulty</TableHead>
               <TableHead>Verified</TableHead>
@@ -168,6 +185,11 @@ export function WiringTemplateManagementContent({
               <TableCell className="font-medium">{item.name}</TableCell>
               <TableCell>{item.pickupConfigurationName}</TableCell>
               <TableCell>{item.switchTypeName}</TableCell>
+              <TableCell className="max-w-72">
+                <div className="truncate">
+                  {formatWiringTemplateInventorySummary(item.inventory) || "-"}
+                </div>
+              </TableCell>
               <TableCell>
                 {item.volumeCount} Vol / {item.toneCount} Tone
               </TableCell>
@@ -205,7 +227,7 @@ export function WiringTemplateManagementContent({
             </TableRow>
           )}
           emptyMessage={
-            <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
+            <TableCell colSpan={9} className="py-8 text-center text-muted-foreground">
               No wiring templates match the current search.
             </TableCell>
           }

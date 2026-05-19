@@ -1,5 +1,8 @@
 import { getPrismaClient } from "@/lib/prisma";
 import {
+  type WiringTemplateDetail,
+  type WiringTemplateDetailComponent,
+  type WiringTemplateDetailConnection,
   type WiringTemplateReference,
   type WiringTemplateRow,
 } from "@/lib/wiring-template-types";
@@ -25,6 +28,32 @@ type PrismaWiringTemplateRecord = {
   updatedAt: Date;
   pickupConfiguration: { name: string };
   switchType: { name: string };
+  components?: Array<{
+    id: string;
+    componentRole: string;
+    componentType: string;
+    assetId: string;
+    positionX: number;
+    positionY: number;
+    rotation: number;
+    scale: number;
+    showLabel: boolean;
+    metadataJson: unknown;
+    asset: { name: string };
+  }>;
+  connections?: Array<{
+    id: string;
+    fromComponentRole: string;
+    fromPointKey: string;
+    toComponentRole: string;
+    toPointKey: string;
+    wireTypeId: string;
+    wireColor: string | null;
+    pathJson: unknown;
+    label: string | null;
+    notes: string | null;
+    wireType: { name: string };
+  }>;
 };
 
 export const seedWiringTemplateRows: WiringTemplateRow[] = [
@@ -117,6 +146,56 @@ function mapRecord(record: PrismaWiringTemplateRecord): WiringTemplateRow {
   };
 }
 
+function mapDetailComponent(
+  component: NonNullable<PrismaWiringTemplateRecord["components"]>[number]
+): WiringTemplateDetailComponent {
+  return {
+    id: component.id,
+    componentRole: component.componentRole,
+    componentType: component.componentType,
+    assetId: component.assetId,
+    assetName: component.asset.name,
+    positionX: component.positionX,
+    positionY: component.positionY,
+    rotation: component.rotation,
+    scale: component.scale,
+    showLabel: component.showLabel,
+    metadataJson:
+      component.metadataJson === null || component.metadataJson === undefined
+        ? null
+        : JSON.stringify(component.metadataJson),
+  };
+}
+
+function mapDetailConnection(
+  connection: NonNullable<PrismaWiringTemplateRecord["connections"]>[number]
+): WiringTemplateDetailConnection {
+  return {
+    id: connection.id,
+    fromComponentRole: connection.fromComponentRole,
+    fromPointKey: connection.fromPointKey,
+    toComponentRole: connection.toComponentRole,
+    toPointKey: connection.toPointKey,
+    wireTypeId: connection.wireTypeId,
+    wireTypeName: connection.wireType.name,
+    wireColor: connection.wireColor,
+    pathJson:
+      connection.pathJson === null || connection.pathJson === undefined
+        ? null
+        : JSON.stringify(connection.pathJson),
+    label: connection.label,
+    notes: connection.notes,
+  };
+}
+
+function mapDetailRecord(record: PrismaWiringTemplateRecord): WiringTemplateDetail {
+  return {
+    ...mapRecord(record),
+    components: (record.components ?? []).map(mapDetailComponent),
+    connections: (record.connections ?? []).map(mapDetailConnection),
+  };
+}
+
 export async function getWiringTemplateRows(): Promise<WiringTemplateRow[]> {
   try {
     const prisma = await getPrismaClient();
@@ -140,6 +219,75 @@ export async function getWiringTemplateRows(): Promise<WiringTemplateRow[]> {
     return templates.map(mapRecord);
   } catch {
     return seedWiringTemplateRows;
+  }
+}
+
+export async function getWiringTemplateDetailById(
+  id: string
+): Promise<WiringTemplateDetail | null> {
+  try {
+    const prisma = await getPrismaClient();
+
+    if (!prisma) {
+      const fallback = seedWiringTemplateRows.find((item) => item.id === id) ?? null;
+
+      if (!fallback) {
+        return null;
+      }
+
+      return {
+        ...fallback,
+        components: [],
+        connections: [],
+      };
+    }
+
+    const template = (await prisma.wiringTemplate.findUnique({
+      where: { id },
+      include: {
+        pickupConfiguration: {
+          select: { name: true },
+        },
+        switchType: {
+          select: { name: true },
+        },
+        components: {
+          orderBy: [{ componentRole: "asc" }, { componentType: "asc" }],
+          include: {
+            asset: {
+              select: { name: true },
+            },
+          },
+        },
+        connections: {
+          orderBy: [
+            { fromComponentRole: "asc" },
+            { toComponentRole: "asc" },
+            { fromPointKey: "asc" },
+            { toPointKey: "asc" },
+          ],
+          include: {
+            wireType: {
+              select: { name: true },
+            },
+          },
+        },
+      },
+    })) as PrismaWiringTemplateRecord | null;
+
+    return template ? mapDetailRecord(template) : null;
+  } catch {
+    const fallback = seedWiringTemplateRows.find((item) => item.id === id) ?? null;
+
+    if (!fallback) {
+      return null;
+    }
+
+    return {
+      ...fallback,
+      components: [],
+      connections: [],
+    };
   }
 }
 

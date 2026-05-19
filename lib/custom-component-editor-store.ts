@@ -322,7 +322,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       const point = createConnectionPoint({
         x,
         y,
-        index: state.connectionPoints.length,
+        existingPoints: state.connectionPoints,
       });
 
       return {

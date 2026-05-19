@@ -27,6 +27,7 @@ import {
   createLineObject,
   createRectangleObject,
   createTextObject,
+  createTriangleObject,
   getObjectDimensions,
   isShapeTool,
   withAutoSizedTextDimensions,
@@ -35,7 +36,7 @@ import { ShapeRenderer } from "@/components/custom-component-editor/shape-render
 
 type DraftShape =
   | {
-      tool: "rectangle" | "ellipse" | "line" | "text";
+      tool: "rectangle" | "triangle" | "ellipse" | "line" | "text";
       start: { x: number; y: number };
       current: { x: number; y: number };
       constrainProportions?: boolean;
@@ -54,6 +55,12 @@ type SelectionBox = {
 type ContextMenuState = {
   x: number;
   y: number;
+} | null;
+
+type InlineTextEditorState = {
+  objectId: string;
+  value: string;
+  style: React.CSSProperties;
 } | null;
 
 const MIN_DRAW_DISTANCE = 8;
@@ -90,6 +97,9 @@ export function CanvasEditor({ stageRef }: CanvasEditorProps) {
   const [draft, setDraft] = React.useState<DraftShape>(null);
   const [selectionBox, setSelectionBox] = React.useState<SelectionBox>(null);
   const [contextMenu, setContextMenu] = React.useState<ContextMenuState>(null);
+  const [inlineTextEditor, setInlineTextEditor] =
+    React.useState<InlineTextEditorState>(null);
+  const inlineTextEditorRef = React.useRef<HTMLTextAreaElement | null>(null);
 
   const background = useEditorStore((state) => state.background);
   const objects = useEditorStore((state) => state.objects);
@@ -190,6 +200,15 @@ export function CanvasEditor({ stageRef }: CanvasEditorProps) {
     };
   }, []);
 
+  React.useEffect(() => {
+    if (!inlineTextEditorRef.current) {
+      return;
+    }
+
+    inlineTextEditorRef.current.focus();
+    inlineTextEditorRef.current.select();
+  }, [inlineTextEditor]);
+
   const getPointerInWorld = React.useCallback(() => {
     const stage = stageRef.current;
     const pointer = stage?.getPointerPosition();
@@ -214,6 +233,7 @@ export function CanvasEditor({ stageRef }: CanvasEditorProps) {
 
       if (
         object.type === "rectangle" ||
+        object.type === "triangle" ||
         object.type === "ellipse" ||
         object.type === "image"
       ) {
@@ -315,11 +335,17 @@ export function CanvasEditor({ stageRef }: CanvasEditorProps) {
     setDraft({
       ...draft,
       current:
-        (draft.tool === "rectangle" || draft.tool === "ellipse") && ctrlKey
+        (draft.tool === "rectangle" ||
+          draft.tool === "triangle" ||
+          draft.tool === "ellipse") &&
+        ctrlKey
           ? getConstrainedPoint(draft.start, pointer)
           : pointer,
       constrainProportions:
-        (draft.tool === "rectangle" || draft.tool === "ellipse") && ctrlKey,
+        (draft.tool === "rectangle" ||
+          draft.tool === "triangle" ||
+          draft.tool === "ellipse") &&
+        ctrlKey,
     });
   }, [draft, getPointerInWorld]);
 
@@ -336,6 +362,16 @@ export function CanvasEditor({ stageRef }: CanvasEditorProps) {
 
       if (deltaX >= MIN_DRAW_DISTANCE || deltaY >= MIN_DRAW_DISTANCE) {
         addObject(createRectangleObject(draft.start, draft.current));
+        created = true;
+      }
+    }
+
+    if (draft.tool === "triangle") {
+      const deltaX = Math.abs(draft.current.x - draft.start.x);
+      const deltaY = Math.abs(draft.current.y - draft.start.y);
+
+      if (deltaX >= MIN_DRAW_DISTANCE || deltaY >= MIN_DRAW_DISTANCE) {
+        addObject(createTriangleObject(draft.start, draft.current));
         created = true;
       }
     }
@@ -404,9 +440,74 @@ export function CanvasEditor({ stageRef }: CanvasEditorProps) {
 
   let preview: CanvasObject | null = null;
 
+  function beginInlineTextEdit(objectId: string) {
+    const target = objects.find((item) => item.id === objectId);
+    const node = nodeMapRef.current.get(objectId);
+    const stage = stageRef.current;
+
+    if (!target || target.type !== "text" || !node || !stage) {
+      return;
+    }
+
+    const bounds = node.getClientRect({
+      skipShadow: false,
+      skipStroke: false,
+    });
+    const stageScaleX = stage.scaleX();
+    const stageScaleY = stage.scaleY();
+    const stageOffsetX = stage.x();
+    const stageOffsetY = stage.y();
+
+    setInlineTextEditor({
+      objectId,
+      value: target.text,
+      style: {
+        left: bounds.x * stageScaleX + stageOffsetX,
+        top: bounds.y * stageScaleY + stageOffsetY,
+        width: Math.max(bounds.width * stageScaleX, 120),
+        height: Math.max(bounds.height * stageScaleY, target.fontSize * stageScaleY + 20),
+        fontSize: `${target.fontSize * stageScaleY}px`,
+        fontFamily: target.fontFamily,
+        fontStyle: target.fontStyle,
+        color: target.fill,
+        textAlign: target.textAlign,
+        lineHeight: "1.2",
+        transform: `rotate(${target.rotation}deg)`,
+        transformOrigin: "top left",
+      },
+    });
+    selectObject(objectId);
+    setContextMenu(null);
+  }
+
+  function commitInlineTextEdit() {
+    if (!inlineTextEditor) {
+      return;
+    }
+
+    const target = objects.find((item) => item.id === inlineTextEditor.objectId);
+
+    if (target?.type === "text") {
+      replaceObject(
+        withAutoSizedTextDimensions({
+          ...target,
+          text: inlineTextEditor.value,
+        })
+      );
+    }
+
+    setInlineTextEditor(null);
+  }
+
+  function cancelInlineTextEdit() {
+    setInlineTextEditor(null);
+  }
+
   if (draft && draft.tool !== "draw") {
     if (draft.tool === "rectangle") {
       preview = createRectangleObject(draft.start, draft.current);
+    } else if (draft.tool === "triangle") {
+      preview = createTriangleObject(draft.start, draft.current);
     } else if (draft.tool === "ellipse") {
       preview = createEllipseObject(draft.start, draft.current);
     } else if (draft.tool === "text") {
@@ -636,6 +737,7 @@ export function CanvasEditor({ stageRef }: CanvasEditorProps) {
               object={object}
               isSelected={selectedIds.includes(object.id)}
               onSelect={selectObject}
+              onDoubleClick={beginInlineTextEdit}
               onContextMenu={(id, x, y) => {
                 if (!selectedIds.includes(id)) {
                   selectObject(id);
@@ -709,6 +811,7 @@ export function CanvasEditor({ stageRef }: CanvasEditorProps) {
               object={preview}
               isSelected={false}
               onSelect={() => {}}
+              onDoubleClick={() => {}}
               onContextMenu={() => {}}
               onDragStart={() => {}}
               onDragMove={() => {}}
@@ -789,9 +892,9 @@ export function CanvasEditor({ stageRef }: CanvasEditorProps) {
           <div className="max-w-md rounded-[2rem] border border-border/70 bg-background/92 px-6 py-5 text-center shadow-sm">
             <div className="text-lg font-semibold text-foreground">Start drawing</div>
             <div className="mt-2 text-sm leading-6 text-muted-foreground">
-              Gunakan toolbar kiri untuk membuat rectangle, ellipse, line, text,
-              free draw, atau upload image. Tool `pan` untuk geser canvas dan wheel
-              mouse untuk zoom.
+              Gunakan toolbar kiri untuk membuat rectangle, triangle, ellipse,
+              line, text, free draw, atau upload image. Tool `pan` untuk geser
+              canvas dan wheel mouse untuk zoom.
             </div>
           </div>
         </div>
@@ -888,6 +991,37 @@ export function CanvasEditor({ stageRef }: CanvasEditorProps) {
             Delete
           </button>
         </div>
+      ) : null}
+      {inlineTextEditor ? (
+        <textarea
+          ref={inlineTextEditorRef}
+          value={inlineTextEditor.value}
+          onChange={(event) =>
+            setInlineTextEditor((current) =>
+              current
+                ? {
+                    ...current,
+                    value: event.target.value,
+                  }
+                : current
+            )
+          }
+          onBlur={commitInlineTextEdit}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              event.preventDefault();
+              cancelInlineTextEdit();
+              return;
+            }
+
+            if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+              event.preventDefault();
+              commitInlineTextEdit();
+            }
+          }}
+          className="absolute z-30 resize-none overflow-hidden border border-primary/30 bg-background/95 px-2 py-1 outline-none ring-2 ring-primary/20"
+          style={inlineTextEditor.style}
+        />
       ) : null}
     </div>
   );

@@ -25,6 +25,10 @@ import {
   Rocket01Icon,
   SearchAddIcon,
   SquareIcon,
+  TextAlignCenterIcon,
+  TextAlignLeftIcon,
+  TextAlignRightIcon,
+  TextIcon,
   SearchMinusIcon,
   Undo02Icon,
   ViewIcon,
@@ -76,14 +80,17 @@ import {
   type BuilderSavedSetupStatus,
 } from "@/lib/custom-builder-saved-setup-types";
 import {
+  createTextObject,
   createEllipseObject,
   createLineObject,
   createRectangleObject,
   getObjectDimensions,
+  withAutoSizedTextDimensions,
 } from "@/lib/custom-component-editor-utils";
 import type {
   EllipseObject,
   RectangleObject,
+  TextObject,
 } from "@/lib/custom-component-editor-types";
 import type { WiringTemplateReference } from "@/lib/wiring-template-types";
 import type { WireTypeRow } from "@/lib/wire-type-types";
@@ -125,6 +132,8 @@ type BuilderInstance = {
   scale: number;
   rotation: number;
   showLabel: boolean;
+  labelOffsetX: number;
+  labelOffsetY: number;
 };
 
 type BuilderConnection = {
@@ -162,6 +171,14 @@ type HoverPointTarget = {
   pointKey: string;
 };
 
+type DragConnectionPointState = {
+  source: HoverPointTarget;
+  connectionId: string;
+  endpoint: "from" | "to";
+  startWorld: { x: number; y: number };
+  moved: boolean;
+};
+
 type SelectionBox = {
   start: { x: number; y: number };
   current: { x: number; y: number };
@@ -173,11 +190,11 @@ type BuilderSnapshot = {
   shapes: BuilderSetupShape[];
 };
 
-type BuilderTool = "select" | "rectangle" | "ellipse" | "line";
+type BuilderTool = "select" | "rectangle" | "ellipse" | "line" | "text";
 
 type DraftBuilderShape =
   | {
-      tool: "rectangle" | "ellipse" | "line";
+      tool: "rectangle" | "ellipse" | "line" | "text";
       start: { x: number; y: number };
       current: { x: number; y: number };
       constrainProportions?: boolean;
@@ -221,6 +238,12 @@ type BuilderPublishFormState = {
   isVerified: boolean;
 };
 
+type InlineBuilderTextEditorState = {
+  shapeId: string;
+  value: string;
+  style: React.CSSProperties;
+} | null;
+
 type CustomBuilderContentProps = {
   assets: BuilderAssetDefinition[];
   wireTypes: WireTypeRow[];
@@ -230,12 +253,13 @@ type CustomBuilderContentProps = {
 
 const INITIAL_MAX_COMPONENT_WIDTH = 280;
 const INITIAL_MAX_COMPONENT_HEIGHT = 180;
-const CONNECTION_POINT_RADIUS = 6;
-const CONNECTION_POINT_ACTIVE_RADIUS = 8;
-const CONNECTION_POINT_RING_RADIUS = 11;
-const CONNECTION_POINT_ACTIVE_RING_RADIUS = 14;
-const CONNECTION_POINT_HIT_RADIUS = 24;
-const CONNECTION_POINT_SNAP_DISTANCE = 36;
+const CONNECTION_POINT_RADIUS = 5;
+const CONNECTION_POINT_ACTIVE_RADIUS = 5.5;
+const CONNECTION_POINT_RING_RADIUS = 6.5;
+const CONNECTION_POINT_ACTIVE_RING_RADIUS = 7.5;
+const CONNECTION_POINT_HIT_RADIUS = 12;
+const CONNECTION_POINT_SNAP_DISTANCE = 10;
+const CONNECTION_POINT_SNAP_PRIORITY_DELTA = 6;
 const WIRE_HIT_STROKE_WIDTH = 18;
 const WIRE_HANDLE_RADIUS = 7;
 const WIRE_BRIDGE_RADIUS = 10;
@@ -790,10 +814,15 @@ function BuilderAssetNode({
   onDragStart,
   onMove,
   onDragEnd,
+  onLabelDragStart,
+  onLabelDragMove,
+  onLabelDragEnd,
   onImageReady,
   onTransformEnd,
   onContextMenuSelect,
   onPointSelect,
+  hasConnectedPoint,
+  onPointDragStart,
 }: {
   asset: BuilderAssetDefinition;
   instance: BuilderInstance;
@@ -803,11 +832,20 @@ function BuilderAssetNode({
   selectedPoint: SelectedPoint | null;
   hoverPointTarget?: HoverPointTarget | null;
   wiringSelectionActive?: boolean;
+  hasConnectedPoint: (instanceId: string, pointKey: string) => boolean;
+  onPointDragStart: (
+    instanceId: string,
+    pointKey: string,
+    pointer: { x: number; y: number }
+  ) => void;
   renderMode?: "full" | "points-only";
   onSelect: (instanceId: string, additive?: boolean) => void;
   onDragStart: (instanceId: string, x: number, y: number) => void;
   onMove: (instanceId: string, x: number, y: number) => void;
   onDragEnd: () => void;
+  onLabelDragStart: (instanceId: string) => void;
+  onLabelDragMove: (instanceId: string, offsetX: number, offsetY: number) => void;
+  onLabelDragEnd: () => void;
   onImageReady: (instanceId: string, renderWidth: number, renderHeight: number) => void;
   onTransformEnd: (
     instanceId: string,
@@ -961,6 +999,7 @@ function BuilderAssetNode({
         const hovered =
           hoverPointTarget?.instanceId === instance.id &&
           hoverPointTarget.pointKey === point.pointKey;
+        const connected = hasConnectedPoint(instance.id, point.pointKey);
         const visibleRadiusMultiplier = renderMode === "points-only" ? 1.25 : 1;
         const hitRadiusMultiplier = renderMode === "points-only" ? 1.35 : 1;
 
@@ -969,6 +1008,24 @@ function BuilderAssetNode({
             key={point.pointKey}
             x={point.x * widthRatio}
             y={point.y * heightRatio}
+            onMouseDown={(event) => {
+              if (!connected || renderMode !== "points-only") {
+                return;
+              }
+
+              const stage = event.target.getStage();
+              const position = stage?.getPointerPosition();
+
+              if (!position) {
+                return;
+              }
+
+              event.cancelBubble = true;
+              onPointDragStart(instance.id, point.pointKey, {
+                x: position.x,
+                y: position.y,
+              });
+            }}
             onClick={(event) => {
               event.cancelBubble = true;
               onPointSelect(instance.id, point.pointKey);
@@ -1016,14 +1073,38 @@ function BuilderAssetNode({
       })}
       {instance.showLabel ? (
         <Text
-          x={0}
-          y={sourceHeight + 8}
+          x={instance.labelOffsetX}
+          y={sourceHeight + 8 + instance.labelOffsetY}
           text={instance.name}
           fontSize={12 * markerScale}
           fill="#0f172a"
           padding={4 * markerScale}
           width={Math.max(sourceWidth, 120)}
-          listening={false}
+          draggable={renderMode === "full" && !wiringSelectionActive}
+          onClick={(event) => {
+            event.cancelBubble = true;
+            onSelect(instance.id, event.evt.shiftKey || event.evt.ctrlKey || event.evt.metaKey);
+          }}
+          onTap={(event) => {
+            event.cancelBubble = true;
+            onSelect(instance.id);
+          }}
+          onDragStart={(event) => {
+            event.cancelBubble = true;
+            onLabelDragStart(instance.id);
+          }}
+          onDragMove={(event) => {
+            event.cancelBubble = true;
+            onLabelDragMove(
+              instance.id,
+              event.target.x(),
+              event.target.y() - (sourceHeight + 8)
+            );
+          }}
+          onDragEnd={(event) => {
+            event.cancelBubble = true;
+            onLabelDragEnd();
+          }}
         />
       ) : null}
     </Group>
@@ -1035,6 +1116,7 @@ function BuilderShapeNode({
   nodeRef,
   isSelected,
   onSelect,
+  onDoubleClick,
   onDragStart,
   onDragMove,
   onDragEnd,
@@ -1044,6 +1126,7 @@ function BuilderShapeNode({
   nodeRef: (node: Konva.Group | null) => void;
   isSelected: boolean;
   onSelect: (shapeId: string, additive?: boolean) => void;
+  onDoubleClick: (shapeId: string) => void;
   onDragStart: (shapeId: string) => void;
   onDragMove: (shapeId: string, x: number, y: number) => void;
   onDragEnd: () => void;
@@ -1072,6 +1155,22 @@ function BuilderShapeNode({
       onTap={(event) => {
         event.cancelBubble = true;
         onSelect(shape.id);
+      }}
+      onDblClick={(event) => {
+        if (shape.type !== "text") {
+          return;
+        }
+
+        event.cancelBubble = true;
+        onDoubleClick(shape.id);
+      }}
+      onDblTap={(event) => {
+        if (shape.type !== "text") {
+          return;
+        }
+
+        event.cancelBubble = true;
+        onDoubleClick(shape.id);
       }}
       onDragStart={() => onDragStart(shape.id)}
       onDragMove={(event) => onDragMove(shape.id, event.target.x(), event.target.y())}
@@ -1125,6 +1224,32 @@ function BuilderShapeNode({
           opacity={shape.opacity}
         />
       ) : null}
+      {shape.type === "text" ? (
+        <>
+          <Rect
+            name="builder-export-content"
+            width={dimensions.width}
+            height={dimensions.height}
+            fill="rgba(0,0,0,0)"
+            strokeEnabled={false}
+          />
+          <Text
+            name="builder-export-content"
+            text={shape.text}
+            width={dimensions.width}
+            height={dimensions.height}
+            fontSize={shape.fontSize}
+            fontFamily={shape.fontFamily}
+            fontStyle={shape.fontStyle ?? "normal"}
+            align={shape.textAlign ?? "left"}
+            fill={shape.fill}
+            stroke={shape.stroke === "transparent" ? undefined : shape.stroke}
+            strokeWidth={shape.strokeWidth}
+            opacity={shape.opacity}
+            verticalAlign="middle"
+          />
+        </>
+      ) : null}
       {isSelected ? (
         <Rect
           name="builder-export-hidden"
@@ -1149,7 +1274,144 @@ function createBuilderShapeFromDraft(draft: NonNullable<DraftBuilderShape>) {
       return createEllipseObject(draft.start, draft.current);
     case "line":
       return createLineObject(draft.start, draft.current);
+    case "text": {
+      const x = Math.min(draft.start.x, draft.current.x);
+      const y = Math.min(draft.start.y, draft.current.y);
+      const width = Math.max(180, Math.abs(draft.current.x - draft.start.x));
+      const height = Math.max(56, Math.abs(draft.current.y - draft.start.y));
+
+      return createTextObject({ x, y, width, height });
+    }
   }
+}
+
+function toggleTextFontStyle(
+  shape: TextObject,
+  style: "bold" | "italic"
+): TextObject {
+  const currentStyles = new Set(shape.fontStyle.split(" ").filter(Boolean));
+
+  if (style === "bold") {
+    if (currentStyles.has("bold")) {
+      currentStyles.delete("bold");
+    } else {
+      currentStyles.add("bold");
+    }
+  }
+
+  if (style === "italic") {
+    if (currentStyles.has("italic")) {
+      currentStyles.delete("italic");
+    } else {
+      currentStyles.add("italic");
+    }
+  }
+
+  const nextFontStyle = Array.from(currentStyles).join(" ").trim();
+
+  return withAutoSizedTextDimensions({
+    ...shape,
+    fontStyle:
+      nextFontStyle === "" ? "normal" : (nextFontStyle as TextObject["fontStyle"]),
+  });
+}
+
+function normalizeBuilderPublishText(value: string | null | undefined) {
+  return (value ?? "").trim().toLowerCase();
+}
+
+function getBuilderComponentCategory(componentType: string | null | undefined) {
+  const normalized = normalizeBuilderPublishText(componentType);
+
+  if (normalized === "pickup" || normalized === "pickup type") {
+    return "pickup";
+  }
+
+  if (
+    normalized === "potentiometer" ||
+    normalized === "pot" ||
+    normalized === "pot type"
+  ) {
+    return "potentiometer";
+  }
+
+  if (normalized === "switch" || normalized === "switch type") {
+    return "switch";
+  }
+
+  if (normalized === "capacitor") {
+    return "capacitor";
+  }
+
+  if (normalized === "resistor") {
+    return "resistor";
+  }
+
+  if (
+    normalized === "output jack" ||
+    normalized === "output" ||
+    normalized === "jack"
+  ) {
+    return "output";
+  }
+
+  if (
+    normalized === "accessory / mod" ||
+    normalized === "accessory" ||
+    normalized === "mod"
+  ) {
+    return "mod";
+  }
+
+  return normalized;
+}
+
+function inferBuilderPickupKind(name: string) {
+  const normalized = normalizeBuilderPublishText(name);
+
+  if (normalized.includes("humbucker")) {
+    return "humbucker";
+  }
+
+  if (normalized.includes("single")) {
+    return "single";
+  }
+
+  return "single";
+}
+
+function inferBuilderPotRole(name: string) {
+  const normalized = normalizeBuilderPublishText(name);
+
+  if (normalized.includes("volume")) {
+    return "volume";
+  }
+
+  if (normalized.includes("tone")) {
+    return "tone";
+  }
+
+  if (normalized.includes("blend")) {
+    return "blend";
+  }
+
+  return "other";
+}
+
+function getBuilderPickupPositionLabel(count: number, index: number) {
+  if (count === 1) {
+    return "Bridge";
+  }
+
+  if (count === 2) {
+    return index === 0 ? "Neck" : "Bridge";
+  }
+
+  if (count === 3) {
+    return index === 0 ? "Neck" : index === 1 ? "Middle" : "Bridge";
+  }
+
+  return `Pickup ${index + 1}`;
 }
 
 function moveItemBefore<T extends { id: string }>(items: T[], draggedId: string, targetId: string) {
@@ -1324,6 +1586,7 @@ function BuilderTopbar({
               { tool: "rectangle" as const, label: "Rectangle", icon: SquareIcon },
               { tool: "ellipse" as const, label: "Ellipse", icon: OvalIcon },
               { tool: "line" as const, label: "Line", icon: Edit01Icon },
+              { tool: "text" as const, label: "Text", icon: TextIcon },
             ].map((item) => (
               <Button
                 key={item.tool}
@@ -1404,6 +1667,8 @@ export function CustomBuilderContent({
   const [selectedShapeIds, setSelectedShapeIds] = React.useState<string[]>([]);
   const [selectedPoint, setSelectedPoint] = React.useState<SelectedPoint | null>(null);
   const [hoverPointTarget, setHoverPointTarget] = React.useState<HoverPointTarget | null>(null);
+  const [dragConnectionPoint, setDragConnectionPoint] =
+    React.useState<DragConnectionPointState | null>(null);
   const [selectedWireTypeId, setSelectedWireTypeId] = React.useState<string>(
     wireTypes[0]?.id ?? ""
   );
@@ -1438,6 +1703,8 @@ export function CustomBuilderContent({
   const [savedSetupDescription, setSavedSetupDescription] = React.useState("");
   const [saveDialogOpen, setSaveDialogOpen] = React.useState(false);
   const [savedSetupBrowserOpen, setSavedSetupBrowserOpen] = React.useState(false);
+  const [inlineTextEditor, setInlineTextEditor] =
+    React.useState<InlineBuilderTextEditorState>(null);
   const [setupNameInput, setSetupNameInput] = React.useState("");
   const [setupDescriptionInput, setSetupDescriptionInput] = React.useState("");
   const [publishDialogOpen, setPublishDialogOpen] = React.useState(false);
@@ -1475,6 +1742,10 @@ export function CustomBuilderContent({
     startOffsetX: number;
     startOffsetY: number;
   } | null>(null);
+  const suppressPointSelectionRef = React.useRef(false);
+  const inlineTextEditorRef = React.useRef<HTMLTextAreaElement | null>(null);
+  const hoverPointTargetRef = React.useRef<HoverPointTarget | null>(null);
+  const dragConnectionPointRef = React.useRef<DragConnectionPointState | null>(null);
   const transformSelectionRef = React.useRef<
     Map<
       string,
@@ -1507,6 +1778,8 @@ export function CustomBuilderContent({
   latestInstancesRef.current = instances;
   latestConnectionsRef.current = connections;
   latestShapesRef.current = shapes;
+  hoverPointTargetRef.current = hoverPointTarget;
+  dragConnectionPointRef.current = dragConnectionPoint;
 
   React.useEffect(() => {
     const element = stageWrapperRef.current;
@@ -1530,6 +1803,15 @@ export function CustomBuilderContent({
 
     return () => observer.disconnect();
   }, []);
+
+  React.useEffect(() => {
+    if (!inlineTextEditorRef.current) {
+      return;
+    }
+
+    inlineTextEditorRef.current.focus();
+    inlineTextEditorRef.current.select();
+  }, [inlineTextEditor]);
 
   const assetComponentTypes = React.useMemo(
     () =>
@@ -1567,11 +1849,124 @@ export function CustomBuilderContent({
   const selectedShape = shapes.find((shape) => shape.id === selectedShapeId) ?? null;
   const selectedConnection =
     connections.find((connection) => connection.id === selectedConnectionId) ?? null;
+  const publishCanvasInventory = React.useMemo(() => {
+    const pickups = instances
+      .filter((instance) => getBuilderComponentCategory(instance.componentType) === "pickup")
+      .sort((left, right) => left.x - right.x)
+      .map((instance, index, collection) => ({
+        role: getBuilderPickupPositionLabel(collection.length, index),
+        name: instance.name,
+        kind: inferBuilderPickupKind(instance.name),
+      }));
+    const potentiometers = instances
+      .filter(
+        (instance) => getBuilderComponentCategory(instance.componentType) === "potentiometer"
+      )
+      .map((instance) => ({
+        role: inferBuilderPotRole(instance.name),
+        name: instance.name,
+      }));
+    const switches = instances
+      .filter((instance) => getBuilderComponentCategory(instance.componentType) === "switch")
+      .map((instance) => instance.name);
+    const capacitors = instances
+      .filter((instance) => getBuilderComponentCategory(instance.componentType) === "capacitor")
+      .map((instance) => instance.name);
+    const resistors = instances
+      .filter((instance) => getBuilderComponentCategory(instance.componentType) === "resistor")
+      .map((instance) => instance.name);
+    const outputs = instances
+      .filter((instance) => getBuilderComponentCategory(instance.componentType) === "output")
+      .map((instance) => instance.name);
+    const mods = instances
+      .filter((instance) => getBuilderComponentCategory(instance.componentType) === "mod")
+      .map((instance) => instance.name);
+    const volumeCount = potentiometers.filter((item) => item.role === "volume").length;
+    const toneCount = potentiometers.filter((item) => item.role === "tone").length;
+
+    return {
+      pickups,
+      potentiometers,
+      switches,
+      capacitors,
+      resistors,
+      outputs,
+      mods,
+      volumeCount,
+      toneCount,
+    };
+  }, [instances]);
+  const derivedPublishValues = React.useMemo(() => {
+    const pickupKindsCode = publishCanvasInventory.pickups
+      .map((item) => (item.kind === "humbucker" ? "h" : "s"))
+      .join("");
+    const pickupConfigurationId =
+      pickupConfigurationOptions.find((option) => {
+        const normalizedName = normalizeBuilderPublishText(option.name);
+
+        if (publishCanvasInventory.pickups.length === 3 && pickupKindsCode === "sss") {
+          return normalizedName.includes("three single coil");
+        }
+
+        if (publishCanvasInventory.pickups.length === 2 && pickupKindsCode === "hh") {
+          return normalizedName.includes("dual humbucker");
+        }
+
+        if (publishCanvasInventory.pickups.length === 2 && pickupKindsCode === "ss") {
+          return normalizedName.includes("dual single coil");
+        }
+
+        if (publishCanvasInventory.pickups.length === 3 && pickupKindsCode === "hsh") {
+          return normalizedName.includes("humbucker single humbucker");
+        }
+
+        return false;
+      })?.id ?? pickupConfigurationOptions[0]?.id ?? "";
+    const switchTypeId =
+      switchTypeOptions.find((option) => {
+        const normalizedName = normalizeBuilderPublishText(option.name);
+
+        return publishCanvasInventory.switches.some((item) =>
+          normalizeBuilderPublishText(item).includes(normalizedName)
+        );
+      })?.id ?? switchTypeOptions[0]?.id ?? "";
+
+    return {
+      pickupConfigurationId,
+      switchTypeId,
+      volumeCount: publishCanvasInventory.volumeCount,
+      toneCount: publishCanvasInventory.toneCount,
+    };
+  }, [pickupConfigurationOptions, publishCanvasInventory, switchTypeOptions]);
   const connectionRenderData = React.useMemo(() => {
+    const dragPreviewPoint =
+      dragConnectionPoint && pointerPosition
+        ? hoverPointTarget
+          ? getPoint(hoverPointTarget.instanceId, hoverPointTarget.pointKey)
+          : pointerPosition
+        : null;
     const entries = connections
       .map((connection) => {
-        const from = getPoint(connection.fromInstanceId, connection.fromPointKey);
-        const to = getPoint(connection.toInstanceId, connection.toPointKey);
+        const draggingSourcePoint =
+          dragConnectionPoint &&
+          connection.id === dragConnectionPoint.connectionId &&
+          dragConnectionPoint.endpoint === "from" &&
+          connection.fromInstanceId === dragConnectionPoint.source.instanceId &&
+          connection.fromPointKey === dragConnectionPoint.source.pointKey;
+        const draggingTargetPoint =
+          dragConnectionPoint &&
+          connection.id === dragConnectionPoint.connectionId &&
+          dragConnectionPoint.endpoint === "to" &&
+          connection.toInstanceId === dragConnectionPoint.source.instanceId &&
+          connection.toPointKey === dragConnectionPoint.source.pointKey;
+        const from =
+          draggingSourcePoint && dragPreviewPoint
+            ? dragPreviewPoint
+            : getPoint(connection.fromInstanceId, connection.fromPointKey);
+        const to =
+          draggingTargetPoint && dragPreviewPoint
+            ? dragPreviewPoint
+            : getPoint(connection.toInstanceId, connection.toPointKey);
 
         if (!from || !to) {
           return null;
@@ -1611,7 +2006,14 @@ export function CustomBuilderContent({
       ...entry,
       bridges: bridgeMap.get(entry.connection.id) ?? [],
     }));
-  }, [connections, instances, wireTypes]);
+  }, [
+    connections,
+    dragConnectionPoint,
+    hoverPointTarget,
+    instances,
+    pointerPosition,
+    wireTypes,
+  ]);
   const visibleLayers = React.useMemo<BuilderLayerEntry[]>(
     () => [
       ...[...connections].reverse().map((connection) => ({
@@ -1855,6 +2257,13 @@ export function CustomBuilderContent({
   React.useEffect(() => {
     function handleWindowMouseUp() {
       panDragRef.current = null;
+
+      if (dragConnectionPointRef.current) {
+        dragConnectionPointRef.current = null;
+        setDragConnectionPoint(null);
+        hoverPointTargetRef.current = null;
+        setHoverPointTarget(null);
+      }
     }
 
     window.addEventListener("mouseup", handleWindowMouseUp);
@@ -2036,12 +2445,27 @@ export function CustomBuilderContent({
     return getPointForInstances(instances, instanceId, pointKey);
   }
 
-  function getNearestConnectionPointTarget(pointer: { x: number; y: number }) {
-    if (!selectedPoint) {
+  function hasConnectedPoint(instanceId: string, pointKey: string) {
+    return connections.some(
+      (connection) =>
+        (connection.fromInstanceId === instanceId &&
+          connection.fromPointKey === pointKey) ||
+        (connection.toInstanceId === instanceId && connection.toPointKey === pointKey)
+    );
+  }
+
+  function getNearestConnectionPointTarget(
+    pointer: { x: number; y: number },
+    sourcePoint?: HoverPointTarget | null
+  ) {
+    const activeSource = sourcePoint ?? selectedPoint;
+
+    if (!activeSource) {
       return null;
     }
 
     let nearestTarget: (HoverPointTarget & { distance: number }) | null = null;
+    let currentHoverDistance: number | null = null;
 
     for (const instance of instances) {
       const asset = getAsset(instance.assetId);
@@ -2052,8 +2476,8 @@ export function CustomBuilderContent({
 
       for (const point of asset.connectionPoints) {
         if (
-          instance.id === selectedPoint.instanceId &&
-          point.pointKey === selectedPoint.pointKey
+          instance.id === activeSource.instanceId &&
+          point.pointKey === activeSource.pointKey
         ) {
           continue;
         }
@@ -2070,6 +2494,13 @@ export function CustomBuilderContent({
         );
 
         if (
+          hoverPointTarget?.instanceId === instance.id &&
+          hoverPointTarget.pointKey === point.pointKey
+        ) {
+          currentHoverDistance = distance;
+        }
+
+        if (
           distance <= CONNECTION_POINT_SNAP_DISTANCE &&
           (!nearestTarget || distance < nearestTarget.distance)
         ) {
@@ -2084,6 +2515,18 @@ export function CustomBuilderContent({
 
     if (!nearestTarget) {
       return null;
+    }
+
+    if (
+      hoverPointTarget &&
+      currentHoverDistance !== null &&
+      currentHoverDistance <= CONNECTION_POINT_SNAP_DISTANCE &&
+      nearestTarget.instanceId !== hoverPointTarget.instanceId &&
+      nearestTarget.pointKey !== hoverPointTarget.pointKey &&
+      nearestTarget.distance >=
+        Math.max(0, currentHoverDistance - CONNECTION_POINT_SNAP_PRIORITY_DELTA)
+    ) {
+      return hoverPointTarget;
     }
 
     return {
@@ -2104,6 +2547,7 @@ export function CustomBuilderContent({
     setSelectedShapeIds([]);
     setSelectedPoint(null);
     setHoverPointTarget(null);
+    setDragConnectionPoint(null);
     setSelectionBox(null);
     setDraftShape(null);
     dragSelectionRef.current = null;
@@ -2229,6 +2673,110 @@ export function CustomBuilderContent({
       x: (pointer.x - canvasOffset.x) / canvasScale,
       y: (pointer.y - canvasOffset.y) / canvasScale,
     };
+  }
+
+  function handleConnectionPointDragStart(
+    instanceId: string,
+    pointKey: string,
+    pointer: { x: number; y: number }
+  ) {
+    if (selectedPoint) {
+      return;
+    }
+
+    const attachedConnections = connections.filter((connection) => {
+      const isFromPoint =
+        connection.fromInstanceId === instanceId && connection.fromPointKey === pointKey;
+      const isToPoint =
+        connection.toInstanceId === instanceId && connection.toPointKey === pointKey;
+
+      return isFromPoint || isToPoint;
+    });
+
+    if (attachedConnections.length === 0) {
+      return;
+    }
+
+    const preferredConnection =
+      attachedConnections.find((connection) => connection.id === selectedConnectionId) ??
+      attachedConnections.at(-1);
+
+    if (!preferredConnection) {
+      return;
+    }
+
+    const endpoint: DragConnectionPointState["endpoint"] =
+      preferredConnection.fromInstanceId === instanceId &&
+      preferredConnection.fromPointKey === pointKey
+        ? "from"
+        : "to";
+
+    const nextDragState = {
+      source: { instanceId, pointKey },
+      connectionId: preferredConnection.id,
+      endpoint,
+      startWorld: {
+        x: (pointer.x - canvasOffset.x) / canvasScale,
+        y: (pointer.y - canvasOffset.y) / canvasScale,
+      },
+      moved: false,
+    };
+
+    dragConnectionPointRef.current = nextDragState;
+    setDragConnectionPoint(nextDragState);
+    hoverPointTargetRef.current = null;
+    setHoverPointTarget(null);
+  }
+
+  function moveConnectionsToPoint(
+    source: HoverPointTarget,
+    target: HoverPointTarget,
+    connectionId: string,
+    endpoint: "from" | "to"
+  ) {
+    if (
+      source.instanceId === target.instanceId &&
+      source.pointKey === target.pointKey
+    ) {
+      return;
+    }
+
+    setConnections((current) =>
+      current.map((connection) => {
+        if (connection.id !== connectionId) {
+          return connection;
+        }
+
+        let nextConnection = connection;
+
+        if (
+          endpoint === "from" &&
+          connection.fromInstanceId === source.instanceId &&
+          connection.fromPointKey === source.pointKey
+        ) {
+          nextConnection = {
+            ...nextConnection,
+            fromInstanceId: target.instanceId,
+            fromPointKey: target.pointKey,
+          };
+        }
+
+        if (
+          endpoint === "to" &&
+          connection.toInstanceId === source.instanceId &&
+          connection.toPointKey === source.pointKey
+        ) {
+          nextConnection = {
+            ...nextConnection,
+            toInstanceId: target.instanceId,
+            toPointKey: target.pointKey,
+          };
+        }
+
+        return normalizeConnectionForInstances(nextConnection, instances);
+      })
+    );
+    setCanvasMessage("Endpoint wiring dipindahkan ke connection point baru.");
   }
 
   function getSelectionRect(box: SelectionBox) {
@@ -2399,6 +2947,8 @@ export function CustomBuilderContent({
         scale: initialScale,
         rotation: 0,
         showLabel: false,
+        labelOffsetX: 0,
+        labelOffsetY: 0,
       },
     ]);
     setSelectedInstanceId(id);
@@ -2442,6 +2992,11 @@ export function CustomBuilderContent({
   }, []);
 
   function handlePointSelect(instanceId: string, pointKey: string) {
+    if (suppressPointSelectionRef.current) {
+      suppressPointSelectionRef.current = false;
+      return;
+    }
+
     if (!selectedWireTypeId) {
       setCanvasMessage("Pilih wire type dulu sebelum membuat koneksi.");
       return;
@@ -2655,6 +3210,7 @@ export function CustomBuilderContent({
     setSelectedShapeIds([]);
     setSelectedPoint(null);
     setHoverPointTarget(null);
+    setDragConnectionPoint(null);
     setDraftShape(null);
     setCanvasMessage("Canvas dibersihkan.");
   }
@@ -2815,10 +3371,10 @@ export function CustomBuilderContent({
       name: baseName,
       slug: slugifyBuilderSetupName(baseName),
       description: savedSetupDescription,
-      pickupConfigurationId: pickupConfigurationOptions[0]?.id ?? "",
-      switchTypeId: switchTypeOptions[0]?.id ?? "",
-      volumeCount: 1,
-      toneCount: 1,
+      pickupConfigurationId: derivedPublishValues.pickupConfigurationId,
+      switchTypeId: derivedPublishValues.switchTypeId,
+      volumeCount: derivedPublishValues.volumeCount,
+      toneCount: derivedPublishValues.toneCount,
       difficultyLevel: "",
       sourceType: "Custom Builder",
       sourceUrl: "",
@@ -2829,9 +3385,8 @@ export function CustomBuilderContent({
   }, [
     activeSavedSetupName,
     canPersistSavedSetups,
-    pickupConfigurationOptions,
+    derivedPublishValues,
     savedSetupDescription,
-    switchTypeOptions,
   ]);
 
   const openSavedSetupBrowser = React.useCallback(() => {
@@ -2959,7 +3514,12 @@ export function CustomBuilderContent({
 
   function updateInstance(
     instanceId: string,
-    patch: Partial<Pick<BuilderInstance, "x" | "y" | "rotation" | "scale" | "showLabel">>
+    patch: Partial<
+      Pick<
+        BuilderInstance,
+        "x" | "y" | "rotation" | "scale" | "showLabel" | "labelOffsetX" | "labelOffsetY"
+      >
+    >
   ) {
     setInstances((current) => {
       const nextInstances = current.map((instance) =>
@@ -3034,6 +3594,18 @@ export function CustomBuilderContent({
             scaleX: 1,
             scaleY: 1,
           };
+        }
+
+        if (shape.type === "text") {
+          return withAutoSizedTextDimensions({
+            ...shape,
+            x: nextX,
+            y: nextY,
+            rotation: nextRotation,
+            fontSize: Math.max(8, shape.fontSize * Math.max(nextScaleX, nextScaleY)),
+            scaleX: 1,
+            scaleY: 1,
+          });
         }
 
         return {
@@ -3132,6 +3704,73 @@ export function CustomBuilderContent({
     }
 
     updateInstance(instanceId, { showLabel: !instance.showLabel });
+  }
+
+  function beginInlineTextEdit(shapeId: string) {
+    const target = shapes.find((shape) => shape.id === shapeId);
+    const node = shapeNodeRefs.current.get(shapeId);
+    const stage = stageRef.current;
+
+    if (!target || target.type !== "text" || !node || !stage) {
+      return;
+    }
+
+    const bounds = node.getClientRect({
+      skipShadow: false,
+      skipStroke: false,
+    });
+    const stageScaleX = stage.scaleX();
+    const stageScaleY = stage.scaleY();
+    const stageOffsetX = stage.x();
+    const stageOffsetY = stage.y();
+
+    setInlineTextEditor({
+      shapeId,
+      value: target.text,
+      style: {
+        left: bounds.x * stageScaleX + stageOffsetX,
+        top: bounds.y * stageScaleY + stageOffsetY,
+        width: Math.max(bounds.width * stageScaleX, 120),
+        height: Math.max(bounds.height * stageScaleY, target.fontSize * stageScaleY + 20),
+        fontSize: `${target.fontSize * stageScaleY}px`,
+        fontFamily: target.fontFamily,
+        fontStyle: target.fontStyle,
+        color: target.fill,
+        textAlign: target.textAlign,
+        lineHeight: "1.2",
+        transform: `rotate(${target.rotation}deg)`,
+        transformOrigin: "top left",
+      },
+    });
+    setSelectedShapeId(shapeId);
+    setSelectedShapeIds([shapeId]);
+    setSelectedInstanceId(null);
+    setSelectedInstanceIds([]);
+    setSelectedConnectionId(null);
+  }
+
+  function commitInlineTextEdit() {
+    if (!inlineTextEditor) {
+      return;
+    }
+
+    const target = shapes.find((shape) => shape.id === inlineTextEditor.shapeId);
+
+    if (target?.type === "text") {
+      updateShape(
+        target.id,
+        withAutoSizedTextDimensions({
+          ...target,
+          text: inlineTextEditor.value,
+        })
+      );
+    }
+
+    setInlineTextEditor(null);
+  }
+
+  function cancelInlineTextEdit() {
+    setInlineTextEditor(null);
   }
 
   function alignSelectedInstance(
@@ -3711,11 +4350,39 @@ export function CustomBuilderContent({
                           : null;
                         setPointerPosition(nextPointerPosition);
 
-                        if (selectedPoint && nextPointerPosition) {
-                          setHoverPointTarget(
-                            getNearestConnectionPointTarget(nextPointerPosition)
+                        if (dragConnectionPoint && nextPointerPosition) {
+                          const nextHover = getNearestConnectionPointTarget(
+                            nextPointerPosition,
+                            dragConnectionPoint.source
                           );
-                        } else if (selectedPoint) {
+                          hoverPointTargetRef.current = nextHover;
+                          setHoverPointTarget(nextHover);
+                          setDragConnectionPoint((current) => {
+                            if (!current || current.moved || !nextPointerPosition) {
+                              return current;
+                            }
+
+                            const moved =
+                              Math.hypot(
+                              nextPointerPosition.x - current.startWorld.x,
+                              nextPointerPosition.y - current.startWorld.y
+                            ) > 6;
+
+                            if (!moved) {
+                              return current;
+                            }
+
+                            const nextDragState = { ...current, moved: true };
+                            dragConnectionPointRef.current = nextDragState;
+                            return nextDragState;
+                          });
+                        } else if (selectedPoint && nextPointerPosition) {
+                          const nextHover =
+                            getNearestConnectionPointTarget(nextPointerPosition);
+                          hoverPointTargetRef.current = nextHover;
+                          setHoverPointTarget(nextHover);
+                        } else if (selectedPoint || dragConnectionPoint) {
+                          hoverPointTargetRef.current = null;
                           setHoverPointTarget(null);
                         }
 
@@ -3810,6 +4477,30 @@ export function CustomBuilderContent({
                         if (panDragRef.current) {
                           panDragRef.current = null;
                           return;
+                        }
+
+                        const activeDragConnectionPoint = dragConnectionPointRef.current;
+                        const activeHoverPointTarget = hoverPointTargetRef.current;
+
+                        if (activeDragConnectionPoint) {
+                          if (activeDragConnectionPoint.moved && activeHoverPointTarget) {
+                            moveConnectionsToPoint(
+                              activeDragConnectionPoint.source,
+                              activeHoverPointTarget,
+                              activeDragConnectionPoint.connectionId,
+                              activeDragConnectionPoint.endpoint
+                            );
+                            suppressPointSelectionRef.current = true;
+                          }
+
+                          dragConnectionPointRef.current = null;
+                          setDragConnectionPoint(null);
+                          hoverPointTargetRef.current = null;
+                          setHoverPointTarget(null);
+
+                          if (activeDragConnectionPoint.moved) {
+                            return;
+                          }
                         }
 
                         if (draftShape) {
@@ -3969,6 +4660,7 @@ export function CustomBuilderContent({
                             nodeRef={() => undefined}
                             isSelected={false}
                             onSelect={() => undefined}
+                            onDoubleClick={() => undefined}
                             onDragStart={() => undefined}
                             onDragMove={() => undefined}
                             onDragEnd={() => undefined}
@@ -3988,6 +4680,7 @@ export function CustomBuilderContent({
                             }}
                             isSelected={selectedShapeIds.includes(shape.id)}
                             onSelect={selectShape}
+                            onDoubleClick={beginInlineTextEdit}
                             onDragStart={(shapeId) => {
                               beginHistoryTransaction();
 
@@ -4037,6 +4730,8 @@ export function CustomBuilderContent({
                               selectedPoint={selectedPoint}
                               hoverPointTarget={hoverPointTarget}
                               wiringSelectionActive={Boolean(selectedPoint)}
+                              hasConnectedPoint={hasConnectedPoint}
+                              onPointDragStart={handleConnectionPointDragStart}
                               onSelect={selectInstance}
                               onDragStart={(instanceId, x, y) => {
                                 beginHistoryTransaction();
@@ -4084,6 +4779,24 @@ export function CustomBuilderContent({
                               }}
                               onDragEnd={() => {
                                 dragSelectionRef.current = null;
+                                commitHistoryTransaction();
+                              }}
+                              onLabelDragStart={(instanceId) => {
+                                beginHistoryTransaction();
+
+                                if (!selectedInstanceIds.includes(instanceId)) {
+                                  setSelectedInstanceId(instanceId);
+                                  setSelectedInstanceIds([instanceId]);
+                                  setSelectedConnectionId(null);
+                                }
+                              }}
+                              onLabelDragMove={(instanceId, labelOffsetX, labelOffsetY) => {
+                                updateInstance(instanceId, {
+                                  labelOffsetX: snapToGrid(labelOffsetX),
+                                  labelOffsetY: snapToGrid(labelOffsetY),
+                                });
+                              }}
+                              onLabelDragEnd={() => {
                                 commitHistoryTransaction();
                               }}
                               onImageReady={handleImageReady}
@@ -4173,7 +4886,10 @@ export function CustomBuilderContent({
                                         return;
                                       }
 
-                                      handleConnectionSegmentInsert(connection.id, index, position);
+                                      handleConnectionSegmentInsert(connection.id, index, {
+                                        x: (position.x - canvasOffset.x) / canvasScale,
+                                        y: (position.y - canvasOffset.y) / canvasScale,
+                                      });
                                       setSelectedConnectionId(connection.id);
                                       setSelectedInstanceId(null);
                                       setSelectedInstanceIds([]);
@@ -4329,11 +5045,16 @@ export function CustomBuilderContent({
                               selectedPoint={selectedPoint}
                               hoverPointTarget={hoverPointTarget}
                               wiringSelectionActive
+                              hasConnectedPoint={hasConnectedPoint}
+                              onPointDragStart={handleConnectionPointDragStart}
                               renderMode="points-only"
                               onSelect={selectInstance}
                               onDragStart={() => undefined}
                               onMove={() => undefined}
                               onDragEnd={() => undefined}
+                              onLabelDragStart={() => undefined}
+                              onLabelDragMove={() => undefined}
+                              onLabelDragEnd={() => undefined}
                               onImageReady={handleImageReady}
                               onTransformEnd={() => undefined}
                               onContextMenuSelect={() => undefined}
@@ -4435,6 +5156,37 @@ export function CustomBuilderContent({
                         />
                       </Layer>
                     </Stage>
+                    {inlineTextEditor ? (
+                      <textarea
+                        ref={inlineTextEditorRef}
+                        value={inlineTextEditor.value}
+                        onChange={(event) =>
+                          setInlineTextEditor((current) =>
+                            current
+                              ? {
+                                  ...current,
+                                  value: event.target.value,
+                                }
+                              : current
+                          )
+                        }
+                        onBlur={commitInlineTextEdit}
+                        onKeyDown={(event) => {
+                          if (event.key === "Escape") {
+                            event.preventDefault();
+                            cancelInlineTextEdit();
+                            return;
+                          }
+
+                          if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+                            event.preventDefault();
+                            commitInlineTextEdit();
+                          }
+                        }}
+                        className="absolute z-30 resize-none overflow-hidden border border-primary/30 bg-background/95 px-2 py-1 outline-none ring-2 ring-primary/20"
+                        style={inlineTextEditor.style}
+                      />
+                    ) : null}
                     {instances.length === 0 && shapes.length === 0 ? (
                       <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
                         <div className="max-w-sm rounded-3xl border border-border/70 bg-background/92 px-6 py-5 text-center shadow-sm">
@@ -4574,6 +5326,34 @@ export function CustomBuilderContent({
                       <HugeiconsIcon icon={selectedInstance.showLabel ? ViewOffIcon : ViewIcon} strokeWidth={2} data-icon="inline-start" />
                       {selectedInstance.showLabel ? "Hide Label" : "Show Label"}
                     </Button>
+                    {selectedInstance.showLabel ? (
+                      <div className="grid grid-cols-2 gap-3">
+                        <label className="grid gap-1.5">
+                          <span className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Label X</span>
+                          <Input
+                            type="number"
+                            value={Math.round(selectedInstance.labelOffsetX)}
+                            onChange={(event) =>
+                              updateInstance(selectedInstance.id, {
+                                labelOffsetX: snapToGrid(Number(event.target.value || 0)),
+                              })
+                            }
+                          />
+                        </label>
+                        <label className="grid gap-1.5">
+                          <span className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Label Y</span>
+                          <Input
+                            type="number"
+                            value={Math.round(selectedInstance.labelOffsetY)}
+                            onChange={(event) =>
+                              updateInstance(selectedInstance.id, {
+                                labelOffsetY: snapToGrid(Number(event.target.value || 0)),
+                              })
+                            }
+                          />
+                        </label>
+                      </div>
+                    ) : null}
                   </>
                 ) : selectedShape ? (
                   <>
@@ -4623,12 +5403,18 @@ export function CustomBuilderContent({
                         <span className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Stroke</span>
                         <Input
                           type="number"
-                          min="1"
+                          min={selectedShape.type === "text" ? "0" : "1"}
                           step="1"
                           value={selectedShape.strokeWidth}
                           onChange={(event) =>
                             updateShape(selectedShape.id, {
-                              strokeWidth: Math.max(1, Number(event.target.value || 1)),
+                              strokeWidth: Math.max(
+                                selectedShape.type === "text" ? 0 : 1,
+                                Number(
+                                  event.target.value ||
+                                    (selectedShape.type === "text" ? 0 : 1)
+                                )
+                              ),
                             })
                           }
                         />
@@ -4637,7 +5423,11 @@ export function CustomBuilderContent({
                         <span className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Outline Color</span>
                         <input
                           type="color"
-                          value={selectedShape.stroke}
+                          value={
+                            isTransparentColor(selectedShape.stroke)
+                              ? "#111827"
+                              : selectedShape.stroke
+                          }
                           onChange={(event) =>
                             updateShape(selectedShape.id, {
                               stroke: event.target.value,
@@ -4646,7 +5436,134 @@ export function CustomBuilderContent({
                           className="h-9 w-full rounded-md border border-input bg-input/20 px-1.5 py-1 outline-none"
                         />
                       </label>
-                      {selectedShape.type !== "line" ? (
+                      {selectedShape.type === "text" ? (
+                        <>
+                          <label className="grid gap-1.5 col-span-2">
+                            <span className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Text</span>
+                            <textarea
+                              value={selectedShape.text}
+                              onChange={(event) =>
+                                updateShape(
+                                  selectedShape.id,
+                                  withAutoSizedTextDimensions({
+                                    ...selectedShape,
+                                    text: event.target.value,
+                                  })
+                                )
+                              }
+                              rows={3}
+                              className="min-h-20 rounded-md border border-input bg-input/20 px-3 py-2 text-sm outline-none"
+                            />
+                          </label>
+                          <label className="grid gap-1.5">
+                            <span className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Font Size</span>
+                            <Input
+                              type="number"
+                              min="8"
+                              value={selectedShape.fontSize}
+                              onChange={(event) =>
+                                updateShape(
+                                  selectedShape.id,
+                                  withAutoSizedTextDimensions({
+                                    ...selectedShape,
+                                    fontSize: Math.max(8, Number(event.target.value || 8)),
+                                  })
+                                )
+                              }
+                            />
+                          </label>
+                          <div className="grid gap-1.5">
+                            <span className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Text Style</span>
+                            <div className="flex gap-2">
+                              <Button
+                                type="button"
+                                variant={
+                                  (selectedShape.fontStyle ?? "normal").includes("bold")
+                                    ? "secondary"
+                                    : "outline"
+                                }
+                                size="sm"
+                                onClick={() =>
+                                  updateShape(
+                                    selectedShape.id,
+                                    toggleTextFontStyle(selectedShape, "bold")
+                                  )
+                                }
+                              >
+                                Bold
+                              </Button>
+                              <Button
+                                type="button"
+                                variant={
+                                  (selectedShape.fontStyle ?? "normal").includes("italic")
+                                    ? "secondary"
+                                    : "outline"
+                                }
+                                size="sm"
+                                onClick={() =>
+                                  updateShape(
+                                    selectedShape.id,
+                                    toggleTextFontStyle(selectedShape, "italic")
+                                  )
+                                }
+                              >
+                                Italic
+                              </Button>
+                            </div>
+                          </div>
+                          <div className="grid gap-1.5 col-span-2">
+                            <span className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Text Align</span>
+                            <div className="flex flex-wrap gap-2">
+                              <Button
+                                type="button"
+                                variant={selectedShape.textAlign === "left" ? "secondary" : "outline"}
+                                size="sm"
+                                onClick={() =>
+                                  updateShape(selectedShape.id, { textAlign: "left" } as Partial<TextObject>)
+                                }
+                              >
+                                <HugeiconsIcon icon={TextAlignLeftIcon} strokeWidth={2} data-icon="inline-start" />
+                                Left
+                              </Button>
+                              <Button
+                                type="button"
+                                variant={selectedShape.textAlign === "center" ? "secondary" : "outline"}
+                                size="sm"
+                                onClick={() =>
+                                  updateShape(selectedShape.id, { textAlign: "center" } as Partial<TextObject>)
+                                }
+                              >
+                                <HugeiconsIcon icon={TextAlignCenterIcon} strokeWidth={2} data-icon="inline-start" />
+                                Center
+                              </Button>
+                              <Button
+                                type="button"
+                                variant={selectedShape.textAlign === "right" ? "secondary" : "outline"}
+                                size="sm"
+                                onClick={() =>
+                                  updateShape(selectedShape.id, { textAlign: "right" } as Partial<TextObject>)
+                                }
+                              >
+                                <HugeiconsIcon icon={TextAlignRightIcon} strokeWidth={2} data-icon="inline-start" />
+                                Right
+                              </Button>
+                            </div>
+                          </div>
+                          <div className="grid gap-1.5 col-span-2">
+                            <span className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Fill Color</span>
+                            <input
+                              type="color"
+                              value={selectedShape.fill}
+                              onChange={(event) =>
+                                updateShape(selectedShape.id, {
+                                  fill: event.target.value,
+                                } as Partial<TextObject>)
+                              }
+                              className="h-9 w-full rounded-md border border-input bg-input/20 px-1.5 py-1 outline-none"
+                            />
+                          </div>
+                        </>
+                      ) : selectedShape.type !== "line" ? (
                         <>
                           <div className="grid gap-1.5">
                             <span className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Fill Color</span>
@@ -4954,72 +5871,87 @@ export function CustomBuilderContent({
                 placeholder="Intermediate"
               />
             </label>
-            <label className="flex flex-col gap-2">
-              <span className="text-xs font-medium">Pickup Configuration</span>
-              <select
-                value={publishForm.pickupConfigurationId}
-                onChange={(event) =>
-                  setPublishForm((current) => ({
-                    ...current,
-                    pickupConfigurationId: event.target.value,
-                  }))
-                }
-                className="h-9 rounded-md border border-input bg-input/20 px-3 text-sm outline-none"
-              >
-                {pickupConfigurationOptions.map((option) => (
-                  <option key={option.id} value={option.id}>
-                    {option.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="flex flex-col gap-2">
-              <span className="text-xs font-medium">Switch Type</span>
-              <select
-                value={publishForm.switchTypeId}
-                onChange={(event) =>
-                  setPublishForm((current) => ({
-                    ...current,
-                    switchTypeId: event.target.value,
-                  }))
-                }
-                className="h-9 rounded-md border border-input bg-input/20 px-3 text-sm outline-none"
-              >
-                {switchTypeOptions.map((option) => (
-                  <option key={option.id} value={option.id}>
-                    {option.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="flex flex-col gap-2">
-              <span className="text-xs font-medium">Volume Count</span>
-              <Input
-                type="number"
-                min="0"
-                value={publishForm.volumeCount}
-                onChange={(event) =>
-                  setPublishForm((current) => ({
-                    ...current,
-                    volumeCount: Number(event.target.value || 0),
-                  }))
-                }
-              />
-            </label>
-            <label className="flex flex-col gap-2">
-              <span className="text-xs font-medium">Tone Count</span>
-              <Input
-                type="number"
-                min="0"
-                value={publishForm.toneCount}
-                onChange={(event) =>
-                  setPublishForm((current) => ({
-                    ...current,
-                    toneCount: Number(event.target.value || 0),
-                  }))
-                }
-              />
-            </label>
+            <div className="grid gap-3 rounded-2xl border border-border/70 bg-muted/20 p-4 sm:col-span-2">
+              <div className="text-sm font-medium text-foreground">Detected From Canvas</div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="grid gap-1">
+                  <div className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
+                    Pickup
+                  </div>
+                  <div className="text-sm text-foreground">
+                    {publishCanvasInventory.pickups.length > 0
+                      ? publishCanvasInventory.pickups
+                          .map((item) => `${item.role}: ${item.name}`)
+                          .join(", ")
+                      : "-"}
+                  </div>
+                </div>
+                <div className="grid gap-1">
+                  <div className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
+                    Potentiometer
+                  </div>
+                  <div className="text-sm text-foreground">
+                    {publishCanvasInventory.potentiometers.length > 0
+                      ? publishCanvasInventory.potentiometers
+                          .map((item) =>
+                            item.role === "other"
+                              ? item.name
+                              : `${item.name} (${item.role})`
+                          )
+                          .join(", ")
+                      : "-"}
+                  </div>
+                </div>
+                <div className="grid gap-1">
+                  <div className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
+                    Switch
+                  </div>
+                  <div className="text-sm text-foreground">
+                    {publishCanvasInventory.switches.join(", ") || "-"}
+                  </div>
+                </div>
+                <div className="grid gap-1">
+                  <div className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
+                    Capacitor
+                  </div>
+                  <div className="text-sm text-foreground">
+                    {publishCanvasInventory.capacitors.join(", ") || "-"}
+                  </div>
+                </div>
+                <div className="grid gap-1">
+                  <div className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
+                    Resistor
+                  </div>
+                  <div className="text-sm text-foreground">
+                    {publishCanvasInventory.resistors.join(", ") || "-"}
+                  </div>
+                </div>
+                <div className="grid gap-1">
+                  <div className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
+                    Output
+                  </div>
+                  <div className="text-sm text-foreground">
+                    {publishCanvasInventory.outputs.join(", ") || "-"}
+                  </div>
+                </div>
+                <div className="grid gap-1">
+                  <div className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
+                    Mods
+                  </div>
+                  <div className="text-sm text-foreground">
+                    {publishCanvasInventory.mods.join(", ") || "-"}
+                  </div>
+                </div>
+                <div className="grid gap-1">
+                  <div className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
+                    Counts
+                  </div>
+                  <div className="text-sm text-foreground">
+                    {publishForm.volumeCount} Volume / {publishForm.toneCount} Tone
+                  </div>
+                </div>
+              </div>
+            </div>
             <label className="flex flex-col gap-2">
               <span className="text-xs font-medium">Source Type</span>
               <Input
@@ -5085,8 +6017,6 @@ export function CustomBuilderContent({
                 isSavingSetup ||
                 !publishForm.name.trim() ||
                 !publishForm.slug.trim() ||
-                !publishForm.pickupConfigurationId ||
-                !publishForm.switchTypeId ||
                 publishForm.volumeCount < 0 ||
                 publishForm.toneCount < 0
               }

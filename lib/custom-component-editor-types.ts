@@ -2,6 +2,7 @@ export type EditorTool =
   | "select"
   | "pan"
   | "rectangle"
+  | "triangle"
   | "ellipse"
   | "line"
   | "text"
@@ -10,6 +11,7 @@ export type EditorTool =
 
 export type CanvasObjectType =
   | "rectangle"
+  | "triangle"
   | "ellipse"
   | "line"
   | "text"
@@ -42,6 +44,13 @@ type CanvasObjectBase = {
 
 export type RectangleObject = CanvasObjectBase & {
   type: "rectangle";
+  width: number;
+  height: number;
+  cornerRadius: number;
+};
+
+export type TriangleObject = CanvasObjectBase & {
+  type: "triangle";
   width: number;
   height: number;
   cornerRadius: number;
@@ -83,6 +92,7 @@ export type ImageObject = CanvasObjectBase & {
 
 export type CanvasObject =
   | RectangleObject
+  | TriangleObject
   | EllipseObject
   | LineObject
   | DrawObject

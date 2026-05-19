@@ -150,12 +150,229 @@ function createComponentRole(name: string, index: number) {
   return `${base || "component"}-${index + 1}`;
 }
 
+function normalizeText(value: string | null | undefined) {
+  return (value ?? "").trim().toLowerCase();
+}
+
+function getComponentCategory(componentType: string | null | undefined) {
+  const normalized = normalizeText(componentType);
+
+  if (normalized === "pickup" || normalized === "pickup type") {
+    return "pickup";
+  }
+
+  if (
+    normalized === "potentiometer" ||
+    normalized === "pot" ||
+    normalized === "pot type"
+  ) {
+    return "potentiometer";
+  }
+
+  if (normalized === "switch" || normalized === "switch type") {
+    return "switch";
+  }
+
+  if (normalized === "capacitor") {
+    return "capacitor";
+  }
+
+  if (normalized === "resistor") {
+    return "resistor";
+  }
+
+  if (
+    normalized === "output jack" ||
+    normalized === "output" ||
+    normalized === "jack"
+  ) {
+    return "output";
+  }
+
+  if (
+    normalized === "accessory / mod" ||
+    normalized === "accessory" ||
+    normalized === "mod"
+  ) {
+    return "mod";
+  }
+
+  return normalized;
+}
+
+function getPickupPositionLabel(count: number, index: number) {
+  if (count === 1) {
+    return "Bridge";
+  }
+
+  if (count === 2) {
+    return index === 0 ? "Neck" : "Bridge";
+  }
+
+  if (count === 3) {
+    return index === 0 ? "Neck" : index === 1 ? "Middle" : "Bridge";
+  }
+
+  return `Pickup ${index + 1}`;
+}
+
+function inferPickupKind(name: string) {
+  const normalized = normalizeText(name);
+
+  if (normalized.includes("humbucker")) {
+    return "H";
+  }
+
+  if (normalized.includes("single")) {
+    return "S";
+  }
+
+  if (normalized.includes("p90") || normalized.includes("p-90")) {
+    return "P90";
+  }
+
+  return "S";
+}
+
+function inferPotRole(name: string) {
+  const normalized = normalizeText(name);
+
+  if (normalized.includes("volume")) {
+    return "volume";
+  }
+
+  if (normalized.includes("tone")) {
+    return "tone";
+  }
+
+  if (normalized.includes("blend")) {
+    return "blend";
+  }
+
+  return "other";
+}
+
+function createCanvasInventory(document: BuilderSavedSetupDocument) {
+  const pickups = document.instances
+    .filter((instance) => getComponentCategory(instance.componentType) === "pickup")
+    .sort((left, right) => left.x - right.x)
+    .map((instance, index, collection) => ({
+      role: getPickupPositionLabel(collection.length, index),
+      name: instance.name,
+    }));
+  const potentiometers = document.instances
+    .filter((instance) => getComponentCategory(instance.componentType) === "potentiometer")
+    .map((instance) => ({
+      role: inferPotRole(instance.name),
+      name: instance.name,
+    }));
+  const switches = document.instances
+    .filter((instance) => getComponentCategory(instance.componentType) === "switch")
+    .map((instance) => instance.name);
+  const capacitors = document.instances
+    .filter((instance) => getComponentCategory(instance.componentType) === "capacitor")
+    .map((instance) => instance.name);
+  const resistors = document.instances
+    .filter((instance) => getComponentCategory(instance.componentType) === "resistor")
+    .map((instance) => instance.name);
+  const outputs = document.instances
+    .filter((instance) => getComponentCategory(instance.componentType) === "output")
+    .map((instance) => instance.name);
+  const mods = document.instances
+    .filter((instance) => getComponentCategory(instance.componentType) === "mod")
+    .map((instance) => instance.name);
+
+  return {
+    pickups,
+    potentiometers,
+    switches,
+    capacitors,
+    resistors,
+    outputs,
+    mods,
+  };
+}
+
+function deriveDetectedCounts(inventory: ReturnType<typeof createCanvasInventory>) {
+  return {
+    volumeCount: inventory.potentiometers.filter((item) => item.role === "volume").length,
+    toneCount: inventory.potentiometers.filter((item) => item.role === "tone").length,
+  };
+}
+
+function deriveSwitchTypeId(document: BuilderSavedSetupDocument) {
+  const switchInstance = document.instances.find(
+    (instance) => getComponentCategory(instance.componentType) === "switch"
+  );
+  const parsedReference = switchInstance ? parseOwnerReference(switchInstance.assetId) : null;
+
+  if (!parsedReference || parsedReference.ownerType !== "switch-type") {
+    return null;
+  }
+
+  return parsedReference.ownerId;
+}
+
+function derivePickupConfigurationId(
+  document: BuilderSavedSetupDocument,
+  pickupConfigurations: Array<{
+    id: string;
+    code: string;
+    pickupCount: number;
+    hasNeck: boolean;
+    hasMiddle: boolean;
+    hasBridge: boolean;
+  }>
+) {
+  const pickups = document.instances
+    .filter((instance) => getComponentCategory(instance.componentType) === "pickup")
+    .sort((left, right) => left.x - right.x);
+
+  if (pickups.length === 0) {
+    return null;
+  }
+
+  const pickupKinds = pickups.map((instance) => inferPickupKind(instance.name));
+  const pickupPattern = pickupKinds.join("");
+  const candidates = pickupConfigurations.filter((configuration) => {
+    if (configuration.pickupCount !== pickups.length) {
+      return false;
+    }
+
+    if (pickups.length === 1) {
+      return configuration.hasBridge || configuration.hasNeck || configuration.hasMiddle;
+    }
+
+    if (pickups.length === 2) {
+      return configuration.hasNeck && configuration.hasBridge && !configuration.hasMiddle;
+    }
+
+    if (pickups.length === 3) {
+      return configuration.hasNeck && configuration.hasMiddle && configuration.hasBridge;
+    }
+
+    return true;
+  });
+  const exactCodeMatch = candidates.find(
+    (configuration) => normalizeText(configuration.code) === pickupPattern.toLowerCase()
+  );
+
+  if (exactCodeMatch) {
+    return exactCodeMatch.id;
+  }
+
+  return candidates[0]?.id ?? null;
+}
+
 function createDiagramJson(document: BuilderSavedSetupDocument, roleMap: Map<string, string>) {
+  const inventory = createCanvasInventory(document);
+
   return {
     builder: {
       version: document.version,
       selectedWireTypeId: document.selectedWireTypeId,
       shapes: document.shapes,
+      inventory,
     },
     components: document.instances.map((instance) => ({
       id: instance.id,
@@ -182,6 +399,8 @@ function createDiagramJson(document: BuilderSavedSetupDocument, roleMap: Map<str
 }
 
 function createSwitchLogicJson(document: BuilderSavedSetupDocument, roleMap: Map<string, string>) {
+  const inventory = createCanvasInventory(document);
+
   return {
     builderConnections: document.connections.map((connection) => ({
       fromComponentRole: roleMap.get(connection.fromInstanceId) ?? connection.fromInstanceId,
@@ -190,6 +409,7 @@ function createSwitchLogicJson(document: BuilderSavedSetupDocument, roleMap: Map
       toPointKey: connection.toPointKey,
       wireTypeId: connection.wireTypeId,
     })),
+    inventory,
     notes: "Generated from custom builder publish flow.",
   } satisfies Prisma.InputJsonValue;
 }
@@ -291,24 +511,16 @@ export async function POST(request: Request) {
   }
 
   const name = body.name?.trim();
-  const pickupConfigurationId = body.pickupConfigurationId?.trim();
-  const switchTypeId = body.switchTypeId?.trim();
+  const requestedPickupConfigurationId = body.pickupConfigurationId?.trim() || null;
+  const requestedSwitchTypeId = body.switchTypeId?.trim() || null;
   const savedSetupId = body.savedSetupId?.trim() || null;
   const thumbnailDataUrl = body.thumbnailDataUrl?.trim() || null;
-  const volumeCount = body.volumeCount;
-  const toneCount = body.toneCount;
+  const requestedVolumeCount = body.volumeCount;
+  const requestedToneCount = body.toneCount;
 
-  if (
-    !name ||
-    !pickupConfigurationId ||
-    !switchTypeId ||
-    typeof volumeCount !== "number" ||
-    typeof toneCount !== "number" ||
-    volumeCount < 0 ||
-    toneCount < 0
-  ) {
+  if (!name) {
     return NextResponse.json(
-      { error: "Name, configuration, switch type, and counts are required." },
+      { error: "Name is required." },
       { status: 400 }
     );
   }
@@ -326,13 +538,24 @@ export async function POST(request: Request) {
     .map((instance) => parseOwnerReference(instance.assetId))
     .filter((value): value is NonNullable<typeof value> => value !== null);
 
-  const [pickupConfiguration, switchType, assets, wireTypes] = await Promise.all([
-    prisma.pickupConfiguration.findUnique({
-      where: { id: pickupConfigurationId },
-      select: { id: true, name: true },
+  const inventory = createCanvasInventory(document);
+  const detectedCounts = deriveDetectedCounts(inventory);
+  const derivedSwitchTypeId = deriveSwitchTypeId(document);
+  const [pickupConfigurations, switchTypes, assets, wireTypes] = await Promise.all([
+    prisma.pickupConfiguration.findMany({
+      orderBy: [{ pickupCount: "desc" }, { code: "asc" }],
+      select: {
+        id: true,
+        code: true,
+        pickupCount: true,
+        hasNeck: true,
+        hasMiddle: true,
+        hasBridge: true,
+        name: true,
+      },
     }),
-    prisma.switchType.findUnique({
-      where: { id: switchTypeId },
+    prisma.switchType.findMany({
+      orderBy: [{ isActive: "desc" }, { name: "asc" }],
       select: { id: true, name: true },
     }),
     prisma.componentAsset.findMany({
@@ -371,16 +594,45 @@ export async function POST(request: Request) {
     }),
   ]);
 
+  const derivedPickupConfigurationId = derivePickupConfigurationId(
+    document,
+    pickupConfigurations
+  );
+  const pickupConfigurationId =
+    requestedPickupConfigurationId ??
+    derivedPickupConfigurationId ??
+    pickupConfigurations[0]?.id ??
+    null;
+  const switchTypeId =
+    requestedSwitchTypeId ??
+    derivedSwitchTypeId ??
+    switchTypes[0]?.id ??
+    null;
+  const volumeCount =
+    typeof requestedVolumeCount === "number" && requestedVolumeCount >= 0
+      ? requestedVolumeCount
+      : detectedCounts.volumeCount;
+  const toneCount =
+    typeof requestedToneCount === "number" && requestedToneCount >= 0
+      ? requestedToneCount
+      : detectedCounts.toneCount;
+  const pickupConfiguration =
+    pickupConfigurationId
+      ? pickupConfigurations.find((item) => item.id === pickupConfigurationId) ?? null
+      : null;
+  const switchType =
+    switchTypeId ? switchTypes.find((item) => item.id === switchTypeId) ?? null : null;
+
   if (!pickupConfiguration) {
     return NextResponse.json(
-      { error: "pickupConfigurationId does not exist." },
+      { error: "Unable to resolve pickup configuration from the builder canvas." },
       { status: 400 }
     );
   }
 
   if (!switchType) {
     return NextResponse.json(
-      { error: "switchTypeId does not exist." },
+      { error: "Unable to resolve switch type from the builder canvas." },
       { status: 400 }
     );
   }
@@ -579,6 +831,8 @@ export async function POST(request: Request) {
             renderWidth: instance.renderWidth,
             renderHeight: instance.renderHeight,
             originalInstanceId: instance.id,
+            labelOffsetX: instance.labelOffsetX,
+            labelOffsetY: instance.labelOffsetY,
           } satisfies Prisma.InputJsonValue,
         })),
       });
@@ -627,6 +881,15 @@ export async function POST(request: Request) {
           components: document.instances.length,
           connections: document.connections.length,
           shapes: document.shapes.length,
+        },
+        detectedInventory: inventory,
+        detectedTemplate: {
+          pickupConfigurationId,
+          pickupConfigurationName: pickupConfiguration.name,
+          switchTypeId,
+          switchTypeName: switchType.name,
+          volumeCount,
+          toneCount,
         },
       },
       { status: 201 }

@@ -199,6 +199,13 @@ export function PublishDialog({
     )
   );
   const [submitting, setSubmitting] = React.useState(false);
+  const [submitError, setSubmitError] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (!open) {
+      setSubmitError(null);
+    }
+  }, [open]);
 
   function updateState<Key extends keyof typeof state>(
     key: Key,
@@ -222,6 +229,7 @@ export function PublishDialog({
 
   async function handleSubmit() {
     setSubmitting(true);
+    setSubmitError(null);
 
     try {
       const payload =
@@ -244,6 +252,8 @@ export function PublishDialog({
         payload,
       });
       onOpenChange(false);
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : "Failed to publish custom component.");
     } finally {
       setSubmitting(false);
     }
@@ -274,6 +284,12 @@ export function PublishDialog({
             connection point akan dipublikasikan sebagai asset milik komponen ini.
           </DialogDescription>
         </DialogHeader>
+
+        {submitError ? (
+          <div className="mx-6 rounded-2xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+            {submitError}
+          </div>
+        ) : null}
 
         <div className="grid gap-4 px-6 pb-4 sm:grid-cols-2">
           <label className="flex flex-col gap-2">

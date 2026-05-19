@@ -9,6 +9,7 @@ import type {
   LineObject,
   RectangleObject,
   TextObject,
+  TriangleObject,
 } from "@/lib/custom-component-editor-types";
 
 const MIN_SHAPE_SIZE = 10;
@@ -62,6 +63,8 @@ export function getDefaultObjectName(type: CanvasObject["type"]) {
   switch (type) {
     case "rectangle":
       return "Rectangle";
+    case "triangle":
+      return "Triangle";
     case "ellipse":
       return "Ellipse";
     case "line":
@@ -78,9 +81,16 @@ export function getDefaultObjectName(type: CanvasObject["type"]) {
 export function createConnectionPoint(params: {
   x: number;
   y: number;
-  index?: number;
+  existingPoints?: Array<{ key: string }>;
 }): ConnectionPoint {
-  const sequence = (params.index ?? 0) + 1;
+  const existingKeys = new Set(
+    (params.existingPoints ?? []).map((point) => point.key.trim().toLowerCase())
+  );
+  let sequence = 1;
+
+  while (existingKeys.has(`point-${sequence}`)) {
+    sequence += 1;
+  }
 
   return {
     id: createEditorId("connection-point"),
@@ -97,6 +107,7 @@ export function createConnectionPoint(params: {
 export function isShapeTool(tool: EditorTool) {
   return (
     tool === "rectangle" ||
+    tool === "triangle" ||
     tool === "ellipse" ||
     tool === "line" ||
     tool === "text" ||
@@ -132,6 +143,21 @@ export function createRectangleObject(
   return {
     ...createBaseObject("rectangle", bounds.x, bounds.y),
     type: "rectangle",
+    width: bounds.width,
+    height: bounds.height,
+    cornerRadius: 18,
+  };
+}
+
+export function createTriangleObject(
+  start: { x: number; y: number },
+  end: { x: number; y: number }
+): TriangleObject {
+  const bounds = normalizeBounds(start, end);
+
+  return {
+    ...createBaseObject("triangle", bounds.x, bounds.y),
+    type: "triangle",
     width: bounds.width,
     height: bounds.height,
     cornerRadius: 18,
@@ -288,6 +314,7 @@ export function createDrawObject(points: number[]): DrawObject {
 export function getObjectDimensions(object: CanvasObject) {
   if (
     object.type === "rectangle" ||
+    object.type === "triangle" ||
     object.type === "ellipse" ||
     object.type === "image"
   ) {
@@ -320,6 +347,7 @@ export function getObjectDimensions(object: CanvasObject) {
 export function getObjectBounds(object: CanvasObject) {
   if (
     object.type === "rectangle" ||
+    object.type === "triangle" ||
     object.type === "ellipse" ||
     object.type === "image"
   ) {

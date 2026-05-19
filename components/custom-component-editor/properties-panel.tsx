@@ -73,6 +73,7 @@ function resizeObject(object: CanvasObject, axis: "width" | "height", rawValue: 
 
   if (
     object.type === "rectangle" ||
+    object.type === "triangle" ||
     object.type === "ellipse" ||
     object.type === "image"
   ) {
@@ -581,7 +582,7 @@ export function PropertiesPanel() {
           />
         </PropertyRow>
 
-        {selectedObject.type === "rectangle" ? (
+        {selectedObject.type === "rectangle" || selectedObject.type === "triangle" ? (
           <PropertyRow label="Corner Radius">
             <Input
               type="number"

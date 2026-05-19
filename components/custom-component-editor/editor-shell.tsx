@@ -159,6 +159,7 @@ export function EditorShell({ initialTarget = null }: EditorShellProps) {
   const [activeDraftDescription, setActiveDraftDescription] = React.useState<string>("");
   const [draftStatus, setDraftStatus] = React.useState<string | null>(null);
   const [saveDialogOpen, setSaveDialogOpen] = React.useState(false);
+  const [saveDialogMode, setSaveDialogMode] = React.useState<"create" | "save-as">("create");
   const [draftBrowserOpen, setDraftBrowserOpen] = React.useState(false);
   const [draftName, setDraftName] = React.useState("");
   const [draftDescription, setDraftDescription] = React.useState("");
@@ -297,7 +298,7 @@ export function EditorShell({ initialTarget = null }: EditorShellProps) {
 
   const saveDraft = React.useCallback(
     async (
-      mode: "create" | "update",
+      mode: "create" | "update" | "save-as",
       override?: {
         name: string;
         description: string;
@@ -317,8 +318,9 @@ export function EditorShell({ initialTarget = null }: EditorShellProps) {
         return;
       }
 
-      const effectiveMode = activeDraftId ? "update" : mode;
-      const effectiveDraftId = activeDraftId;
+      const effectiveMode =
+        mode === "save-as" ? "create" : activeDraftId ? "update" : mode;
+      const effectiveDraftId = mode === "save-as" ? null : activeDraftId;
 
       setIsSavingDraft(true);
 
@@ -365,6 +367,7 @@ export function EditorShell({ initialTarget = null }: EditorShellProps) {
           setPendingAutosaveEnable(false);
         }
         setSaveDialogOpen(false);
+        setSaveDialogMode("create");
       } catch (error) {
         setDraftStatus(getErrorMessage(error));
       } finally {
@@ -402,6 +405,7 @@ export function EditorShell({ initialTarget = null }: EditorShellProps) {
 
     setDraftName(activeDraftName ?? draftName);
     setDraftDescription(activeDraftDescription);
+    setSaveDialogMode("create");
     setSaveDialogOpen(true);
   }, [
     activeDraftDescription,
@@ -410,6 +414,30 @@ export function EditorShell({ initialTarget = null }: EditorShellProps) {
     canPersistDraft,
     draftName,
     saveDraft,
+  ]);
+
+  const saveAsDraft = React.useCallback(() => {
+    if (!canPersistDraft) {
+      setDraftStatus("Sign in to save drafts.");
+      return;
+    }
+
+    const suggestedName = activeDraftName?.trim()
+      ? `${activeDraftName} Copy`
+      : draftName.trim()
+        ? `${draftName.trim()} Copy`
+        : "Untitled Draft Copy";
+
+    setDraftName(suggestedName);
+    setDraftDescription(activeDraftDescription || draftDescription);
+    setSaveDialogMode("save-as");
+    setSaveDialogOpen(true);
+  }, [
+    activeDraftDescription,
+    activeDraftName,
+    canPersistDraft,
+    draftDescription,
+    draftName,
   ]);
 
   const deleteDraft = React.useCallback(async (draftId: string) => {
@@ -764,6 +792,32 @@ export function EditorShell({ initialTarget = null }: EditorShellProps) {
     [addObject, viewport]
   );
 
+  const handleNewCanvas = React.useCallback(() => {
+    importDocument({
+      version: 1,
+      background: "#f8fafc",
+      objects: [],
+      connectionPoints: [],
+    });
+    setViewport({ x: 64, y: 40, scale: 1 });
+    setActiveDraftId(null);
+    setActiveDraftName(null);
+    setActiveDraftDescription("");
+    setDraftName("");
+    setDraftDescription("");
+    setAutosaveEnabled(false);
+    setPendingAutosaveEnable(false);
+    setDraftStatus("Started a new canvas.");
+    markSnapshotAsSaved(
+      JSON.stringify({
+        version: 1,
+        background: "#f8fafc",
+        objects: [],
+        connectionPoints: [],
+      })
+    );
+  }, [importDocument, markSnapshotAsSaved, setViewport]);
+
   const handlePublish = React.useCallback(
     async (value: PublishSubmitValue) => {
       const exported = createPngExport();
@@ -813,14 +867,27 @@ export function EditorShell({ initialTarget = null }: EditorShellProps) {
           method: "POST",
           body: formData,
         });
-        const payload = (await response.json()) as {
+        const responseText = await response.text();
+        let payload = {} as {
           error?: string;
           owner?: { name?: string };
           asset?: { name?: string };
         };
 
+        if (responseText) {
+          try {
+            payload = JSON.parse(responseText) as typeof payload;
+          } catch {
+            payload = {};
+          }
+        }
+
         if (!response.ok) {
-          throw new Error(payload.error || "Failed to publish custom component.");
+          throw new Error(
+            payload.error ||
+              responseText ||
+              `Failed to publish custom component (${response.status}).`
+          );
         }
 
         setDraftStatus(
@@ -876,9 +943,11 @@ export function EditorShell({ initialTarget = null }: EditorShellProps) {
             downloadDataUrl("custom-component.png", exported.url);
           }
         }}
+        onNewCanvas={handleNewCanvas}
         onSaveDraft={() => {
           void saveCurrentDraft();
         }}
+        onSaveAsDraft={saveAsDraft}
         onPublish={() => setPublishDialogOpen(true)}
         onOpenDrafts={openDraftBrowser}
         canSaveDraft={canPersistDraft}
@@ -940,13 +1009,19 @@ export function EditorShell({ initialTarget = null }: EditorShellProps) {
           if (!open && pendingAutosaveEnable) {
             setPendingAutosaveEnable(false);
           }
+
+          if (!open) {
+            setSaveDialogMode("create");
+          }
         }}
       >
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Save Draft</DialogTitle>
+            <DialogTitle>{saveDialogMode === "save-as" ? "Save As" : "Save Draft"}</DialogTitle>
             <DialogDescription>
-              Simpan draft custom component ke database user yang sedang login.
+              {saveDialogMode === "save-as"
+                ? "Simpan salinan draft custom component sebagai file baru."
+                : "Simpan draft custom component ke database user yang sedang login."}
             </DialogDescription>
           </DialogHeader>
 
@@ -986,10 +1061,16 @@ export function EditorShell({ initialTarget = null }: EditorShellProps) {
             <Button
               disabled={isSavingDraft}
               onClick={() => {
-                void saveDraft(activeDraftId ? "update" : "create");
+                void saveDraft(
+                  saveDialogMode === "save-as"
+                    ? "save-as"
+                    : activeDraftId
+                      ? "update"
+                      : "create"
+                );
               }}
             >
-              {isSavingDraft ? "Saving..." : "Save Draft"}
+              {isSavingDraft ? "Saving..." : saveDialogMode === "save-as" ? "Save As" : "Save Draft"}
             </Button>
           </DialogFooter>
         </DialogContent>
