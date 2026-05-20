@@ -3,20 +3,20 @@
 import * as React from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
   ArrowLeft01Icon,
   Bookmark02Icon,
-  CheckmarkCircle02Icon,
   DashboardSquare01Icon,
   Edit02Icon,
   ElectricPlugsIcon,
-  FavouriteIcon,
   PaintBrush02Icon,
   Share08Icon,
   ViewIcon,
 } from "@hugeicons/core-free-icons";
 
+import { HeartIcon } from "@/components/heart-icon";
 import { TopNavbar } from "@/components/top-navbar";
 import { Button } from "@/components/ui/button";
 import {
@@ -27,10 +27,15 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { parseWiringTemplateInventory } from "@/lib/wiring-template-inventory";
+import { cn } from "@/lib/utils";
 import type { WiringTemplateDetail } from "@/lib/wiring-template-types";
 
 type WiringTemplateDetailContentProps = {
   template: WiringTemplateDetail;
+  editHref?: string;
+  showEditButton?: boolean;
+  backHref?: string;
+  backLabel?: string;
 };
 
 type TemplateComponentMetadata = {
@@ -62,18 +67,6 @@ const PREVIEW_WHEEL_ZOOM_STEP = 0.1;
 const THUMBNAIL_PREVIEW_WIDTH = 1200;
 const THUMBNAIL_PREVIEW_HEIGHT = 750;
 
-function formatTemplateDate(value: string) {
-  try {
-    return new Date(value).toLocaleDateString("id-ID", {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-    });
-  } catch {
-    return value;
-  }
-}
-
 function getCreatorInitials(name: string) {
   return (
     name
@@ -83,6 +76,17 @@ function getCreatorInitials(name: string) {
       .map((part) => part[0]?.toUpperCase() ?? "")
       .join("") || "U"
   );
+}
+
+function formatCompactMetric(value: number) {
+  if (value >= 1000) {
+    const compact = value / 1000;
+    const formatted = compact.toFixed(1);
+
+    return `${formatted.replace(/\.0$/, "")}k`;
+  }
+
+  return String(value);
 }
 
 function parseComponentMetadata(value: string | null): TemplateComponentMetadata {
@@ -138,20 +142,6 @@ function parseConnectionControlPoints(value: string | null) {
   }
 }
 
-function formatPathSummary(value: string | null) {
-  if (!value) {
-    return "-";
-  }
-
-  const controlPoints = parseConnectionControlPoints(value).length;
-
-  if (controlPoints > 0) {
-    return `${controlPoints} control point${controlPoints === 1 ? "" : "s"}`;
-  }
-
-  return "Direct path";
-}
-
 function InfoRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-center justify-between gap-3 border-b border-border/50 pb-3 last:border-b-0 last:pb-0">
@@ -162,8 +152,18 @@ function InfoRow({ label, value }: { label: string; value: string }) {
 }
 
 export function WiringTemplateDetailContent({
-  template,
+  template: initialTemplate,
+  editHref = "/custom-builder",
+  showEditButton = true,
+  backHref = "/explore",
+  backLabel = "Back to Explore",
 }: WiringTemplateDetailContentProps) {
+  const router = useRouter();
+  const [template, setTemplate] = React.useState(initialTemplate);
+  const [isLovePending, setIsLovePending] = React.useState(false);
+  const [isLoveAnimating, setIsLoveAnimating] = React.useState(false);
+  const [isSavePending, setIsSavePending] = React.useState(false);
+  const [isSaveAnimating, setIsSaveAnimating] = React.useState(false);
   const [previewZoom, setPreviewZoom] = React.useState(1);
   const [isPreviewPanning, setIsPreviewPanning] = React.useState(false);
   const previewViewportRef = React.useRef<HTMLDivElement | null>(null);
@@ -288,6 +288,82 @@ export function WiringTemplateDetailContent({
   })();
 
   const headerTabs = ["Diagram", "Components", "Switch Positions", "Notes", "Source"];
+
+  async function toggleTemplateLove() {
+    setIsLovePending(true);
+    setIsLoveAnimating(true);
+    window.setTimeout(() => {
+      setIsLoveAnimating(false);
+    }, 220);
+
+    try {
+      const response = await fetch(`/api/wiring-templates/${template.id}/love`, {
+        method: "POST",
+      });
+      const payload = (await response.json()) as
+        | {
+            loved?: boolean;
+            loveCount?: number;
+            error?: string;
+          }
+        | undefined;
+
+      if (response.status === 401) {
+        router.push(`/login?callbackUrl=${encodeURIComponent(`/explore/${template.id}`)}`);
+        return;
+      }
+
+      if (!response.ok) {
+        throw new Error(payload?.error || "Failed to update love.");
+      }
+
+      setTemplate((current) => ({
+        ...current,
+        currentUserLoved: Boolean(payload?.loved),
+        loveCount: payload?.loveCount ?? current.loveCount,
+      }));
+    } finally {
+      setIsLovePending(false);
+    }
+  }
+
+  async function toggleTemplateSave() {
+    setIsSavePending(true);
+    setIsSaveAnimating(true);
+    window.setTimeout(() => {
+      setIsSaveAnimating(false);
+    }, 220);
+
+    try {
+      const response = await fetch(`/api/wiring-templates/${template.id}/save`, {
+        method: "POST",
+      });
+      const payload = (await response.json()) as
+        | {
+            saved?: boolean;
+            saveCount?: number;
+            error?: string;
+          }
+        | undefined;
+
+      if (response.status === 401) {
+        router.push(`/login?callbackUrl=${encodeURIComponent(`/explore/${template.id}`)}`);
+        return;
+      }
+
+      if (!response.ok) {
+        throw new Error(payload?.error || "Failed to update save.");
+      }
+
+      setTemplate((current) => ({
+        ...current,
+        currentUserSaved: Boolean(payload?.saved),
+        saveCount: payload?.saveCount ?? current.saveCount,
+      }));
+    } finally {
+      setIsSavePending(false);
+    }
+  }
 
   function zoomPreviewIn() {
     applyPreviewZoom(Number((previewZoom + PREVIEW_ZOOM_STEP).toFixed(2)));
@@ -427,13 +503,13 @@ export function WiringTemplateDetailContent({
               <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                 <div className="min-w-0">
                   <Button variant="ghost" size="sm" className="mb-2 -ml-3 px-3" asChild>
-                    <Link href="/explore">
+                    <Link href={backHref}>
                       <HugeiconsIcon
                         icon={ArrowLeft01Icon}
                         strokeWidth={2}
                         data-icon="inline-start"
                       />
-                      Back to Explore
+                      {backLabel}
                     </Link>
                   </Button>
                   <CardTitle className="text-2xl sm:text-4xl">{template.name}</CardTitle>
@@ -469,24 +545,68 @@ export function WiringTemplateDetailContent({
                       Share
                     </Button>
                   )}
-                  <Button variant="outline" size="lg">
+                  <Button
+                    variant={template.currentUserSaved ? "default" : "outline"}
+                    size="lg"
+                    className={cn(
+                      "transition-colors",
+                      template.currentUserSaved
+                        ? "bg-amber-500 text-white hover:bg-amber-500/90"
+                        : "hover:border-amber-200 hover:bg-amber-50 hover:text-amber-600 dark:hover:bg-amber-950/30"
+                    )}
+                    disabled={isSavePending}
+                    onClick={() => {
+                      void toggleTemplateSave();
+                    }}
+                  >
                     <HugeiconsIcon
                       icon={Bookmark02Icon}
                       strokeWidth={2}
+                      className={cn(
+                        "transition-transform duration-200 ease-out",
+                        isSaveAnimating ? "scale-125" : "scale-100"
+                      )}
                       data-icon="inline-start"
                     />
-                    Save
+                    {template.currentUserSaved ? "Saved" : "Save"}{" "}
+                    {formatCompactMetric(template.saveCount)}
                   </Button>
-                  <Button size="lg" asChild>
-                    <Link href="/wiring/templates">
-                      <HugeiconsIcon
-                        icon={Edit02Icon}
-                        strokeWidth={2}
-                        data-icon="inline-start"
-                      />
-                      Edit Diagram
-                    </Link>
+                  <Button
+                    variant={template.currentUserLoved ? "default" : "outline"}
+                    size="lg"
+                    className={cn(
+                      "transition-colors",
+                      template.currentUserLoved
+                        ? "bg-rose-500 text-white hover:bg-rose-500/90"
+                        : "hover:border-rose-200 hover:bg-rose-50 hover:text-rose-500 dark:hover:bg-rose-950/30"
+                    )}
+                    disabled={isLovePending}
+                    onClick={() => {
+                      void toggleTemplateLove();
+                    }}
+                  >
+                    <HeartIcon
+                      filled={template.currentUserLoved || isLoveAnimating}
+                      className={cn(
+                        "size-4",
+                        "transition-transform duration-200 ease-out",
+                        isLoveAnimating ? "scale-125" : "scale-100"
+                      )}
+                    />
+                    {formatCompactMetric(template.loveCount)}
                   </Button>
+                  {showEditButton ? (
+                    <Button size="lg" asChild>
+                      <Link href={editHref}>
+                        <HugeiconsIcon
+                          icon={Edit02Icon}
+                          strokeWidth={2}
+                          data-icon="inline-start"
+                        />
+                        Edit Diagram
+                      </Link>
+                    </Button>
+                  ) : null}
                 </div>
               </div>
 
@@ -729,54 +849,6 @@ export function WiringTemplateDetailContent({
               </CardContent>
             </Card>
           </div>
-        </section>
-
-        <section>
-          <Card className="border border-border/70 bg-card/90 shadow-sm">
-            <CardHeader>
-              <CardTitle>Connections List</CardTitle>
-              <CardDescription>
-                Record wiring dari `wiring_template_connections`.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-3">
-              {template.connections.length > 0 ? (
-                template.connections.map((connection) => (
-                  <div
-                    key={connection.id}
-                    className="rounded-xl border border-border/60 bg-background px-4 py-4"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <div className="font-medium text-foreground">
-                          {connection.fromComponentRole}.{connection.fromPointKey} to{" "}
-                          {connection.toComponentRole}.{connection.toPointKey}
-                        </div>
-                        <div className="text-sm text-muted-foreground">
-                          {connection.wireTypeName}
-                          {connection.wireColor ? ` / ${connection.wireColor}` : ""}
-                        </div>
-                      </div>
-                      <HugeiconsIcon
-                        icon={connection.label ? CheckmarkCircle02Icon : ViewIcon}
-                        strokeWidth={2}
-                        className="text-muted-foreground"
-                      />
-                    </div>
-                    <div className="mt-3 grid gap-1 text-sm text-muted-foreground">
-                      <div>Label: {connection.label || "-"}</div>
-                      <div>Path: {formatPathSummary(connection.pathJson)}</div>
-                      <div>Notes: {connection.notes || "-"}</div>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="rounded-2xl border border-dashed border-border/80 bg-muted/10 p-6 text-sm text-muted-foreground">
-                  Belum ada record koneksi tersimpan untuk template ini.
-                </div>
-              )}
-            </CardContent>
-          </Card>
         </section>
 
       </div>

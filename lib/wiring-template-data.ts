@@ -24,6 +24,9 @@ type PrismaWiringTemplateRecord = {
   sourceType: string | null;
   sourceUrl: string | null;
   createdBy: string;
+  viewCount: number;
+  loveCount: number;
+  saveCount: number;
   createdAt: Date;
   updatedAt: Date;
   pickupConfiguration: { name: string };
@@ -56,6 +59,12 @@ type PrismaWiringTemplateRecord = {
   }>;
 };
 
+type CreatorDirectoryEntry = {
+  id: string;
+  name: string;
+  photoUrl: string | null;
+};
+
 export const seedWiringTemplateRows: WiringTemplateRow[] = [
   {
     id: "seed-wiring-template-strat-sss",
@@ -78,6 +87,14 @@ export const seedWiringTemplateRows: WiringTemplateRow[] = [
     sourceType: "Reference",
     sourceUrl: "https://example.com/strat-standard-sss-5-way",
     createdBy: "System Seed",
+    creatorId: null,
+    creatorName: "System Seed",
+    creatorPhoto: null,
+    viewCount: 12500,
+    loveCount: 176,
+    saveCount: 94,
+    currentUserLoved: false,
+    currentUserSaved: false,
     createdAt: new Date("2026-05-17T13:10:00.000Z").toISOString(),
     updatedAt: new Date("2026-05-17T13:10:00.000Z").toISOString(),
   },
@@ -102,6 +119,14 @@ export const seedWiringTemplateRows: WiringTemplateRow[] = [
     sourceType: "Imported",
     sourceUrl: "https://example.com/les-paul-hh-3-way",
     createdBy: "System Seed",
+    creatorId: null,
+    creatorName: "System Seed",
+    creatorPhoto: null,
+    viewCount: 8400,
+    loveCount: 124,
+    saveCount: 61,
+    currentUserLoved: false,
+    currentUserSaved: false,
     createdAt: new Date("2026-05-17T13:12:00.000Z").toISOString(),
     updatedAt: new Date("2026-05-17T13:12:00.000Z").toISOString(),
   },
@@ -141,9 +166,39 @@ function mapRecord(record: PrismaWiringTemplateRecord): WiringTemplateRow {
     sourceType: record.sourceType,
     sourceUrl: record.sourceUrl,
     createdBy: record.createdBy,
+    creatorId: null,
+    creatorName: record.createdBy,
+    creatorPhoto: null,
+    viewCount: record.viewCount,
+    loveCount: record.loveCount,
+    saveCount: record.saveCount,
+    currentUserLoved: false,
+    currentUserSaved: false,
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),
   };
+}
+
+function normalizeCreatorLookupKey(value: string) {
+  return value.trim().toLowerCase();
+}
+
+function applyCreatorDirectory<T extends WiringTemplateRow>(
+  record: T,
+  directory: Map<string, CreatorDirectoryEntry>
+): T {
+  const creator = directory.get(normalizeCreatorLookupKey(record.createdBy));
+
+  if (!creator) {
+    return record;
+  }
+
+  return {
+    ...record,
+    creatorId: creator.id,
+    creatorName: creator.name,
+    creatorPhoto: creator.photoUrl,
+  } satisfies T;
 }
 
 function mapDetailComponent(
@@ -197,6 +252,12 @@ function mapDetailRecord(record: PrismaWiringTemplateRecord): WiringTemplateDeta
 }
 
 export async function getWiringTemplateRows(): Promise<WiringTemplateRow[]> {
+  return getWiringTemplateRowsForUser(null);
+}
+
+export async function getWiringTemplateRowsForUser(
+  userId: string | null
+): Promise<WiringTemplateRow[]> {
   try {
     const prisma = await getPrismaClient();
 
@@ -204,19 +265,70 @@ export async function getWiringTemplateRows(): Promise<WiringTemplateRow[]> {
       return seedWiringTemplateRows;
     }
 
-    const templates = (await prisma.wiringTemplate.findMany({
-      orderBy: [{ isVerified: "desc" }, { name: "asc" }],
-      include: {
-        pickupConfiguration: {
-          select: { name: true },
+    const [templates, users, loves, saves] = await Promise.all([
+      prisma.wiringTemplate.findMany({
+        orderBy: [{ isVerified: "desc" }, { name: "asc" }],
+        include: {
+          pickupConfiguration: {
+            select: { name: true },
+          },
+          switchType: {
+            select: { name: true },
+          },
         },
-        switchType: {
-          select: { name: true },
+      }) as Promise<PrismaWiringTemplateRecord[]>,
+      prisma.user.findMany({
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          photoUrl: true,
         },
-      },
-    })) as PrismaWiringTemplateRecord[];
+      }),
+      userId
+        ? prisma.wiringTemplateLove.findMany({
+            where: { userId },
+            select: {
+              wiringTemplateId: true,
+            },
+          })
+        : Promise.resolve([] as Array<{ wiringTemplateId: string }>),
+      userId
+        ? prisma.wiringTemplateSave.findMany({
+            where: { userId },
+            select: {
+              wiringTemplateId: true,
+            },
+          })
+        : Promise.resolve([] as Array<{ wiringTemplateId: string }>),
+    ]);
 
-    return templates.map(mapRecord);
+    const creatorDirectory = new Map<string, CreatorDirectoryEntry>();
+    const lovedTemplateIds = new Set(loves.map((love) => love.wiringTemplateId));
+    const savedTemplateIds = new Set(saves.map((save) => save.wiringTemplateId));
+
+    for (const user of users) {
+      creatorDirectory.set(normalizeCreatorLookupKey(user.email), {
+        id: user.id,
+        name: user.name,
+        photoUrl: user.photoUrl,
+      });
+      creatorDirectory.set(normalizeCreatorLookupKey(user.name), {
+        id: user.id,
+        name: user.name,
+        photoUrl: user.photoUrl,
+      });
+    }
+
+    return templates.map((template) => {
+      const nextTemplate = applyCreatorDirectory(mapRecord(template), creatorDirectory);
+
+      return {
+        ...nextTemplate,
+        currentUserLoved: lovedTemplateIds.has(template.id),
+        currentUserSaved: savedTemplateIds.has(template.id),
+      };
+    });
   } catch {
     return seedWiringTemplateRows;
   }
@@ -224,6 +336,13 @@ export async function getWiringTemplateRows(): Promise<WiringTemplateRow[]> {
 
 export async function getWiringTemplateDetailById(
   id: string
+): Promise<WiringTemplateDetail | null> {
+  return getWiringTemplateDetailByIdForUser(id, null);
+}
+
+export async function getWiringTemplateDetailByIdForUser(
+  id: string,
+  userId: string | null
 ): Promise<WiringTemplateDetail | null> {
   try {
     const prisma = await getPrismaClient();
@@ -242,40 +361,99 @@ export async function getWiringTemplateDetailById(
       };
     }
 
-    const template = (await prisma.wiringTemplate.findUnique({
-      where: { id },
-      include: {
-        pickupConfiguration: {
-          select: { name: true },
-        },
-        switchType: {
-          select: { name: true },
-        },
-        components: {
-          orderBy: [{ componentRole: "asc" }, { componentType: "asc" }],
-          include: {
-            asset: {
-              select: { name: true },
+    const [template, users, love, save] = await Promise.all([
+      prisma.wiringTemplate.findUnique({
+        where: { id },
+        include: {
+          pickupConfiguration: {
+            select: { name: true },
+          },
+          switchType: {
+            select: { name: true },
+          },
+          components: {
+            orderBy: [{ componentRole: "asc" }, { componentType: "asc" }],
+            include: {
+              asset: {
+                select: { name: true },
+              },
+            },
+          },
+          connections: {
+            orderBy: [
+              { fromComponentRole: "asc" },
+              { toComponentRole: "asc" },
+              { fromPointKey: "asc" },
+              { toPointKey: "asc" },
+            ],
+            include: {
+              wireType: {
+                select: { name: true },
+              },
             },
           },
         },
-        connections: {
-          orderBy: [
-            { fromComponentRole: "asc" },
-            { toComponentRole: "asc" },
-            { fromPointKey: "asc" },
-            { toPointKey: "asc" },
-          ],
-          include: {
-            wireType: {
-              select: { name: true },
-            },
-          },
+      }) as Promise<PrismaWiringTemplateRecord | null>,
+      prisma.user.findMany({
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          photoUrl: true,
         },
-      },
-    })) as PrismaWiringTemplateRecord | null;
+      }),
+      userId
+        ? prisma.wiringTemplateLove.findUnique({
+            where: {
+              userId_wiringTemplateId: {
+                userId,
+                wiringTemplateId: id,
+              },
+            },
+            select: {
+              id: true,
+            },
+          })
+        : Promise.resolve(null),
+      userId
+        ? prisma.wiringTemplateSave.findUnique({
+            where: {
+              userId_wiringTemplateId: {
+                userId,
+                wiringTemplateId: id,
+              },
+            },
+            select: {
+              id: true,
+            },
+          })
+        : Promise.resolve(null),
+    ]);
 
-    return template ? mapDetailRecord(template) : null;
+    if (!template) {
+      return null;
+    }
+
+    const creatorDirectory = new Map<string, CreatorDirectoryEntry>();
+
+    for (const user of users) {
+      creatorDirectory.set(normalizeCreatorLookupKey(user.email), {
+        id: user.id,
+        name: user.name,
+        photoUrl: user.photoUrl,
+      });
+      creatorDirectory.set(normalizeCreatorLookupKey(user.name), {
+        id: user.id,
+        name: user.name,
+        photoUrl: user.photoUrl,
+      });
+    }
+
+    return {
+      ...applyCreatorDirectory(mapDetailRecord(template), creatorDirectory),
+      currentUserLoved: Boolean(love),
+      currentUserSaved: Boolean(save),
+    };
   } catch {
     const fallback = seedWiringTemplateRows.find((item) => item.id === id) ?? null;
 
@@ -288,6 +466,101 @@ export async function getWiringTemplateDetailById(
       components: [],
       connections: [],
     };
+  }
+}
+
+export async function incrementWiringTemplateViewCount(id: string) {
+  try {
+    const prisma = await getPrismaClient();
+
+    if (!prisma) {
+      return;
+    }
+
+    await prisma.wiringTemplate.update({
+      where: { id },
+      data: {
+        viewCount: {
+          increment: 1,
+        },
+      },
+    });
+  } catch {
+    // Ignore view-count failures so template detail remains accessible.
+  }
+}
+
+export async function getSavedWiringTemplateRowsForUser(
+  userId: string
+): Promise<WiringTemplateRow[]> {
+  try {
+    const prisma = await getPrismaClient();
+
+    if (!prisma) {
+      return [];
+    }
+
+    const [savedRows, users, loves] = await Promise.all([
+      prisma.wiringTemplateSave.findMany({
+        where: { userId },
+        orderBy: [{ createdAt: "desc" }],
+        select: {
+          wiringTemplate: {
+            include: {
+              pickupConfiguration: {
+                select: { name: true },
+              },
+              switchType: {
+                select: { name: true },
+              },
+            },
+          },
+        },
+      }),
+      prisma.user.findMany({
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          photoUrl: true,
+        },
+      }),
+      prisma.wiringTemplateLove.findMany({
+        where: { userId },
+        select: {
+          wiringTemplateId: true,
+        },
+      }),
+    ]);
+
+    const creatorDirectory = new Map<string, CreatorDirectoryEntry>();
+    const lovedTemplateIds = new Set(loves.map((love) => love.wiringTemplateId));
+
+    for (const user of users) {
+      creatorDirectory.set(normalizeCreatorLookupKey(user.email), {
+        id: user.id,
+        name: user.name,
+        photoUrl: user.photoUrl,
+      });
+      creatorDirectory.set(normalizeCreatorLookupKey(user.name), {
+        id: user.id,
+        name: user.name,
+        photoUrl: user.photoUrl,
+      });
+    }
+
+    return savedRows.map((row) => {
+      const template = row.wiringTemplate as PrismaWiringTemplateRecord;
+      const nextTemplate = applyCreatorDirectory(mapRecord(template), creatorDirectory);
+
+      return {
+        ...nextTemplate,
+        currentUserLoved: lovedTemplateIds.has(template.id),
+        currentUserSaved: true,
+      };
+    });
+  } catch {
+    return [];
   }
 }
 

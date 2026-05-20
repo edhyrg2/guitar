@@ -50,6 +50,14 @@ export type WiringTemplateRow = {
   sourceType: string | null;
   sourceUrl: string | null;
   createdBy: string;
+  creatorId: string | null;
+  creatorName: string;
+  creatorPhoto: string | null;
+  viewCount: number;
+  loveCount: number;
+  saveCount: number;
+  currentUserLoved: boolean;
+  currentUserSaved: boolean;
   createdAt: string;
   updatedAt: string;
 };
@@ -64,6 +72,14 @@ export type WiringTemplateInput = Omit<
   | "id"
   | "pickupConfigurationName"
   | "switchTypeName"
+  | "creatorId"
+  | "creatorName"
+  | "creatorPhoto"
+  | "viewCount"
+  | "loveCount"
+  | "currentUserLoved"
+  | "saveCount"
+  | "currentUserSaved"
   | "createdAt"
   | "updatedAt"
 >;

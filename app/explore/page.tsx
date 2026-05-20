@@ -1,10 +1,12 @@
 import { AppSidebar } from "@/components/app-sidebar";
 import { ExploreWiringTemplatesContent } from "@/components/explore-wiring-templates-content";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
-import { getWiringTemplateRows } from "@/lib/wiring-template-data";
+import { getSafeServerSession } from "@/lib/auth-session";
+import { getWiringTemplateRowsForUser } from "@/lib/wiring-template-data";
 
 export default async function ExplorePage() {
-  const templates = await getWiringTemplateRows();
+  const session = await getSafeServerSession();
+  const templates = await getWiringTemplateRowsForUser(session?.user?.id ?? null);
 
   return (
     <SidebarProvider>

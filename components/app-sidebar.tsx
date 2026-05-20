@@ -69,7 +69,7 @@ const primaryItems: SidebarItem[] = [
   { title: "My Design", href: "/my-design", icon: UserAccountIcon, badge: "Mine" },
   { title: "Custom Builder", href: "/custom-builder", icon: PaintBrush02Icon },
   { title: "Custom Component", href: "/custom-component", icon: PaintBrush02Icon },
-  { title: "Saved Setups", href: "#", icon: BookBookmark01Icon },
+  { title: "Saved Setups", href: "/saved-setups", icon: BookBookmark01Icon },
 ];
 
 const secondaryItems: SidebarItem[] = [

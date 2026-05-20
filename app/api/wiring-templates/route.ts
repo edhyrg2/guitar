@@ -24,6 +24,9 @@ function mapTemplateResponse(record: {
   sourceType: string | null;
   sourceUrl: string | null;
   createdBy: string;
+  viewCount: number;
+  loveCount: number;
+  saveCount: number;
   createdAt: Date;
   updatedAt: Date;
   pickupConfiguration: { name: string };
@@ -48,6 +51,14 @@ function mapTemplateResponse(record: {
     sourceType: record.sourceType,
     sourceUrl: record.sourceUrl,
     createdBy: record.createdBy,
+    creatorId: null,
+    creatorName: record.createdBy,
+    creatorPhoto: null,
+    viewCount: record.viewCount,
+    loveCount: record.loveCount,
+    saveCount: record.saveCount,
+    currentUserLoved: false,
+    currentUserSaved: false,
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),
   };

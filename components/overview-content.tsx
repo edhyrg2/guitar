@@ -1,4 +1,5 @@
 import { HugeiconsIcon } from "@hugeicons/react";
+import Link from "next/link";
 import {
   ArrowDown01Icon,
   Bookmark02Icon,
@@ -218,13 +219,15 @@ export function OverviewContent() {
                     />
                     Save
                   </Button>
-                  <Button size="lg">
+                  <Button size="lg" asChild>
+                    <Link href="/custom-builder">
                     <HugeiconsIcon
                       icon={Edit02Icon}
                       strokeWidth={2}
                       data-icon="inline-start"
                     />
                     Edit Diagram
+                    </Link>
                   </Button>
                 </div>
               </div>

@@ -6,14 +6,12 @@ import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
-  BookBookmark01Icon,
   Camera01Icon,
   Edit02Icon,
   LinkSquare02Icon,
   Location01Icon,
   Mail01Icon,
   NoteIcon,
-  PaintBrush02Icon,
 } from "@hugeicons/core-free-icons";
 
 import { Button } from "@/components/ui/button";
@@ -462,80 +460,70 @@ export function MyDesignContent({
                   key={item.id}
                   className="group overflow-hidden rounded-[1.5rem] border border-border/70 bg-background transition hover:-translate-y-0.5 hover:border-primary/35 dark:bg-card"
                 >
-                  <div className="relative h-72 bg-white">
-                    {item.thumbnailUrl ? (
-                      <Image
-                        src={item.thumbnailUrl}
-                        alt={item.title}
-                        fill
-                        unoptimized
-                        className="object-contain object-center"
-                      />
-                    ) : (
-                      <div
-                        className="absolute inset-0"
-                        style={{
-                          background:
-                            item.type === "saved-setup"
-                              ? "linear-gradient(135deg, rgba(15,23,42,0.95), rgba(8,145,178,0.80))"
-                              : "linear-gradient(135deg, rgba(88,28,135,0.92), rgba(244,114,182,0.75))",
-                        }}
-                      />
-                    )}
-                    <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/82 via-black/40 to-transparent p-5 text-white">
-                      <div className="flex items-end justify-between gap-4">
-                        <div className="pb-0.5">
-                          <div className="line-clamp-2 text-2xl font-semibold leading-tight">
-                            {item.title}
+                  <Link
+                    href={
+                      item.type === "saved-setup"
+                        ? `/my-design/setup/${item.id}`
+                        : `/my-design/component/${item.id}`
+                    }
+                    className="block"
+                  >
+                    <div className="relative h-72 bg-white">
+                      {item.thumbnailUrl ? (
+                        <Image
+                          src={item.thumbnailUrl}
+                          alt={item.title}
+                          fill
+                          unoptimized
+                          className="object-contain object-center"
+                        />
+                      ) : (
+                        <div
+                          className="absolute inset-0"
+                          style={{
+                            background:
+                              item.type === "saved-setup"
+                                ? "linear-gradient(135deg, rgba(15,23,42,0.95), rgba(8,145,178,0.80))"
+                                : "linear-gradient(135deg, rgba(88,28,135,0.92), rgba(244,114,182,0.75))",
+                          }}
+                        />
+                      )}
+                      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/82 via-black/40 to-transparent p-5 text-white">
+                        <div className="flex items-end justify-between gap-4">
+                          <div className="pb-0.5">
+                            <div className="line-clamp-2 text-2xl font-semibold leading-tight">
+                              {item.title}
+                            </div>
+                            <div className="mt-2 text-sm text-white/80">{item.status}</div>
                           </div>
-                          <div className="mt-2 text-sm text-white/80">{item.status}</div>
-                        </div>
-                        <div className="flex shrink-0 items-center gap-2">
-                          {item.canUnpublish ? (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              disabled={isPending || activeItemId === item.id}
-                              className="border-white/15 bg-black/60 text-white hover:bg-black"
-                              onClick={() =>
-                                startTransition(() => {
-                                  void unpublishComponentDraft(item.id).catch(
-                                    (error: unknown) => {
-                                      setFeedback(
-                                        error instanceof Error
-                                          ? error.message
-                                          : "Failed to unpublish component."
-                                      );
-                                    }
-                                  );
-                                })
-                              }
-                            >
-                              Unpublish
-                            </Button>
-                          ) : null}
-                          <Button
-                            size="sm"
-                            asChild
-                            className="border-white/10 bg-black/80 text-white hover:bg-black"
-                          >
-                            <Link href={item.editorHref}>
-                              <HugeiconsIcon
-                                icon={
-                                  item.type === "saved-setup"
-                                    ? BookBookmark01Icon
-                                    : PaintBrush02Icon
-                                }
-                                strokeWidth={2}
-                                data-icon="inline-start"
-                              />
-                              {item.type === "saved-setup" ? "Open Builder" : "Open Editor"}
-                            </Link>
-                          </Button>
                         </div>
                       </div>
                     </div>
-                  </div>
+                  </Link>
+                  {item.canUnpublish ? (
+                    <div className="border-t border-border/70 px-4 py-3">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={isPending || activeItemId === item.id}
+                        onClick={() =>
+                          startTransition(() => {
+                            void unpublishComponentDraft(item.id).catch(
+                              (error: unknown) => {
+                                setFeedback(
+                                  error instanceof Error
+                                    ? error.message
+                                    : "Failed to unpublish component."
+                                );
+                              }
+                            );
+                          })
+                        }
+                      >
+                        Unpublish
+                      </Button>
+                    </div>
+                  ) : null}
                 </div>
               ))}
 

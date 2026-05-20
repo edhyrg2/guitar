@@ -37,6 +37,8 @@ model User {
   updatedAt       DateTime  @updatedAt
   customComponentDrafts CustomComponentDraft[]
   builderSavedSetups   BuilderSavedSetup[]
+  wiringTemplateLoves  WiringTemplateLove[]
+  wiringTemplateSaves  WiringTemplateSave[]
 
   @@index([email])
   @@index([level])
@@ -455,6 +457,9 @@ model WiringTemplate {
   sourceType            String?             @map("source_type")
   sourceUrl             String?             @map("source_url")
   createdBy             String              @map("created_by")
+  viewCount             Int                 @default(0) @map("view_count")
+  loveCount             Int                 @default(0) @map("love_count")
+  saveCount             Int                 @default(0) @map("save_count")
   createdAt             DateTime            @default(now()) @map("created_at")
   updatedAt             DateTime            @updatedAt @map("updated_at")
   pickupConfiguration   PickupConfiguration @relation(fields: [pickupConfigurationId], references: [id], onDelete: Restrict)
@@ -463,12 +468,42 @@ model WiringTemplate {
   diagramSources        DiagramSource[]
   components            WiringTemplateComponent[]
   connections           WiringTemplateConnection[]
+  loves                 WiringTemplateLove[]
+  saves                 WiringTemplateSave[]
 
   @@index([name])
   @@index([pickupConfigurationId])
   @@index([switchTypeId])
   @@index([isVerified])
   @@map("wiring_templates")
+}
+
+model WiringTemplateLove {
+  id               String         @id @default(cuid())
+  userId           String         @map("user_id")
+  wiringTemplateId String         @map("wiring_template_id")
+  createdAt        DateTime       @default(now()) @map("created_at")
+  user             User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  wiringTemplate   WiringTemplate @relation(fields: [wiringTemplateId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, wiringTemplateId])
+  @@index([userId])
+  @@index([wiringTemplateId])
+  @@map("wiring_template_loves")
+}
+
+model WiringTemplateSave {
+  id               String         @id @default(cuid())
+  userId           String         @map("user_id")
+  wiringTemplateId String         @map("wiring_template_id")
+  createdAt        DateTime       @default(now()) @map("created_at")
+  user             User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  wiringTemplate   WiringTemplate @relation(fields: [wiringTemplateId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, wiringTemplateId])
+  @@index([userId])
+  @@index([wiringTemplateId])
+  @@map("wiring_template_saves")
 }
 
 model DiagramSource {
