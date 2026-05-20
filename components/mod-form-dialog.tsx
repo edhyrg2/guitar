@@ -11,6 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { AppSelect } from "@/components/ui/app-select";
 import { Input } from "@/components/ui/input";
 import { type ModInput, type ModRow } from "@/lib/mod-types";
 
@@ -149,53 +150,57 @@ function ModFormDialogContent({
         </label>
         <label className="flex flex-col gap-2">
           <span className="text-xs font-medium">Requires Push Pull</span>
-          <select
+          <AppSelect
             value={form.requiresPushPull ? "true" : "false"}
-            onChange={(event) =>
-              updateField("requiresPushPull", event.target.value === "true")
+            onValueChange={(value) =>
+              updateField("requiresPushPull", value === "true")
             }
-            className="h-9 rounded-md border border-input bg-input/20 px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 dark:bg-input/30"
-          >
-            <option value="false">No</option>
-            <option value="true">Yes</option>
-          </select>
+            className="h-9 px-3 text-sm"
+            options={[
+              { value: "false", label: "No" },
+              { value: "true", label: "Yes" },
+            ]}
+          />
         </label>
         <label className="flex flex-col gap-2">
           <span className="text-xs font-medium">Requires Mini Toggle</span>
-          <select
+          <AppSelect
             value={form.requiresMiniToggle ? "true" : "false"}
-            onChange={(event) =>
-              updateField("requiresMiniToggle", event.target.value === "true")
+            onValueChange={(value) =>
+              updateField("requiresMiniToggle", value === "true")
             }
-            className="h-9 rounded-md border border-input bg-input/20 px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 dark:bg-input/30"
-          >
-            <option value="false">No</option>
-            <option value="true">Yes</option>
-          </select>
+            className="h-9 px-3 text-sm"
+            options={[
+              { value: "false", label: "No" },
+              { value: "true", label: "Yes" },
+            ]}
+          />
         </label>
         <label className="flex flex-col gap-2">
           <span className="text-xs font-medium">Requires Special Switch</span>
-          <select
+          <AppSelect
             value={form.requiresSpecialSwitch ? "true" : "false"}
-            onChange={(event) =>
-              updateField("requiresSpecialSwitch", event.target.value === "true")
+            onValueChange={(value) =>
+              updateField("requiresSpecialSwitch", value === "true")
             }
-            className="h-9 rounded-md border border-input bg-input/20 px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 dark:bg-input/30"
-          >
-            <option value="false">No</option>
-            <option value="true">Yes</option>
-          </select>
+            className="h-9 px-3 text-sm"
+            options={[
+              { value: "false", label: "No" },
+              { value: "true", label: "Yes" },
+            ]}
+          />
         </label>
         <label className="flex flex-col gap-2">
           <span className="text-xs font-medium">Active</span>
-          <select
+          <AppSelect
             value={form.isActive ? "true" : "false"}
-            onChange={(event) => updateField("isActive", event.target.value === "true")}
-            className="h-9 rounded-md border border-input bg-input/20 px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 dark:bg-input/30"
-          >
-            <option value="true">Active</option>
-            <option value="false">Inactive</option>
-          </select>
+            onValueChange={(value) => updateField("isActive", value === "true")}
+            className="h-9 px-3 text-sm"
+            options={[
+              { value: "true", label: "Active" },
+              { value: "false", label: "Inactive" },
+            ]}
+          />
         </label>
         <label className="flex flex-col gap-2 sm:col-span-2">
           <span className="text-xs font-medium">Description</span>

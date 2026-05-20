@@ -353,6 +353,7 @@ export function EditorShell({ initialTarget = null }: EditorShellProps) {
 
       try {
         const document = serializeEditorDocument(objects, background, connectionPoints);
+        const thumbnailExport = createPngExport();
         const response = await fetch(
           effectiveMode === "update" && effectiveDraftId
             ? `/api/custom-component-drafts/${effectiveDraftId}`
@@ -365,6 +366,7 @@ export function EditorShell({ initialTarget = null }: EditorShellProps) {
             body: JSON.stringify({
               name,
               description: description || null,
+              thumbnailDataUrl: thumbnailExport?.url ?? null,
               document,
             }),
           }
@@ -410,6 +412,7 @@ export function EditorShell({ initialTarget = null }: EditorShellProps) {
       documentSnapshot,
       markSnapshotAsSaved,
       connectionPoints,
+      createPngExport,
       objects,
       pendingAutosaveEnable,
       persistDraftListEntry,
@@ -922,6 +925,7 @@ export function EditorShell({ initialTarget = null }: EditorShellProps) {
         const formData = new FormData();
 
         formData.append("publishType", value.publishType);
+        formData.append("draftId", activeDraftId ?? "");
         formData.append("ownerType", initialTarget?.ownerType ?? "");
         formData.append("ownerId", initialTarget?.ownerId ?? "");
         formData.append("assetSlug", value.assetSlug ?? "");
@@ -992,6 +996,7 @@ export function EditorShell({ initialTarget = null }: EditorShellProps) {
       background,
       connectionPoints,
       createPngExport,
+      activeDraftId,
       initialTarget,
       objects,
     ]

@@ -2,6 +2,7 @@
 
 import * as React from "react";
 
+import { AppSelect } from "@/components/ui/app-select";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -40,6 +41,7 @@ const PUBLISH_TYPE_OPTIONS: Array<{ value: PublishType; label: string }> = [
   { value: "capacitor", label: "Capacitor" },
   { value: "resistor", label: "Resistor" },
   { value: "pickup-type", label: "Pickup Type" },
+  { value: "output-jack", label: "Output Jack" },
   { value: "mod", label: "Accessory / Mod" },
 ];
 
@@ -100,6 +102,15 @@ function createInitialState(
       name: normalizedName,
       slug: suggestedSlug || "",
       coilCount: "",
+      description: "",
+      isActive: true,
+    },
+    outputJack: {
+      name: normalizedName,
+      slug: suggestedSlug || "",
+      jackType: "Mono",
+      mountingStyle: "",
+      conductorCount: Math.max(connectionPointCount, 2),
       description: "",
       isActive: true,
     },
@@ -169,6 +180,16 @@ function createInitialState(
     };
   }
 
+  if (publishType === "output-jack") {
+    return {
+      ...baseState,
+      outputJack: {
+        ...baseState.outputJack,
+        ...initialPayload,
+      },
+    };
+  }
+
   return {
     ...baseState,
     mod: {
@@ -201,12 +222,6 @@ export function PublishDialog({
   const [submitting, setSubmitting] = React.useState(false);
   const [submitError, setSubmitError] = React.useState<string | null>(null);
 
-  React.useEffect(() => {
-    if (!open) {
-      setSubmitError(null);
-    }
-  }, [open]);
-
   function updateState<Key extends keyof typeof state>(
     key: Key,
     value: (typeof state)[Key]
@@ -215,7 +230,14 @@ export function PublishDialog({
   }
 
   function updateNestedState<
-    Key extends "switchType" | "potType" | "capacitor" | "resistor" | "pickupType" | "mod",
+    Key extends
+      | "switchType"
+      | "potType"
+      | "capacitor"
+      | "resistor"
+      | "pickupType"
+      | "outputJack"
+      | "mod",
     Field extends keyof (typeof state)[Key],
   >(key: Key, field: Field, value: (typeof state)[Key][Field]) {
     setState((current) => ({
@@ -243,6 +265,8 @@ export function PublishDialog({
                 ? state.resistor
                 : state.publishType === "pickup-type"
                   ? state.pickupType
+                  : state.publishType === "output-jack"
+                    ? state.outputJack
                   : state.mod;
 
       await onSubmit({
@@ -272,10 +296,21 @@ export function PublishDialog({
       state.resistor.valueLabel.trim() &&
       state.resistor.valueOhm > 0) ||
     (state.publishType === "pickup-type" && state.pickupType.name.trim()) ||
+    (state.publishType === "output-jack" &&
+      state.outputJack.name.trim() &&
+      state.outputJack.conductorCount > 0) ||
     (state.publishType === "mod" && state.mod.name.trim());
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen) {
+          setSubmitError(null);
+        }
+        onOpenChange(nextOpen);
+      }}
+    >
       <DialogContent className="max-w-3xl">
         <DialogHeader>
           <DialogTitle>Publish Custom Component</DialogTitle>
@@ -294,20 +329,16 @@ export function PublishDialog({
         <div className="grid gap-4 px-6 pb-4 sm:grid-cols-2">
           <label className="flex flex-col gap-2">
             <span className="text-xs font-medium">Component Type</span>
-            <select
+            <AppSelect
               value={state.publishType}
-              onChange={(event) =>
-                updateState("publishType", event.target.value as PublishType)
-              }
+              onValueChange={(value) => updateState("publishType", value as PublishType)}
               disabled={Boolean(initialTarget)}
-              className="h-9 rounded-md border border-input bg-input/20 px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 dark:bg-input/30"
-            >
-              {PUBLISH_TYPE_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
+              className="h-9 px-3 text-sm"
+              options={PUBLISH_TYPE_OPTIONS.map((option) => ({
+                value: option.value,
+                label: option.label,
+              }))}
+            />
           </label>
           <label className="flex flex-col gap-2">
             <span className="text-xs font-medium">Asset Slug</span>
@@ -580,6 +611,64 @@ export function PublishDialog({
                   value={state.pickupType.coilCount}
                   onChange={(event) =>
                     updateNestedState("pickupType", "coilCount", event.target.value)
+                  }
+                />
+              </label>
+            </>
+          ) : null}
+
+          {state.publishType === "output-jack" ? (
+            <>
+              <label className="flex flex-col gap-2 sm:col-span-2">
+                <span className="text-xs font-medium">Name</span>
+                <Input
+                  value={state.outputJack.name}
+                  onChange={(event) =>
+                    updateNestedState("outputJack", "name", event.target.value)
+                  }
+                />
+              </label>
+              <label className="flex flex-col gap-2">
+                <span className="text-xs font-medium">Slug</span>
+                <Input
+                  value={state.outputJack.slug}
+                  onChange={(event) =>
+                    updateNestedState("outputJack", "slug", event.target.value)
+                  }
+                />
+              </label>
+              <label className="flex flex-col gap-2">
+                <span className="text-xs font-medium">Jack Type</span>
+                <Input
+                  value={state.outputJack.jackType}
+                  onChange={(event) =>
+                    updateNestedState("outputJack", "jackType", event.target.value)
+                  }
+                  placeholder="Mono, Stereo, TRS"
+                />
+              </label>
+              <label className="flex flex-col gap-2">
+                <span className="text-xs font-medium">Mounting Style</span>
+                <Input
+                  value={state.outputJack.mountingStyle}
+                  onChange={(event) =>
+                    updateNestedState("outputJack", "mountingStyle", event.target.value)
+                  }
+                  placeholder="Side mount"
+                />
+              </label>
+              <label className="flex flex-col gap-2">
+                <span className="text-xs font-medium">Conductor Count</span>
+                <Input
+                  type="number"
+                  min="1"
+                  value={state.outputJack.conductorCount}
+                  onChange={(event) =>
+                    updateNestedState(
+                      "outputJack",
+                      "conductorCount",
+                      Number(event.target.value || 0)
+                    )
                   }
                 />
               </label>

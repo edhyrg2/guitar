@@ -11,6 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { AppSelect } from "@/components/ui/app-select";
 import { Input } from "@/components/ui/input";
 import {
   type WiringTemplateInput,
@@ -189,33 +190,27 @@ function WiringTemplateFormDialogContent({
         </label>
         <label className="flex flex-col gap-2">
           <span className="text-xs font-medium">Pickup Configuration</span>
-          <select
+          <AppSelect
             value={form.pickupConfigurationId}
-            onChange={(event) =>
-              updateField("pickupConfigurationId", event.target.value)
-            }
-            className="h-9 rounded-md border border-input bg-input/20 px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 dark:bg-input/30"
-          >
-            {pickupConfigurationOptions.map((option) => (
-              <option key={option.id} value={option.id}>
-                {option.name}
-              </option>
-            ))}
-          </select>
+            onValueChange={(value) => updateField("pickupConfigurationId", value)}
+            className="h-9 px-3 text-sm"
+            options={pickupConfigurationOptions.map((option) => ({
+              value: option.id,
+              label: option.name,
+            }))}
+          />
         </label>
         <label className="flex flex-col gap-2">
           <span className="text-xs font-medium">Switch Type</span>
-          <select
+          <AppSelect
             value={form.switchTypeId}
-            onChange={(event) => updateField("switchTypeId", event.target.value)}
-            className="h-9 rounded-md border border-input bg-input/20 px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 dark:bg-input/30"
-          >
-            {switchTypeOptions.map((option) => (
-              <option key={option.id} value={option.id}>
-                {option.name}
-              </option>
-            ))}
-          </select>
+            onValueChange={(value) => updateField("switchTypeId", value)}
+            className="h-9 px-3 text-sm"
+            options={switchTypeOptions.map((option) => ({
+              value: option.id,
+              label: option.name,
+            }))}
+          />
         </label>
         <label className="flex flex-col gap-2">
           <span className="text-xs font-medium">Volume Count</span>
@@ -299,16 +294,15 @@ function WiringTemplateFormDialogContent({
         </label>
         <label className="flex flex-col gap-2">
           <span className="text-xs font-medium">Verified</span>
-          <select
+          <AppSelect
             value={form.isVerified ? "true" : "false"}
-            onChange={(event) =>
-              updateField("isVerified", event.target.value === "true")
-            }
-            className="h-9 rounded-md border border-input bg-input/20 px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 dark:bg-input/30"
-          >
-            <option value="false">No</option>
-            <option value="true">Yes</option>
-          </select>
+            onValueChange={(value) => updateField("isVerified", value === "true")}
+            className="h-9 px-3 text-sm"
+            options={[
+              { value: "false", label: "No" },
+              { value: "true", label: "Yes" },
+            ]}
+          />
         </label>
       </div>
 

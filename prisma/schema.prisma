@@ -24,6 +24,13 @@ model User {
   passwordHash    String
   level           UserLevel @default(USER)
   photoUrl        String?
+  profileBio      String?   @map("profile_bio")
+  location        String?
+  websiteUrl      String?   @map("website_url")
+  facebookUrl     String?   @map("facebook_url")
+  instagramUrl    String?   @map("instagram_url")
+  youtubeUrl      String?   @map("youtube_url")
+  xUrl            String?   @map("x_url")
   isActive        Boolean   @default(true)
   emailVerifiedAt DateTime?
   createdAt       DateTime  @default(now())
@@ -299,6 +306,28 @@ model Mod {
   @@map("mods")
 }
 
+model OutputJack {
+  id                 String   @id @default(cuid())
+  name               String
+  slug               String?  @unique
+  jackType           String?  @map("jack_type")
+  mountingStyle      String?  @map("mounting_style")
+  conductorCount     Int?     @map("conductor_count")
+  description        String?
+  svgUrl             String?  @map("svg_url")
+  thumbnailUrl       String?  @map("thumbnail_url")
+  width              Int?
+  height             Int?
+  anchorPointsJson   Json?    @map("anchor_points_json")
+  editorDocumentJson Json?    @map("editor_document_json")
+  styleType          String?  @map("style_type")
+  isActive           Boolean  @default(true) @map("is_active")
+
+  @@index([name])
+  @@index([isActive])
+  @@map("output_jacks")
+}
+
 model ComponentAsset {
   id               String   @id @default(cuid())
   ownerType        String?  @map("owner_type")
@@ -315,6 +344,7 @@ model ComponentAsset {
   styleType        String?  @map("style_type")
   isActive         Boolean  @default(true) @map("is_active")
   connectionPoints ComponentConnectionPoint[]
+  publishedDrafts  CustomComponentDraft[]
   templateComponents WiringTemplateComponent[]
 
   @@index([name])
@@ -331,15 +361,26 @@ model CustomComponentDraft {
   name         String
   slug         String?  @unique
   description  String?
+  thumbnailUrl String?  @map("thumbnail_url")
+  status       CustomComponentDraftStatus @default(DRAFT)
+  publishedComponentAssetId String? @map("published_component_asset_id")
   documentJson Json     @map("document_json")
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
   user         User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+  publishedComponentAsset ComponentAsset? @relation(fields: [publishedComponentAssetId], references: [id], onDelete: SetNull)
 
   @@index([userId])
   @@index([name])
   @@index([updatedAt])
+  @@index([publishedComponentAssetId])
   @@map("custom_component_drafts")
+}
+
+enum CustomComponentDraftStatus {
+  DRAFT
+  PUBLISHED
+  UNPUBLISHED
 }
 
 model BuilderSavedSetup {

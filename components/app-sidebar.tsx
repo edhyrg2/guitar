@@ -66,6 +66,7 @@ type SidebarItem =
 const primaryItems: SidebarItem[] = [
   { title: "Overview", href: "/", icon: DashboardSquare01Icon, badge: "Live" },
   { title: "Explore Wiring", href: "/explore", icon: ViewIcon, badge: "New" },
+  { title: "My Design", href: "/my-design", icon: UserAccountIcon, badge: "Mine" },
   { title: "Custom Builder", href: "/custom-builder", icon: PaintBrush02Icon },
   { title: "Custom Component", href: "/custom-component", icon: PaintBrush02Icon },
   { title: "Saved Setups", href: "#", icon: BookBookmark01Icon },
@@ -286,6 +287,17 @@ export function AppSidebar({ activePath = "/" }: AppSidebarProps) {
                         <Link href="/master-data/pot-types">
                           <HugeiconsIcon icon={VolumeHighIcon} strokeWidth={2} />
                           <span>Potentiometer</span>
+                        </Link>
+                      </SidebarMenuSubButton>
+                    </SidebarMenuSubItem>
+                    <SidebarMenuSubItem>
+                      <SidebarMenuSubButton
+                        asChild
+                        isActive={activePath === "/master-data/output-jacks"}
+                      >
+                        <Link href="/master-data/output-jacks">
+                          <HugeiconsIcon icon={ElectricPlugsIcon} strokeWidth={2} />
+                          <span>Output Jack</span>
                         </Link>
                       </SidebarMenuSubButton>
                     </SidebarMenuSubItem>

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
-import { Prisma } from "@prisma/client";
+import { CustomComponentDraftStatus, Prisma } from "@prisma/client";
 
+import { getSafeServerSession } from "@/lib/auth-session";
 import { saveComponentAssetImages } from "@/lib/component-asset-upload";
 import type { PublishType } from "@/lib/custom-component-publish-target-types";
 import { getPrismaClient } from "@/lib/prisma";
@@ -49,7 +50,7 @@ async function ensureUniqueComponentAssetSlug(
 
 async function ensureUniqueOwnerSlug(params: {
   tx: Prisma.TransactionClient;
-  model: "switchType" | "pickupType" | "mod";
+  model: "switchType" | "pickupType" | "outputJack" | "mod";
   baseSlug: string | null;
   currentOwnerId: string | null;
 }) {
@@ -80,6 +81,11 @@ async function ensureUniqueOwnerSlug(params: {
               where: { slug: candidate },
               select: { id: true },
             })
+          : model === "outputJack"
+            ? await tx.outputJack.findUnique({
+                where: { slug: candidate },
+                select: { id: true },
+              })
           : await tx.mod.findUnique({
               where: { slug: candidate },
               select: { id: true },
@@ -199,6 +205,8 @@ function getComponentTypeLabel(publishType: PublishType) {
       return "Resistor";
     case "pickup-type":
       return "Pickup Type";
+    case "output-jack":
+      return "Output Jack";
     case "mod":
       return "Accessory / Mod";
   }
@@ -383,6 +391,48 @@ async function upsertOwner(
         });
   }
 
+  if (publishType === "output-jack") {
+    const name = String(payload.name ?? "").trim();
+
+    if (!name) {
+      throw new Error("Output jack requires name.");
+    }
+
+    const ownerSlug = await ensureUniqueOwnerSlug({
+      tx,
+      model: "outputJack",
+      baseSlug: String(payload.slug ?? "").trim() || null,
+      currentOwnerId: editingOwnerId,
+    });
+
+    const conductorCount = parseNullableNumber(String(payload.conductorCount ?? "")) ?? 0;
+
+    if (conductorCount < 1) {
+      throw new Error("Output jack requires conductor count.");
+    }
+
+    const data = {
+      name,
+      slug: ownerSlug,
+      jackType: String(payload.jackType ?? "").trim() || null,
+      mountingStyle: String(payload.mountingStyle ?? "").trim() || null,
+      conductorCount,
+      description: String(payload.description ?? "").trim() || null,
+      isActive: payload.isActive === false ? false : true,
+    };
+
+    return editingOwnerId
+      ? await tx.outputJack.update({
+          where: { id: editingOwnerId },
+          data,
+          select: { id: true, name: true, slug: true },
+        })
+      : await tx.outputJack.create({
+          data,
+          select: { id: true, name: true, slug: true },
+        });
+  }
+
   const name = String(payload.name ?? "").trim();
 
   if (!name) {
@@ -513,6 +563,22 @@ async function syncOwnerVisualData(
     return;
   }
 
+  if (publishType === "output-jack") {
+    await tx.outputJack.update({
+      where: { id: ownerId },
+      data: {
+        svgUrl: data.svgUrl,
+        thumbnailUrl: data.thumbnailUrl,
+        width: data.width,
+        height: data.height,
+        anchorPointsJson: data.anchorPointsJson,
+        editorDocumentJson: data.editorDocumentJson,
+        styleType: data.styleType,
+      },
+    });
+    return;
+  }
+
   await tx.mod.update({
     where: { id: ownerId },
     data: {
@@ -528,6 +594,12 @@ async function syncOwnerVisualData(
 }
 
 export async function POST(request: Request) {
+  const session = await getSafeServerSession();
+
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const prisma = await getPrismaClient();
 
   if (!prisma) {
@@ -551,6 +623,7 @@ export async function POST(request: Request) {
   const styleType = String(formData.get("styleType") ?? "").trim() || null;
   const ownerType = String(formData.get("ownerType") ?? "").trim() || null;
   const ownerId = String(formData.get("ownerId") ?? "").trim() || null;
+  const draftId = String(formData.get("draftId") ?? "").trim() || null;
   const requestedSlug = String(formData.get("assetSlug") ?? "").trim() || null;
   const width = parseNullableNumber(String(formData.get("width") ?? ""));
   const height = parseNullableNumber(String(formData.get("height") ?? ""));
@@ -563,6 +636,7 @@ export async function POST(request: Request) {
     publishType !== "capacitor" &&
     publishType !== "resistor" &&
     publishType !== "pickup-type" &&
+    publishType !== "output-jack" &&
     publishType !== "mod"
   ) {
     return NextResponse.json({ error: "Unsupported publish type." }, { status: 400 });
@@ -726,6 +800,19 @@ export async function POST(request: Request) {
         await tx.switchType.update({
           where: { id: owner.id },
           data: { svgAssetId: componentAsset.id },
+        });
+      }
+
+      if (draftId) {
+        await tx.customComponentDraft.updateMany({
+          where: {
+            id: draftId,
+            userId: session.user.id,
+          },
+          data: {
+            publishedComponentAssetId: componentAsset.id,
+            status: CustomComponentDraftStatus.PUBLISHED,
+          },
         });
       }
 

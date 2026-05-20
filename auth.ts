@@ -91,12 +91,16 @@ export const authOptions: NextAuthOptions = {
     }),
   ],
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger, session }) {
       if (user) {
         token.id = user.id;
         token.level = user.level as PrismaUserLevel;
         token.isActive = user.isActive as boolean;
         token.photo = user.photo as string;
+      }
+
+      if (trigger === "update" && typeof session?.user?.photo === "string") {
+        token.photo = session.user.photo;
       }
 
       return token;

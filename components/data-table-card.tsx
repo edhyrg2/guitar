@@ -13,6 +13,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { AppSelect } from "@/components/ui/app-select";
 import { Input } from "@/components/ui/input";
 import {
   Table,
@@ -118,20 +119,18 @@ export function DataTableCard<T>({
             Showing {rangeStart}-{rangeEnd} of {filteredRows.length} {summaryLabel}
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <select
-              value={pageSize}
-              onChange={(event) => {
-                setPageSize(Number(event.target.value));
+            <AppSelect
+              value={String(pageSize)}
+              onValueChange={(value) => {
+                setPageSize(Number(value));
                 setPage(1);
               }}
-              className="h-7 rounded-md border border-input bg-input/20 px-2 text-xs outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 dark:bg-input/30"
-            >
-              {pageSizes.map((size) => (
-                <option key={size} value={size}>
-                  {size} / page
-                </option>
-              ))}
-            </select>
+              className="h-7 px-2 text-xs"
+              options={pageSizes.map((size) => ({
+                value: String(size),
+                label: `${size} / page`,
+              }))}
+            />
             <Button
               variant="outline"
               size="sm"

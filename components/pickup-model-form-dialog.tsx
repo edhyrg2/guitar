@@ -11,6 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { AppSelect } from "@/components/ui/app-select";
 import { Input } from "@/components/ui/input";
 import {
   type PickupModelInput,
@@ -161,31 +162,27 @@ function PickupModelFormDialogContent({
       <div className="grid gap-4 px-6 pb-6 sm:grid-cols-2">
         <label className="flex flex-col gap-2">
           <span className="text-xs font-medium">Pickup Brand</span>
-          <select
+          <AppSelect
             value={form.pickupBrandId}
-            onChange={(event) => updateField("pickupBrandId", event.target.value)}
-            className="h-9 rounded-md border border-input bg-input/20 px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 dark:bg-input/30"
-          >
-            {brandOptions.map((option) => (
-              <option key={option.id} value={option.id}>
-                {option.name}
-              </option>
-            ))}
-          </select>
+            onValueChange={(value) => updateField("pickupBrandId", value)}
+            className="h-9 px-3 text-sm"
+            options={brandOptions.map((option) => ({
+              value: option.id,
+              label: option.name,
+            }))}
+          />
         </label>
         <label className="flex flex-col gap-2">
           <span className="text-xs font-medium">Pickup Type</span>
-          <select
+          <AppSelect
             value={form.pickupTypeId}
-            onChange={(event) => updateField("pickupTypeId", event.target.value)}
-            className="h-9 rounded-md border border-input bg-input/20 px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 dark:bg-input/30"
-          >
-            {pickupTypeOptions.map((option) => (
-              <option key={option.id} value={option.id}>
-                {option.name}
-              </option>
-            ))}
-          </select>
+            onValueChange={(value) => updateField("pickupTypeId", value)}
+            className="h-9 px-3 text-sm"
+            options={pickupTypeOptions.map((option) => ({
+              value: option.id,
+              label: option.name,
+            }))}
+          />
         </label>
         <label className="flex flex-col gap-2 sm:col-span-2">
           <span className="text-xs font-medium">Name</span>
@@ -265,16 +262,17 @@ function PickupModelFormDialogContent({
         </label>
         <label className="flex flex-col gap-2">
           <span className="text-xs font-medium">Active</span>
-          <select
+          <AppSelect
             value={form.isActivePickup ? "true" : "false"}
-            onChange={(event) =>
-              updateField("isActivePickup", event.target.value === "true")
+            onValueChange={(value) =>
+              updateField("isActivePickup", value === "true")
             }
-            className="h-9 rounded-md border border-input bg-input/20 px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 dark:bg-input/30"
-          >
-            <option value="true">Active</option>
-            <option value="false">Inactive</option>
-          </select>
+            className="h-9 px-3 text-sm"
+            options={[
+              { value: "true", label: "Active" },
+              { value: "false", label: "Inactive" },
+            ]}
+          />
         </label>
       </div>
 

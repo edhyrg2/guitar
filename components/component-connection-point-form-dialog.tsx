@@ -3,6 +3,7 @@
 import * as React from "react";
 import Image from "next/image";
 
+import { AppSelect } from "@/components/ui/app-select";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -226,21 +227,19 @@ function ComponentConnectionPointFormDialogContent({
       <div className="grid gap-4 px-6 pb-6 sm:grid-cols-2">
         <label className="flex flex-col gap-2 sm:col-span-2">
           <span className="text-xs font-medium">Component Asset</span>
-          <select
+          <AppSelect
             value={form.componentAssetId}
-            onChange={(event) => {
+            onValueChange={(value) => {
               setImageSize(null);
               setImageDisplayBox(null);
-              updateField("componentAssetId", event.target.value);
+              updateField("componentAssetId", value);
             }}
-            className="h-9 rounded-md border border-input bg-input/20 px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 dark:bg-input/30"
-          >
-            {componentAssetOptions.map((option) => (
-              <option key={option.id} value={option.id}>
-                {option.name}
-              </option>
-            ))}
-          </select>
+            className="h-9 px-3 text-sm"
+            options={componentAssetOptions.map((option) => ({
+              value: option.id,
+              label: option.name,
+            }))}
+          />
         </label>
         <div className="flex flex-col gap-3 sm:col-span-2">
           <div className="flex items-center justify-between gap-3">

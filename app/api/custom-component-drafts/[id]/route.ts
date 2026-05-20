@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
-import { Prisma } from "@prisma/client";
+import { CustomComponentDraftStatus, Prisma } from "@prisma/client";
 
 import { getSafeServerSession } from "@/lib/auth-session";
+import { saveCustomComponentDraftThumbnail } from "@/lib/custom-component-draft-thumbnail-upload";
 import { normalizeEditorDocument } from "@/lib/custom-component-editor-utils";
 import { getPrismaClient } from "@/lib/prisma";
 
@@ -9,6 +10,7 @@ type CustomComponentDraftBody = {
   name?: string;
   slug?: string | null;
   description?: string | null;
+  thumbnailDataUrl?: string | null;
   document?: unknown;
 };
 
@@ -17,6 +19,9 @@ function formatDraftResponse(draft: {
   name: string;
   slug: string | null;
   description: string | null;
+  thumbnailUrl: string | null;
+  status: CustomComponentDraftStatus;
+  publishedComponentAssetId: string | null;
   documentJson: Prisma.JsonValue;
   createdAt: Date;
   updatedAt: Date;
@@ -69,6 +74,12 @@ export async function PUT(
 
   try {
     const document = normalizeEditorDocument(body.document);
+    const thumbnailUrl = body.thumbnailDataUrl?.trim()
+      ? await saveCustomComponentDraftThumbnail(body.thumbnailDataUrl, {
+          name,
+          slug: body.slug?.trim() || null,
+        })
+      : undefined;
 
     const draft = await prisma.customComponentDraft.update({
       where: { id },
@@ -76,6 +87,8 @@ export async function PUT(
         name,
         slug: body.slug?.trim() || null,
         description: body.description?.trim() || null,
+        ...(thumbnailUrl !== undefined ? { thumbnailUrl } : {}),
+        status: CustomComponentDraftStatus.DRAFT,
         documentJson: document as Prisma.InputJsonValue,
       },
     });

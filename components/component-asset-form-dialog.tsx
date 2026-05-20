@@ -3,6 +3,7 @@
 import * as React from "react";
 import Image from "next/image";
 
+import { AppSelect } from "@/components/ui/app-select";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -195,43 +196,42 @@ function ComponentAssetFormDialogContent({
       <div className="grid gap-4 px-6 pb-6 sm:grid-cols-2">
         <label className="flex flex-col gap-2">
           <span className="text-xs font-medium">Component Type</span>
-          <select
+          <AppSelect
             value={form.componentType}
-            onChange={(event) => {
-              const nextType = event.target.value;
+            onValueChange={(nextType) => {
               const nextGroup =
                 catalogGroups.find((group) => group.type === nextType) ?? null;
 
               updateField("componentType", nextType);
               updateField("name", nextGroup?.names[0] ?? "");
             }}
-            className="h-9 rounded-md border border-input bg-input/20 px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 dark:bg-input/30"
-          >
-            <option value="">Select component type</option>
-            {componentTypeOptions.map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
-          </select>
+            className="h-9 px-3 text-sm"
+            placeholder="Select component type"
+            emptyLabel="Select component type"
+            options={componentTypeOptions.map((option) => ({
+              value: option,
+              label: option,
+            }))}
+          />
         </label>
         <label className="flex flex-col gap-2">
           <span className="text-xs font-medium">Name</span>
-          <select
+          <AppSelect
             value={form.name}
-            onChange={(event) => updateField("name", event.target.value)}
+            onValueChange={(value) => updateField("name", value)}
             disabled={!selectedGroup}
-            className="h-9 rounded-md border border-input bg-input/20 px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30"
-          >
-            <option value="">
-              {selectedGroup ? "Select component name" : "Select component type first"}
-            </option>
-            {componentNameOptions.map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
-          </select>
+            className="h-9 px-3 text-sm"
+            placeholder={
+              selectedGroup ? "Select component name" : "Select component type first"
+            }
+            emptyLabel={
+              selectedGroup ? "Select component name" : "Select component type first"
+            }
+            options={componentNameOptions.map((option) => ({
+              value: option,
+              label: option,
+            }))}
+          />
         </label>
         <label className="flex flex-col gap-2">
           <span className="text-xs font-medium">Slug</span>
@@ -320,14 +320,15 @@ function ComponentAssetFormDialogContent({
         </label>
         <label className="flex flex-col gap-2">
           <span className="text-xs font-medium">Active</span>
-          <select
+          <AppSelect
             value={form.isActive ? "true" : "false"}
-            onChange={(event) => updateField("isActive", event.target.value === "true")}
-            className="h-9 rounded-md border border-input bg-input/20 px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 dark:bg-input/30"
-          >
-            <option value="true">Active</option>
-            <option value="false">Inactive</option>
-          </select>
+            onValueChange={(value) => updateField("isActive", value === "true")}
+            className="h-9 px-3 text-sm"
+            options={[
+              { value: "true", label: "Active" },
+              { value: "false", label: "Inactive" },
+            ]}
+          />
         </label>
       </div>
 

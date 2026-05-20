@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { signOut } from "next-auth/react";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Logout03Icon } from "@hugeicons/core-free-icons";
@@ -14,6 +15,14 @@ type AuthUserControlProps = {
   variant?: "navbar" | "sidebar";
 };
 
+function isImageSource(value: string | null | undefined) {
+  if (!value) {
+    return false;
+  }
+
+  return value.startsWith("/") || /^https?:\/\//i.test(value);
+}
+
 export function AuthUserControl({
   name,
   level,
@@ -23,8 +32,18 @@ export function AuthUserControl({
   if (variant === "sidebar") {
     return (
       <div className="flex items-center gap-2 rounded-md border border-sidebar-border/70 bg-sidebar-accent/40 px-3 py-3">
-        <div className="flex size-9 items-center justify-center rounded-md bg-sidebar-accent font-medium text-sidebar-accent-foreground">
-          {photo ?? name.slice(0, 2).toUpperCase()}
+        <div className="relative flex size-9 items-center justify-center overflow-hidden rounded-md bg-sidebar-accent font-medium text-sidebar-accent-foreground">
+          {isImageSource(photo) ? (
+            <Image
+              src={photo!}
+              alt={name}
+              fill
+              unoptimized
+              className="object-cover"
+            />
+          ) : (
+            photo ?? name.slice(0, 2).toUpperCase()
+          )}
         </div>
         <div className="min-w-0 flex-1 text-left">
           <div className="truncate text-sm font-medium">{name}</div>
@@ -51,8 +70,18 @@ export function AuthUserControl({
           "hidden items-center gap-2 rounded-md border border-border/70 bg-card px-2.5 py-1.5 sm:flex"
         )}
       >
-        <div className="flex size-8 items-center justify-center rounded-md bg-sidebar-accent font-medium text-sidebar-accent-foreground">
-          {photo ?? name.slice(0, 2).toUpperCase()}
+        <div className="relative flex size-8 items-center justify-center overflow-hidden rounded-md bg-sidebar-accent font-medium text-sidebar-accent-foreground">
+          {isImageSource(photo) ? (
+            <Image
+              src={photo!}
+              alt={name}
+              fill
+              unoptimized
+              className="object-cover"
+            />
+          ) : (
+            photo ?? name.slice(0, 2).toUpperCase()
+          )}
         </div>
         <div className="min-w-0 text-left">
           <div className="truncate text-xs font-medium">{name}</div>

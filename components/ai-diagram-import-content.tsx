@@ -24,6 +24,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { AppSelect } from "@/components/ui/app-select";
 import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
 import {
@@ -984,33 +985,29 @@ export function AiDiagramImportContent({
             </label>
             <label className="flex flex-col gap-2">
               <span className="text-xs font-medium">Pickup Configuration</span>
-              <select
+              <AppSelect
                 value={form.pickupConfigurationId}
-                onChange={(event) =>
-                  updateField("pickupConfigurationId", event.target.value)
+                onValueChange={(value) =>
+                  updateField("pickupConfigurationId", value)
                 }
-                className="h-9 rounded-md border border-input bg-input/20 px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 dark:bg-input/30"
-              >
-                {pickupConfigurations.map((option) => (
-                  <option key={option.id} value={option.id}>
-                    {option.code} - {option.name}
-                  </option>
-                ))}
-              </select>
+                className="h-9 px-3 text-sm"
+                options={pickupConfigurations.map((option) => ({
+                  value: option.id,
+                  label: `${option.code} - ${option.name}`,
+                }))}
+              />
             </label>
             <label className="flex flex-col gap-2">
               <span className="text-xs font-medium">Switch Type</span>
-              <select
+              <AppSelect
                 value={form.switchTypeId}
-                onChange={(event) => updateField("switchTypeId", event.target.value)}
-                className="h-9 rounded-md border border-input bg-input/20 px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 dark:bg-input/30"
-              >
-                {switchTypes.map((option) => (
-                  <option key={option.id} value={option.id}>
-                    {option.name}
-                  </option>
-                ))}
-              </select>
+                onValueChange={(value) => updateField("switchTypeId", value)}
+                className="h-9 px-3 text-sm"
+                options={switchTypes.map((option) => ({
+                  value: option.id,
+                  label: option.name,
+                }))}
+              />
             </label>
             <label className="flex flex-col gap-2">
               <span className="text-xs font-medium">Volume Count</span>

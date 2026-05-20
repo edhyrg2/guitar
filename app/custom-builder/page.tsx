@@ -397,7 +397,17 @@ async function getBuilderAssets(): Promise<BuilderAssetDefinition[]> {
   );
 }
 
-export default async function CustomBuilderPage() {
+type CustomBuilderPageProps = {
+  searchParams?: Promise<{
+    savedSetupId?: string;
+  }>;
+};
+
+export default async function CustomBuilderPage({
+  searchParams,
+}: CustomBuilderPageProps) {
+  const resolvedSearchParams = (await searchParams) ?? {};
+  const initialSavedSetupId = resolvedSearchParams.savedSetupId?.trim() || null;
   const [builderAssets, wireTypes, pickupConfigurationOptions, switchTypeOptions] = await Promise.all([
     getBuilderAssets(),
     getWireTypeRows(),
@@ -434,6 +444,7 @@ export default async function CustomBuilderPage() {
             wireTypes={wireTypes}
             pickupConfigurationOptions={pickupConfigurationOptions}
             switchTypeOptions={switchTypeOptions}
+            initialSavedSetupId={initialSavedSetupId}
           />
         </div>
       </SidebarInset>

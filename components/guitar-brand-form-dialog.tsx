@@ -11,6 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { AppSelect } from "@/components/ui/app-select";
 import { Input } from "@/components/ui/input";
 import { type GuitarBrandInput, type GuitarBrandRow } from "@/lib/guitar-brand-types";
 
@@ -165,14 +166,15 @@ function GuitarBrandFormDialogContent({
         </label>
         <label className="flex flex-col gap-2">
           <span className="text-xs font-medium">Active</span>
-          <select
+          <AppSelect
             value={form.isActive ? "true" : "false"}
-            onChange={(event) => updateField("isActive", event.target.value === "true")}
-            className="h-9 rounded-md border border-input bg-input/20 px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 dark:bg-input/30"
-          >
-            <option value="true">Active</option>
-            <option value="false">Inactive</option>
-          </select>
+            onValueChange={(value) => updateField("isActive", value === "true")}
+            className="h-9 px-3 text-sm"
+            options={[
+              { value: "true", label: "Active" },
+              { value: "false", label: "Inactive" },
+            ]}
+          />
         </label>
       </div>
 

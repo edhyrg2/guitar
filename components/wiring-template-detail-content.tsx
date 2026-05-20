@@ -5,6 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
+  ArrowLeft01Icon,
   Bookmark02Icon,
   CheckmarkCircle02Icon,
   DashboardSquare01Icon,
@@ -71,6 +72,17 @@ function formatTemplateDate(value: string) {
   } catch {
     return value;
   }
+}
+
+function getCreatorInitials(name: string) {
+  return (
+    name
+      .split(" ")
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase() ?? "")
+      .join("") || "U"
+  );
 }
 
 function parseComponentMetadata(value: string | null): TemplateComponentMetadata {
@@ -409,65 +421,30 @@ export function WiringTemplateDetailContent({
       />
 
       <div className="flex flex-1 flex-col gap-6 px-4 py-6 sm:px-6">
-        <section className="grid gap-6 xl:grid-cols-[240px_minmax(0,1.35fr)_280px]">
-          <Card className="border border-border/70 bg-card/90 shadow-sm">
-            <CardHeader>
-              <CardTitle>Template Summary</CardTitle>
-              <CardDescription>
-                Metadata utama untuk wiring yang sedang dibuka.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-5">
-              <div className="rounded-2xl border border-border/70 bg-muted/20 p-4">
-                <div className="mb-3 flex items-center gap-2 text-sm text-muted-foreground">
-                  <HugeiconsIcon
-                    icon={template.isVerified ? FavouriteIcon : ViewIcon}
-                    strokeWidth={2}
-                  />
-                  <span>{template.isVerified ? "Verified reference" : "Published template"}</span>
-                </div>
-                <div className="text-lg font-semibold text-foreground">{template.name}</div>
-                <div className="mt-2 text-sm leading-6 text-muted-foreground">
-                  {template.description || "Template publish tanpa deskripsi tambahan."}
-                </div>
-              </div>
-
-              <div className="flex flex-col gap-3">
-                <InfoRow label="Pickup Config" value={template.pickupConfigurationName} />
-                <InfoRow label="Switch Type" value={template.switchTypeName} />
-                <InfoRow
-                  label="Controls"
-                  value={`${template.volumeCount} Vol / ${template.toneCount} Tone`}
-                />
-                <InfoRow label="Source" value={template.sourceType ?? "-"} />
-                <InfoRow label="Difficulty" value={template.difficultyLevel ?? "-"} />
-                <InfoRow label="Created By" value={template.createdBy} />
-                <InfoRow label="Published" value={formatTemplateDate(template.createdAt)} />
-                <InfoRow label="Updated" value={formatTemplateDate(template.updatedAt)} />
-                <InfoRow label="Slug" value={template.slug ?? "-"} />
-              </div>
-            </CardContent>
-          </Card>
-
+        <section className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_280px]">
           <Card className="border border-border/70 bg-card/95 shadow-sm">
             <CardHeader className="gap-4 border-b border-border/70 pb-4">
               <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                 <div className="min-w-0">
-                  <div className="mb-2 flex items-center gap-2 text-muted-foreground">
-                    <HugeiconsIcon
-                      icon={template.isVerified ? FavouriteIcon : ViewIcon}
-                      strokeWidth={2}
-                    />
-                    <span className="text-xs">
-                      {template.isVerified ? "Verified factory reference" : "Published custom reference"}
-                    </span>
-                  </div>
+                  <Button variant="ghost" size="sm" className="mb-2 -ml-3 px-3" asChild>
+                    <Link href="/explore">
+                      <HugeiconsIcon
+                        icon={ArrowLeft01Icon}
+                        strokeWidth={2}
+                        data-icon="inline-start"
+                      />
+                      Back to Explore
+                    </Link>
+                  </Button>
                   <CardTitle className="text-2xl sm:text-4xl">{template.name}</CardTitle>
-                  <CardDescription className="mt-2">
-                    {template.pickupConfigurationName} / {template.switchTypeName} /{" "}
-                    {template.volumeCount} Vol / {template.toneCount} Tone /{" "}
-                    {template.sourceType ?? "Standard Wiring"}
-                  </CardDescription>
+                  <div className="mt-3 flex items-center gap-3">
+                    <div className="flex size-10 items-center justify-center rounded-full bg-muted text-sm font-semibold text-foreground">
+                      {getCreatorInitials(template.createdBy)}
+                    </div>
+                    <div className="min-w-0 truncate text-sm font-medium text-foreground">
+                      {template.createdBy}
+                    </div>
+                  </div>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">

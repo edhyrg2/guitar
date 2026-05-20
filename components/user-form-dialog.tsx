@@ -7,6 +7,7 @@ import {
   USER_LEVEL_OPTIONS,
   type UserRow,
 } from "@/lib/user-types";
+import { AppSelect } from "@/components/ui/app-select";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -118,35 +119,29 @@ function UserFormDialogContent({
         </label>
         <label className="flex flex-col gap-2">
           <span className="text-xs font-medium">Level</span>
-          <select
+          <AppSelect
             value={form.level}
-            onChange={(event) =>
-              updateField("level", event.target.value as UserRow["level"])
-            }
-            className="h-7 rounded-md border border-input bg-input/20 px-2 text-xs outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 dark:bg-input/30"
-          >
-            {USER_LEVEL_OPTIONS.map((level) => (
-              <option key={level} value={level}>
-                {level}
-              </option>
-            ))}
-          </select>
+            onValueChange={(value) => updateField("level", value as UserRow["level"])}
+            className="h-7 px-2 text-xs"
+            options={USER_LEVEL_OPTIONS.map((level) => ({
+              value: level,
+              label: level,
+            }))}
+          />
         </label>
         <label className="flex flex-col gap-2">
           <span className="text-xs font-medium">Status</span>
-          <select
+          <AppSelect
             value={form.activity}
-            onChange={(event) =>
-              updateField("activity", event.target.value as UserRow["activity"])
+            onValueChange={(value) =>
+              updateField("activity", value as UserRow["activity"])
             }
-            className="h-7 rounded-md border border-input bg-input/20 px-2 text-xs outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 dark:bg-input/30"
-          >
-            {USER_ACTIVITY_OPTIONS.map((activity) => (
-              <option key={activity} value={activity}>
-                {activity}
-              </option>
-            ))}
-          </select>
+            className="h-7 px-2 text-xs"
+            options={USER_ACTIVITY_OPTIONS.map((activity) => ({
+              value: activity,
+              label: activity,
+            }))}
+          />
         </label>
         <label className="flex flex-col gap-2">
           <span className="text-xs font-medium">Photo initials</span>

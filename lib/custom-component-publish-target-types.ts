@@ -6,6 +6,7 @@ export type PublishType =
   | "capacitor"
   | "resistor"
   | "pickup-type"
+  | "output-jack"
   | "mod";
 
 export type CustomComponentEditorTarget = {

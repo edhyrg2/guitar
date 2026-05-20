@@ -97,6 +97,31 @@ type WiringTemplateDelegate = {
       slug: true;
     };
   }) => Promise<{ id: string; name: string; slug: string | null }>;
+  update: (args: {
+    where: { id: string };
+    data: {
+      name: string;
+      slug: string | null;
+      description: string | null;
+      thumbnailUrl: string | null;
+      pickupConfigurationId: string;
+      switchTypeId: string;
+      volumeCount: number;
+      toneCount: number;
+      difficultyLevel: string | null;
+      diagramJson: Prisma.InputJsonValue;
+      switchLogicJson: Prisma.InputJsonValue;
+      isVerified: boolean;
+      sourceType: string;
+      sourceUrl: string | null;
+      createdBy: string;
+    };
+    select: {
+      id: true;
+      name: true;
+      slug: true;
+    };
+  }) => Promise<{ id: string; name: string; slug: string | null }>;
 };
 
 type WiringTemplateComponentDelegate = {
@@ -114,6 +139,11 @@ type WiringTemplateComponentDelegate = {
       metadataJson: Prisma.InputJsonValue;
     }>;
   }) => Promise<unknown>;
+  deleteMany: (args: {
+    where: {
+      wiringTemplateId: string;
+    };
+  }) => Promise<unknown>;
 };
 
 type WiringTemplateConnectionDelegate = {
@@ -130,6 +160,11 @@ type WiringTemplateConnectionDelegate = {
       label: string | null;
       notes: string | null;
     }>;
+  }) => Promise<unknown>;
+  deleteMany: (args: {
+    where: {
+      wiringTemplateId: string;
+    };
   }) => Promise<unknown>;
 };
 
@@ -787,30 +822,72 @@ export async function POST(request: Request) {
   try {
     const result = await prisma.$transaction(async (tx) => {
       const transactionClient = tx as unknown as PublishTransactionClient;
-      const createdTemplate = await transactionClient.wiringTemplate.create({
-        data: {
-          name,
-          slug: body.slug?.trim() || null,
-          description: body.description?.trim() || null,
-          thumbnailUrl,
-          pickupConfigurationId,
-          switchTypeId,
-          volumeCount,
-          toneCount,
-          difficultyLevel: body.difficultyLevel?.trim() || null,
-          diagramJson: createDiagramJson(document, roleMap),
-          switchLogicJson: createSwitchLogicJson(document, roleMap),
-          isVerified: Boolean(body.isVerified),
-          sourceType: body.sourceType?.trim() || "Custom Builder",
-          sourceUrl: body.sourceUrl?.trim() || null,
-          createdBy,
-        },
-        select: {
-          id: true,
-          name: true,
-          slug: true,
-        },
-      });
+      const existingPublishedTemplateId = existingSavedSetup?.publishedTemplateId ?? null;
+      const createdTemplate = existingPublishedTemplateId
+        ? await transactionClient.wiringTemplate.update({
+            where: {
+              id: existingPublishedTemplateId,
+            },
+            data: {
+              name,
+              slug: body.slug?.trim() || null,
+              description: body.description?.trim() || null,
+              thumbnailUrl,
+              pickupConfigurationId,
+              switchTypeId,
+              volumeCount,
+              toneCount,
+              difficultyLevel: body.difficultyLevel?.trim() || null,
+              diagramJson: createDiagramJson(document, roleMap),
+              switchLogicJson: createSwitchLogicJson(document, roleMap),
+              isVerified: Boolean(body.isVerified),
+              sourceType: body.sourceType?.trim() || "Custom Builder",
+              sourceUrl: body.sourceUrl?.trim() || null,
+              createdBy,
+            },
+            select: {
+              id: true,
+              name: true,
+              slug: true,
+            },
+          })
+        : await transactionClient.wiringTemplate.create({
+            data: {
+              name,
+              slug: body.slug?.trim() || null,
+              description: body.description?.trim() || null,
+              thumbnailUrl,
+              pickupConfigurationId,
+              switchTypeId,
+              volumeCount,
+              toneCount,
+              difficultyLevel: body.difficultyLevel?.trim() || null,
+              diagramJson: createDiagramJson(document, roleMap),
+              switchLogicJson: createSwitchLogicJson(document, roleMap),
+              isVerified: Boolean(body.isVerified),
+              sourceType: body.sourceType?.trim() || "Custom Builder",
+              sourceUrl: body.sourceUrl?.trim() || null,
+              createdBy,
+            },
+            select: {
+              id: true,
+              name: true,
+              slug: true,
+            },
+          });
+
+      if (existingPublishedTemplateId) {
+        await transactionClient.wiringTemplateConnection.deleteMany({
+          where: {
+            wiringTemplateId: existingPublishedTemplateId,
+          },
+        });
+        await transactionClient.wiringTemplateComponent.deleteMany({
+          where: {
+            wiringTemplateId: existingPublishedTemplateId,
+          },
+        });
+      }
 
       await transactionClient.wiringTemplateComponent.createMany({
         data: document.instances.map((instance) => ({

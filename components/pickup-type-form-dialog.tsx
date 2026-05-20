@@ -11,6 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { AppSelect } from "@/components/ui/app-select";
 import { Input } from "@/components/ui/input";
 import {
   pickupTypeOptions,
@@ -142,20 +143,17 @@ function PickupTypeFormDialogContent({
         </label>
         <label className="flex flex-col gap-2">
           <span className="text-xs font-medium">Coil Count</span>
-          <select
+          <AppSelect
             value={form.coilCount ?? ""}
-            onChange={(event) =>
-              updateField("coilCount", event.target.value || null)
-            }
-            className="h-9 rounded-md border border-input bg-input/20 px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 dark:bg-input/30"
-          >
-            <option value="">Select coil type</option>
-            {pickupTypeOptions.map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
-          </select>
+            onValueChange={(value) => updateField("coilCount", value || null)}
+            className="h-9 px-3 text-sm"
+            placeholder="Select coil type"
+            emptyLabel="Select coil type"
+            options={pickupTypeOptions.map((option) => ({
+              value: option,
+              label: option,
+            }))}
+          />
         </label>
         <label className="flex flex-col gap-2 sm:col-span-2">
           <span className="text-xs font-medium">Description</span>
@@ -169,16 +167,15 @@ function PickupTypeFormDialogContent({
         </label>
         <label className="flex flex-col gap-2">
           <span className="text-xs font-medium">Active</span>
-          <select
+          <AppSelect
             value={form.isActive ? "true" : "false"}
-            onChange={(event) =>
-              updateField("isActive", event.target.value === "true")
-            }
-            className="h-9 rounded-md border border-input bg-input/20 px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 dark:bg-input/30"
-          >
-            <option value="true">Active</option>
-            <option value="false">Inactive</option>
-          </select>
+            onValueChange={(value) => updateField("isActive", value === "true")}
+            className="h-9 px-3 text-sm"
+            options={[
+              { value: "true", label: "Active" },
+              { value: "false", label: "Inactive" },
+            ]}
+          />
         </label>
       </div>
 

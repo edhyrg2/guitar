@@ -35,6 +35,7 @@ async function getInitialTarget(
     ownerType !== "capacitor" &&
     ownerType !== "resistor" &&
     ownerType !== "pickup-type" &&
+    ownerType !== "output-jack" &&
     ownerType !== "mod"
   ) {
     return null;
@@ -138,6 +139,19 @@ async function getInitialTarget(
         name: true,
         slug: true,
         coilCount: true,
+        description: true,
+        isActive: true,
+      },
+    });
+  } else if (ownerType === "output-jack") {
+    payload = await prisma.outputJack.findUnique({
+      where: { id: ownerId },
+      select: {
+        name: true,
+        slug: true,
+        jackType: true,
+        mountingStyle: true,
+        conductorCount: true,
         description: true,
         isActive: true,
       },

@@ -11,6 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { AppSelect } from "@/components/ui/app-select";
 import { Input } from "@/components/ui/input";
 import {
   type WiringTemplateComponentInput,
@@ -145,17 +146,15 @@ function WiringTemplateComponentFormDialogContent({
       <div className="grid gap-4 px-6 pb-6 sm:grid-cols-2">
         <label className="flex flex-col gap-2 sm:col-span-2">
           <span className="text-xs font-medium">Wiring Template</span>
-          <select
+          <AppSelect
             value={form.wiringTemplateId}
-            onChange={(event) => updateField("wiringTemplateId", event.target.value)}
-            className="h-9 rounded-md border border-input bg-input/20 px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 dark:bg-input/30"
-          >
-            {wiringTemplateOptions.map((option) => (
-              <option key={option.id} value={option.id}>
-                {option.name}
-              </option>
-            ))}
-          </select>
+            onValueChange={(value) => updateField("wiringTemplateId", value)}
+            className="h-9 px-3 text-sm"
+            options={wiringTemplateOptions.map((option) => ({
+              value: option.id,
+              label: option.name,
+            }))}
+          />
         </label>
         <label className="flex flex-col gap-2">
           <span className="text-xs font-medium">Component Role</span>
@@ -175,17 +174,15 @@ function WiringTemplateComponentFormDialogContent({
         </label>
         <label className="flex flex-col gap-2 sm:col-span-2">
           <span className="text-xs font-medium">Asset</span>
-          <select
+          <AppSelect
             value={form.assetId}
-            onChange={(event) => updateField("assetId", event.target.value)}
-            className="h-9 rounded-md border border-input bg-input/20 px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 dark:bg-input/30"
-          >
-            {assetOptions.map((option) => (
-              <option key={option.id} value={option.id}>
-                {option.name}
-              </option>
-            ))}
-          </select>
+            onValueChange={(value) => updateField("assetId", value)}
+            className="h-9 px-3 text-sm"
+            options={assetOptions.map((option) => ({
+              value: option.id,
+              label: option.name,
+            }))}
+          />
         </label>
         <label className="flex flex-col gap-2">
           <span className="text-xs font-medium">Position X</span>

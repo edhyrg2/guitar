@@ -3,6 +3,7 @@
 import * as React from "react";
 
 import { type BrandInput, type BrandRow } from "@/lib/brand-types";
+import { AppSelect } from "@/components/ui/app-select";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -173,14 +174,15 @@ function BrandFormDialogContent({
         </label>
         <label className="flex flex-col gap-2">
           <span className="text-xs font-medium">Active</span>
-          <select
+          <AppSelect
             value={form.active ? "true" : "false"}
-            onChange={(event) => updateField("active", event.target.value === "true")}
-            className="h-7 rounded-md border border-input bg-input/20 px-2 text-xs outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 dark:bg-input/30"
-          >
-            <option value="true">Active</option>
-            <option value="false">Inactive</option>
-          </select>
+            onValueChange={(value) => updateField("active", value === "true")}
+            className="h-7 px-2 text-xs"
+            options={[
+              { value: "true", label: "Active" },
+              { value: "false", label: "Inactive" },
+            ]}
+          />
         </label>
       </div>
 

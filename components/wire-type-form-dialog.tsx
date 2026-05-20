@@ -11,6 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { AppSelect } from "@/components/ui/app-select";
 import { Input } from "@/components/ui/input";
 import { type WireTypeInput, type WireTypeRow } from "@/lib/wire-type-types";
 
@@ -159,29 +160,27 @@ function WireTypeFormDialogContent({
         </label>
         <label className="flex flex-col gap-2">
           <span className="text-xs font-medium">Is Shielded</span>
-          <select
+          <AppSelect
             value={form.isShielded ? "true" : "false"}
-            onChange={(event) =>
-              updateField("isShielded", event.target.value === "true")
-            }
-            className="h-9 rounded-md border border-input bg-input/20 px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 dark:bg-input/30"
-          >
-            <option value="false">No</option>
-            <option value="true">Yes</option>
-          </select>
+            onValueChange={(value) => updateField("isShielded", value === "true")}
+            className="h-9 px-3 text-sm"
+            options={[
+              { value: "false", label: "No" },
+              { value: "true", label: "Yes" },
+            ]}
+          />
         </label>
         <label className="flex flex-col gap-2">
           <span className="text-xs font-medium">Is Ground</span>
-          <select
+          <AppSelect
             value={form.isGround ? "true" : "false"}
-            onChange={(event) =>
-              updateField("isGround", event.target.value === "true")
-            }
-            className="h-9 rounded-md border border-input bg-input/20 px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 dark:bg-input/30"
-          >
-            <option value="false">No</option>
-            <option value="true">Yes</option>
-          </select>
+            onValueChange={(value) => updateField("isGround", value === "true")}
+            className="h-9 px-3 text-sm"
+            options={[
+              { value: "false", label: "No" },
+              { value: "true", label: "Yes" },
+            ]}
+          />
         </label>
         <label className="flex flex-col gap-2 sm:col-span-2">
           <span className="text-xs font-medium">Description</span>

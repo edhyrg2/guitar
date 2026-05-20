@@ -11,6 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { AppSelect } from "@/components/ui/app-select";
 import { Input } from "@/components/ui/input";
 import {
   type DiagramSourceInput,
@@ -167,17 +168,15 @@ function DiagramSourceFormDialogContent({
       <div className="grid gap-4 px-6 pb-6 sm:grid-cols-2">
         <label className="flex flex-col gap-2 sm:col-span-2">
           <span className="text-xs font-medium">Wiring Template</span>
-          <select
+          <AppSelect
             value={form.wiringTemplateId}
-            onChange={(event) => updateField("wiringTemplateId", event.target.value)}
-            className="h-9 rounded-md border border-input bg-input/20 px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 dark:bg-input/30"
-          >
-            {wiringTemplateOptions.map((option) => (
-              <option key={option.id} value={option.id}>
-                {option.name}
-              </option>
-            ))}
-          </select>
+            onValueChange={(value) => updateField("wiringTemplateId", value)}
+            className="h-9 px-3 text-sm"
+            options={wiringTemplateOptions.map((option) => ({
+              value: option.id,
+              label: option.name,
+            }))}
+          />
         </label>
         <label className="flex flex-col gap-2">
           <span className="text-xs font-medium">Source Name</span>
@@ -229,16 +228,15 @@ function DiagramSourceFormDialogContent({
         </label>
         <label className="flex flex-col gap-2">
           <span className="text-xs font-medium">Official Source</span>
-          <select
+          <AppSelect
             value={form.isOfficial ? "true" : "false"}
-            onChange={(event) =>
-              updateField("isOfficial", event.target.value === "true")
-            }
-            className="h-9 rounded-md border border-input bg-input/20 px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 dark:bg-input/30"
-          >
-            <option value="false">No</option>
-            <option value="true">Yes</option>
-          </select>
+            onValueChange={(value) => updateField("isOfficial", value === "true")}
+            className="h-9 px-3 text-sm"
+            options={[
+              { value: "false", label: "No" },
+              { value: "true", label: "Yes" },
+            ]}
+          />
         </label>
         <div />
         <label className="flex flex-col gap-2 sm:col-span-2">

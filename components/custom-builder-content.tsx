@@ -74,6 +74,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { AppSelect } from "@/components/ui/app-select";
 import { Input } from "@/components/ui/input";
 import {
   normalizeBuilderSavedSetupDocument,
@@ -252,6 +253,7 @@ type CustomBuilderContentProps = {
   wireTypes: WireTypeRow[];
   pickupConfigurationOptions: WiringTemplateReference[];
   switchTypeOptions: WiringTemplateReference[];
+  initialSavedSetupId?: string | null;
 };
 
 const INITIAL_MAX_COMPONENT_WIDTH = 280;
@@ -1760,17 +1762,15 @@ function BuilderTopbar({
             <HugeiconsIcon icon={Redo02Icon} strokeWidth={2} data-icon="inline-start" />
             Redo
           </Button>
-          <select
+          <AppSelect
             value={selectedWireTypeId}
-            onChange={(event) => onWireTypeChange(event.target.value)}
-            className="h-9 min-w-56 rounded-md border border-border bg-background px-3 text-sm outline-none"
-          >
-            {wireTypes.map((wireType) => (
-              <option key={wireType.id} value={wireType.id}>
-                {wireType.name}
-              </option>
-            ))}
-          </select>
+            onValueChange={onWireTypeChange}
+            className="h-9 w-56 px-3 text-sm"
+            options={wireTypes.map((wireType) => ({
+              value: wireType.id,
+              label: wireType.name,
+            }))}
+          />
           <div className="flex items-center gap-1 rounded-full border border-border/70 bg-card px-1 py-1 shadow-sm">
             <Button variant="ghost" size="sm" disabled={!canAlign} onClick={() => onAlign("left")}>
               <HugeiconsIcon icon={AlignLeftIcon} strokeWidth={2} />
@@ -1807,6 +1807,7 @@ export function CustomBuilderContent({
   wireTypes,
   pickupConfigurationOptions,
   switchTypeOptions,
+  initialSavedSetupId = null,
 }: CustomBuilderContentProps) {
   const { data: session, status: sessionStatus } = useSession();
   const [instances, setInstances] = React.useState<BuilderInstance[]>([]);
@@ -1921,6 +1922,7 @@ export function CustomBuilderContent({
   const latestShapesRef = React.useRef<BuilderSetupShape[]>([]);
   const historyTransactionDepthRef = React.useRef(0);
   const historyTransactionSnapshotRef = React.useRef<BuilderSnapshot | null>(null);
+  const initialSavedSetupLoadRef = React.useRef<string | null>(null);
   const stageRef = React.useRef<Konva.Stage | null>(null);
   const nextIdRef = React.useRef(1);
   const worldViewportWidth = stageSize.width / canvasScale;
@@ -2744,6 +2746,9 @@ export function CustomBuilderContent({
     });
   }
 
+  const applySavedSetupDocumentRef = React.useRef(applySavedSetupDocument);
+  applySavedSetupDocumentRef.current = applySavedSetupDocument;
+
   const createPublishThumbnailDataUrl = React.useCallback(() => {
     const stage = stageRef.current;
 
@@ -3370,9 +3375,24 @@ export function CustomBuilderContent({
     setCanvasMessage("Canvas dibersihkan.");
   }
 
+  const loadSavedSetupIntoCanvas = React.useCallback(
+    (setup: BuilderSavedSetupRow) => {
+      applySavedSetupDocumentRef.current(
+        normalizeBuilderSavedSetupDocument(setup.documentJson)
+      );
+      setActiveSavedSetupId(setup.id);
+      setActiveSavedSetupName(setup.name);
+      setSavedSetupStatus(setup.status);
+      setActivePublishedTemplateId(setup.publishedTemplateId);
+      setSavedSetupDescription(setup.description ?? "");
+      setCanvasMessage(`Setup "${setup.name}" loaded.`);
+    },
+    []
+  );
+
   const loadSavedSetups = React.useCallback(async () => {
     if (!canPersistSavedSetups) {
-      return;
+      return [] as BuilderSavedSetupRow[];
     }
 
     setIsLoadingSavedSetups(true);
@@ -3392,12 +3412,56 @@ export function CustomBuilderContent({
       }
 
       setSavedSetups(payload);
+      return payload;
     } catch (error) {
       setCanvasMessage(error instanceof Error ? error.message : "Failed to load saved setups.");
+      return [] as BuilderSavedSetupRow[];
     } finally {
       setIsLoadingSavedSetups(false);
     }
   }, [canPersistSavedSetups]);
+
+  React.useEffect(() => {
+    if (!initialSavedSetupId || !canPersistSavedSetups) {
+      return;
+    }
+
+    if (initialSavedSetupLoadRef.current === initialSavedSetupId) {
+      return;
+    }
+
+    let cancelled = false;
+
+    void (async () => {
+      const availableSetups =
+        savedSetups.length > 0 ? savedSetups : await loadSavedSetups();
+
+      if (cancelled) {
+        return;
+      }
+
+      const targetSetup = availableSetups.find((setup) => setup.id === initialSavedSetupId);
+
+      if (!targetSetup) {
+        setCanvasMessage(`Saved setup "${initialSavedSetupId}" tidak ditemukan.`);
+        initialSavedSetupLoadRef.current = initialSavedSetupId;
+        return;
+      }
+
+      loadSavedSetupIntoCanvas(targetSetup);
+      initialSavedSetupLoadRef.current = initialSavedSetupId;
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    canPersistSavedSetups,
+    initialSavedSetupId,
+    loadSavedSetupIntoCanvas,
+    loadSavedSetups,
+    savedSetups,
+  ]);
 
   const saveSetupDraft = React.useCallback(
     async (options?: {
@@ -4437,18 +4501,18 @@ export function CustomBuilderContent({
                 onChange={(event) => setAssetQuery(event.target.value)}
                 placeholder="Cari asset, tipe, atau titik koneksi..."
               />
-              <select
+              <AppSelect
                 value={assetComponentTypeFilter}
-                onChange={(event) => setAssetComponentTypeFilter(event.target.value)}
-                className="h-9 rounded-md border border-border bg-background px-3 text-sm outline-none"
-              >
-                <option value="all">Semua komponen</option>
-                {assetComponentTypes.map((componentType) => (
-                  <option key={componentType} value={componentType}>
-                    {componentType}
-                  </option>
-                ))}
-              </select>
+                onValueChange={setAssetComponentTypeFilter}
+                className="h-9 px-3 text-sm"
+                options={[
+                  { value: "all", label: "Semua komponen" },
+                  ...assetComponentTypes.map((componentType) => ({
+                    value: componentType,
+                    label: componentType,
+                  })),
+                ]}
+              />
               <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1">
                 <div className="grid gap-3">
                   {filteredAssets.map((asset) => (
@@ -5939,17 +6003,17 @@ export function CustomBuilderContent({
                     <div className="font-medium text-foreground">Wire Connection</div>
                     <label className="grid gap-1.5">
                       <span className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Wire Type</span>
-                      <select
+                      <AppSelect
                         value={selectedConnection.wireTypeId}
-                        onChange={(event) => updateConnectionWireType(selectedConnection.id, event.target.value)}
-                        className="h-9 rounded-md border border-input bg-input/20 px-3 text-sm outline-none"
-                      >
-                        {wireTypes.map((wireType) => (
-                          <option key={wireType.id} value={wireType.id}>
-                            {wireType.name}
-                          </option>
-                        ))}
-                      </select>
+                        onValueChange={(value) =>
+                          updateConnectionWireType(selectedConnection.id, value)
+                        }
+                        className="h-9 px-3 text-sm"
+                        options={wireTypes.map((wireType) => ({
+                          value: wireType.id,
+                          label: wireType.name,
+                        }))}
+                      />
                     </label>
                     <Button variant="outline" size="sm" onClick={straightenSelectedConnection}>
                       Straighten Wire
@@ -6421,15 +6485,7 @@ export function CustomBuilderContent({
                           size="sm"
                           disabled={savedSetupActionId === setup.id}
                           onClick={() => {
-                            applySavedSetupDocument(
-                              normalizeBuilderSavedSetupDocument(setup.documentJson)
-                            );
-                            setActiveSavedSetupId(setup.id);
-                            setActiveSavedSetupName(setup.name);
-                            setSavedSetupStatus(setup.status);
-                            setActivePublishedTemplateId(setup.publishedTemplateId);
-                            setSavedSetupDescription(setup.description ?? "");
-                            setCanvasMessage(`Setup "${setup.name}" loaded.`);
+                            loadSavedSetupIntoCanvas(setup);
                             setSavedSetupBrowserOpen(false);
                           }}
                         >
