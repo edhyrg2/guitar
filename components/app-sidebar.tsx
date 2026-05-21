@@ -64,7 +64,7 @@ type SidebarItem =
     };
 
 const primaryItems: SidebarItem[] = [
-  { title: "Overview", href: "/", icon: DashboardSquare01Icon, badge: "Live" },
+  { title: "Overview", href: "/dashboard", icon: DashboardSquare01Icon, badge: "Live" },
   { title: "Explore Wiring", href: "/explore", icon: ViewIcon, badge: "New" },
   { title: "My Design", href: "/my-design", icon: UserAccountIcon, badge: "Mine" },
   { title: "Custom Builder", href: "/custom-builder", icon: PaintBrush02Icon },

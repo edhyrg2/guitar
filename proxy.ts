@@ -14,7 +14,14 @@ const masterOnlyPrefixes = ["/users"];
 
 const developerPrefixes = ["/ai", "/guitar", "/master-data", "/wiring"];
 
-const authenticatedOnlyPrefixes = ["/", "/custom-builder", "/custom-component", "/my-design"];
+const authenticatedOnlyPrefixes = [
+  "/explore",
+  "/custom-builder",
+  "/custom-component",
+  "/my-design",
+  "/dashboard",
+  "/saved-setups",
+];
 
 const masterOnlyApiPrefixes: string[] = [];
 
@@ -96,7 +103,11 @@ function getRequiredApiLevel(pathname: string): UserLevel | null {
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  if (pathname.startsWith("/api/auth/")) {
+  // Always allow auth and register endpoints
+  if (
+    pathname.startsWith("/api/auth/") ||
+    pathname.startsWith("/api/register")
+  ) {
     return NextResponse.next();
   }
 
@@ -109,10 +120,12 @@ export async function proxy(request: NextRequest) {
     ? getRequiredApiLevel(pathname)
     : getRequiredLevel(pathname);
 
+  // Public route — no auth needed
   if (!requiredLevel) {
     return NextResponse.next();
   }
 
+  // Not authenticated
   if (!token?.id || !token?.isActive) {
     if (pathname.startsWith("/api/")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -124,6 +137,7 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(signInUrl);
   }
 
+  // Check role level
   const currentLevel = token.level as UserLevel | undefined;
   const hasRequiredLevel =
     currentLevel && roleWeight[currentLevel] >= roleWeight[requiredLevel];
@@ -136,13 +150,19 @@ export async function proxy(request: NextRequest) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
+  // Insufficient role — redirect to home (public gallery)
   return NextResponse.redirect(new URL("/", request.url));
 }
 
 export const config = {
   matcher: [
-    "/",
     "/api/:path*",
+    "/explore",
+    "/explore/:path*",
+    "/dashboard",
+    "/dashboard/:path*",
+    "/saved-setups",
+    "/saved-setups/:path*",
     "/my-design/:path*",
     "/users/:path*",
     "/ai/:path*",

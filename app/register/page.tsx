@@ -8,13 +8,12 @@ import {
 } from "@hugeicons/core-free-icons";
 
 import { GuitarIcon } from "@/components/guitar-icon";
-import { LoginForm } from "@/components/login-form";
+import { RegisterForm } from "@/components/register-form";
 import { getSafeServerSession } from "@/lib/auth-session";
 
-type LoginPageProps = {
+type RegisterPageProps = {
   searchParams?: Promise<{
     callbackUrl?: string;
-    registered?: string;
   }>;
 };
 
@@ -36,7 +35,7 @@ const FEATURES = [
   },
 ];
 
-export default async function LoginPage({ searchParams }: LoginPageProps) {
+export default async function RegisterPage({ searchParams }: RegisterPageProps) {
   const session = await getSafeServerSession();
 
   if (session) {
@@ -45,7 +44,6 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
 
   const resolvedSearchParams = (await searchParams) ?? {};
   const callbackUrl = resolvedSearchParams.callbackUrl || "/";
-  const justRegistered = resolvedSearchParams.registered === "1";
 
   return (
     <main className="min-h-screen lg:grid lg:grid-cols-[1fr_minmax(400px,480px)]">
@@ -77,11 +75,11 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
           <div className="grid max-w-sm gap-8">
             <div className="grid gap-4">
               <h1 className="text-3xl font-semibold leading-tight tracking-tight xl:text-4xl">
-                Build better wiring diagrams, faster.
+                Join the community of guitar builders.
               </h1>
               <p className="text-sm leading-relaxed text-sidebar-foreground/70">
-                A collaborative workspace for guitar builders — manage templates,
-                custom components, and wiring references all in one place.
+                Create your free account and start building, sharing, and
+                exploring guitar wiring diagrams with a growing community.
               </p>
             </div>
 
@@ -126,19 +124,13 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
 
           {/* Heading */}
           <div className="mb-8 grid gap-1.5">
-            <h2 className="text-2xl font-semibold tracking-tight">Welcome back</h2>
+            <h2 className="text-2xl font-semibold tracking-tight">Create an account</h2>
             <p className="text-sm text-muted-foreground">
-              Sign in to your account to continue.
+              Free forever. No credit card required.
             </p>
           </div>
 
-          {justRegistered && (
-            <div className="mb-6 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-600 dark:text-emerald-400">
-              Account created successfully. Sign in to continue.
-            </div>
-          )}
-
-          <LoginForm callbackUrl={callbackUrl} />
+          <RegisterForm callbackUrl={callbackUrl} />
         </div>
       </section>
     </main>

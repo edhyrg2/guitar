@@ -32,6 +32,8 @@ type AssetAnchorPoint = {
 
 type NamedOwnerRecord = {
   id: string;
+  ownerType?: string | null;
+  ownerId?: string | null;
   name: string;
   componentType?: string | null;
   slug?: string | null;
@@ -171,9 +173,10 @@ async function getBuilderAssets(): Promise<BuilderAssetDefinition[]> {
     potTypes,
     capacitors,
     resistors,
-    pickupTypes,
+    pickupModels,
     mods,
     genericAssets,
+    pickupModelAssets,
   ] = await Promise.all([
     prisma.switchType.findMany({
       orderBy: [{ isActive: "desc" }, { name: "asc" }],
@@ -233,19 +236,24 @@ async function getBuilderAssets(): Promise<BuilderAssetDefinition[]> {
         isActive: true,
       },
     }),
-    prisma.pickupType.findMany({
-      orderBy: [{ isActive: "desc" }, { name: "asc" }],
+    prisma.pickupModel.findMany({
+      orderBy: [{ isActivePickup: "desc" }, { name: "asc" }],
       select: {
         id: true,
         name: true,
         slug: true,
-        svgUrl: true,
-        thumbnailUrl: true,
-        width: true,
-        height: true,
-        anchorPointsJson: true,
-        styleType: true,
-        isActive: true,
+        positionType: true,
+        isActivePickup: true,
+        pickupBrand: {
+          select: {
+            name: true,
+          },
+        },
+        pickupType: {
+          select: {
+            name: true,
+          },
+        },
       },
     }),
     prisma.mod.findMany({
@@ -270,6 +278,29 @@ async function getBuilderAssets(): Promise<BuilderAssetDefinition[]> {
       orderBy: [{ isActive: "desc" }, { componentType: "asc" }, { name: "asc" }],
       select: {
         id: true,
+        ownerType: true,
+        ownerId: true,
+        name: true,
+        componentType: true,
+        slug: true,
+        svgUrl: true,
+        thumbnailUrl: true,
+        width: true,
+        height: true,
+        anchorPointsJson: true,
+        styleType: true,
+        isActive: true,
+      },
+    }),
+    prisma.componentAsset.findMany({
+      where: {
+        ownerType: "pickup-model",
+      },
+      orderBy: [{ isActive: "desc" }, { componentType: "asc" }, { name: "asc" }],
+      select: {
+        id: true,
+        ownerType: true,
+        ownerId: true,
         name: true,
         componentType: true,
         slug: true,
@@ -283,6 +314,12 @@ async function getBuilderAssets(): Promise<BuilderAssetDefinition[]> {
       },
     }),
   ]);
+
+  const pickupModelAssetMap = new Map(
+    pickupModelAssets
+      .filter((asset) => asset.ownerType === "pickup-model" && asset.ownerId)
+      .map((asset) => [asset.ownerId!, asset])
+  );
 
   return mergeBuilderAssets(
     buildBuilderAssets(
@@ -348,19 +385,25 @@ async function getBuilderAssets(): Promise<BuilderAssetDefinition[]> {
       "Resistor"
     ),
     buildBuilderAssets(
-      pickupTypes.map((item) => ({
-        id: item.id,
-        name: item.name,
-        slug: item.slug,
-        svgUrl: item.svgUrl,
-        thumbnailUrl: item.thumbnailUrl,
-        width: item.width,
-        height: item.height,
-        anchorPointsJson: item.anchorPointsJson,
-        styleType: item.styleType,
-        isActive: item.isActive,
-      })),
-      "pickup-type",
+      pickupModels.map((item) => {
+        const asset = pickupModelAssetMap.get(item.id);
+
+        return {
+          id: item.id,
+          name: `${item.pickupBrand.name} ${item.name}`,
+          componentType: "Pickup",
+          slug: item.slug,
+          svgUrl: asset?.svgUrl,
+          thumbnailUrl: asset?.thumbnailUrl,
+          width: asset?.width,
+          height: asset?.height,
+          anchorPointsJson: asset?.anchorPointsJson,
+          styleType: asset?.styleType,
+          componentAssetId: asset?.id ?? null,
+          isActive: item.isActivePickup,
+        };
+      }),
+      "pickup-model",
       "Pickup"
     ),
     buildBuilderAssets(
@@ -380,7 +423,9 @@ async function getBuilderAssets(): Promise<BuilderAssetDefinition[]> {
       "Accessory / Mod"
     ),
     buildGenericBuilderAssets(
-      genericAssets.map((item) => ({
+      genericAssets
+        .filter((item) => item.ownerType === null)
+        .map((item) => ({
         id: item.id,
         name: item.name,
         componentType: item.componentType,

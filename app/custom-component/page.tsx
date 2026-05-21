@@ -34,6 +34,7 @@ async function getInitialTarget(
     ownerType !== "pot-type" &&
     ownerType !== "capacitor" &&
     ownerType !== "resistor" &&
+    ownerType !== "pickup-model" &&
     ownerType !== "pickup-type" &&
     ownerType !== "output-jack" &&
     ownerType !== "mod"
@@ -130,6 +131,34 @@ async function getInitialTarget(
         tolerance: true,
         description: true,
         isActive: true,
+      },
+    });
+  } else if (ownerType === "pickup-model") {
+    payload = await prisma.pickupModel.findUnique({
+      where: { id: ownerId },
+      select: {
+        pickupBrandId: true,
+        pickupTypeId: true,
+        name: true,
+        slug: true,
+        positionType: true,
+        wireCount: true,
+        magnetType: true,
+        dcResistance: true,
+        outputLevel: true,
+        colorCodeSchemaId: true,
+        description: true,
+        isActivePickup: true,
+        pickupBrand: {
+          select: {
+            name: true,
+          },
+        },
+        pickupType: {
+          select: {
+            name: true,
+          },
+        },
       },
     });
   } else if (ownerType === "pickup-type") {

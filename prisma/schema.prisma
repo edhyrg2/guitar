@@ -79,6 +79,7 @@ model PickupType {
   styleType   String? @map("style_type")
   pickupModels PickupModel[]
   wireColorSchemas WireColorSchema[]
+  templateComponents WiringTemplateComponent[]
 
   @@index([name])
   @@index([isActive])
@@ -103,6 +104,7 @@ model PickupModel {
   updatedAt         DateTime @updatedAt @map("updated_at")
   pickupBrand       Brand    @relation(fields: [pickupBrandId], references: [id], onDelete: Restrict)
   pickupType        PickupType @relation(fields: [pickupTypeId], references: [id], onDelete: Restrict)
+  templateComponents WiringTemplateComponent[]
 
   @@index([name])
   @@index([pickupBrandId])
@@ -211,6 +213,7 @@ model SwitchType {
   styleType      String?  @map("style_type")
   isActive       Boolean  @default(true) @map("is_active")
   wiringTemplates WiringTemplate[]
+  templateComponents WiringTemplateComponent[]
 
   @@index([name])
   @@index([isActive])
@@ -237,6 +240,7 @@ model PotType {
   editorDocumentJson Json? @map("editor_document_json")
   styleType   String?  @map("style_type")
   isActive    Boolean  @default(true) @map("is_active")
+  templateComponents WiringTemplateComponent[]
 
   @@index([name])
   @@index([isActive])
@@ -258,6 +262,7 @@ model Capacitor {
   editorDocumentJson Json? @map("editor_document_json")
   styleType     String?  @map("style_type")
   isActive      Boolean  @default(true) @map("is_active")
+  templateComponents WiringTemplateComponent[]
 
   @@index([valueLabel])
   @@index([isActive])
@@ -279,6 +284,7 @@ model Resistor {
   editorDocumentJson Json? @map("editor_document_json")
   styleType   String?  @map("style_type")
   isActive    Boolean  @default(true) @map("is_active")
+  templateComponents WiringTemplateComponent[]
 
   @@index([valueLabel])
   @@index([isActive])
@@ -302,6 +308,7 @@ model Mod {
   editorDocumentJson    Json?    @map("editor_document_json")
   styleType             String?  @map("style_type")
   isActive              Boolean  @default(true) @map("is_active")
+  templateComponents    WiringTemplateComponent[]
 
   @@index([name])
   @@index([isActive])
@@ -324,6 +331,7 @@ model OutputJack {
   editorDocumentJson Json?    @map("editor_document_json")
   styleType          String?  @map("style_type")
   isActive           Boolean  @default(true) @map("is_active")
+  templateComponents WiringTemplateComponent[]
 
   @@index([name])
   @@index([isActive])
@@ -533,6 +541,14 @@ model WiringTemplateComponent {
   componentRole    String         @map("component_role")
   componentType    String         @map("component_type")
   assetId          String         @map("asset_id")
+  pickupModelId    String?        @map("pickup_model_id")
+  pickupTypeId     String?        @map("pickup_type_id")
+  switchTypeId     String?        @map("switch_type_id")
+  potTypeId        String?        @map("pot_type_id")
+  capacitorId      String?        @map("capacitor_id")
+  resistorId       String?        @map("resistor_id")
+  modId            String?        @map("mod_id")
+  outputJackId     String?        @map("output_jack_id")
   positionX        Float          @map("position_x")
   positionY        Float          @map("position_y")
   rotation         Float          @default(0)
@@ -541,10 +557,26 @@ model WiringTemplateComponent {
   metadataJson     Json?          @map("metadata_json")
   wiringTemplate   WiringTemplate @relation(fields: [wiringTemplateId], references: [id], onDelete: Restrict)
   asset            ComponentAsset @relation(fields: [assetId], references: [id], onDelete: Restrict)
+  pickupModel      PickupModel?   @relation(fields: [pickupModelId], references: [id], onDelete: SetNull)
+  pickupType       PickupType?    @relation(fields: [pickupTypeId], references: [id], onDelete: SetNull)
+  switchType       SwitchType?    @relation(fields: [switchTypeId], references: [id], onDelete: SetNull)
+  potType          PotType?       @relation(fields: [potTypeId], references: [id], onDelete: SetNull)
+  capacitor        Capacitor?     @relation(fields: [capacitorId], references: [id], onDelete: SetNull)
+  resistor         Resistor?      @relation(fields: [resistorId], references: [id], onDelete: SetNull)
+  mod              Mod?           @relation(fields: [modId], references: [id], onDelete: SetNull)
+  outputJack       OutputJack?    @relation(fields: [outputJackId], references: [id], onDelete: SetNull)
 
   @@index([wiringTemplateId])
   @@index([assetId])
   @@index([componentRole])
+  @@index([pickupModelId])
+  @@index([pickupTypeId])
+  @@index([switchTypeId])
+  @@index([potTypeId])
+  @@index([capacitorId])
+  @@index([resistorId])
+  @@index([modId])
+  @@index([outputJackId])
   @@map("wiring_template_components")
 }
 

@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Image from "next/image";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
   Add01Icon,
@@ -108,9 +109,19 @@ export function UserManagementContent({
               <TableCell>{user.email}</TableCell>
               <TableCell>{user.level}</TableCell>
               <TableCell>
-                <div className="flex size-7 items-center justify-center rounded-md bg-muted font-medium text-muted-foreground">
-                  {user.photo}
-                </div>
+                {user.photo ? (
+                  <Image
+                    src={user.photo}
+                    alt={user.name}
+                    width={28}
+                    height={28}
+                    className="size-7 rounded-full object-cover"
+                  />
+                ) : (
+                  <div className="flex size-7 items-center justify-center rounded-full bg-muted text-xs font-semibold uppercase text-muted-foreground">
+                    {user.name[0]}
+                  </div>
+                )}
               </TableCell>
               <TableCell>
                 <StatusPill

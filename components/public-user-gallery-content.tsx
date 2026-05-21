@@ -119,7 +119,7 @@ export function PublicUserGalleryContent({
       <TopNavbar
         searchPlaceholder="Search creator profile and published gallery..."
         items={[
-          { label: "Overview", href: "/", icon: DashboardSquare01Icon },
+          { label: "Overview", href: "/dashboard", icon: DashboardSquare01Icon },
           { label: "Explore", href: "/explore", icon: ViewIcon },
           {
             label: "Creator Gallery",

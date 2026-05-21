@@ -40,6 +40,7 @@ const PUBLISH_TYPE_OPTIONS: Array<{ value: PublishType; label: string }> = [
   { value: "pot-type", label: "Potentiometer" },
   { value: "capacitor", label: "Capacitor" },
   { value: "resistor", label: "Resistor" },
+  { value: "pickup-model", label: "Pickup Model" },
   { value: "pickup-type", label: "Pickup Type" },
   { value: "output-jack", label: "Output Jack" },
   { value: "mod", label: "Accessory / Mod" },
@@ -97,6 +98,22 @@ function createInitialState(
       tolerance: "",
       description: "",
       isActive: true,
+    },
+    pickupModel: {
+      pickupBrandId: "",
+      pickupTypeId: "",
+      pickupBrandName: "",
+      pickupTypeName: "",
+      name: normalizedName,
+      slug: suggestedSlug || "",
+      positionType: "",
+      wireCount: "",
+      magnetType: "",
+      dcResistance: "",
+      outputLevel: "",
+      colorCodeSchemaId: "",
+      description: "",
+      isActivePickup: true,
     },
     pickupType: {
       name: normalizedName,
@@ -170,6 +187,16 @@ function createInitialState(
     };
   }
 
+  if (publishType === "pickup-model") {
+    return {
+      ...baseState,
+      pickupModel: {
+        ...baseState.pickupModel,
+        ...initialPayload,
+      },
+    };
+  }
+
   if (publishType === "pickup-type") {
     return {
       ...baseState,
@@ -235,6 +262,7 @@ export function PublishDialog({
       | "potType"
       | "capacitor"
       | "resistor"
+      | "pickupModel"
       | "pickupType"
       | "outputJack"
       | "mod",
@@ -263,6 +291,8 @@ export function PublishDialog({
               ? state.capacitor
               : state.publishType === "resistor"
                 ? state.resistor
+                : state.publishType === "pickup-model"
+                  ? state.pickupModel
                 : state.publishType === "pickup-type"
                   ? state.pickupType
                   : state.publishType === "output-jack"
@@ -295,6 +325,10 @@ export function PublishDialog({
     (state.publishType === "resistor" &&
       state.resistor.valueLabel.trim() &&
       state.resistor.valueOhm > 0) ||
+    (state.publishType === "pickup-model" &&
+      state.pickupModel.name.trim() &&
+      state.pickupModel.pickupBrandId.trim() &&
+      state.pickupModel.pickupTypeId.trim()) ||
     (state.publishType === "pickup-type" && state.pickupType.name.trim()) ||
     (state.publishType === "output-jack" &&
       state.outputJack.name.trim() &&
@@ -611,6 +645,94 @@ export function PublishDialog({
                   value={state.pickupType.coilCount}
                   onChange={(event) =>
                     updateNestedState("pickupType", "coilCount", event.target.value)
+                  }
+                />
+              </label>
+            </>
+          ) : null}
+
+          {state.publishType === "pickup-model" ? (
+            <>
+              <label className="flex flex-col gap-2 sm:col-span-2">
+                <span className="text-xs font-medium">Model Name</span>
+                <Input
+                  value={state.pickupModel.name}
+                  onChange={(event) =>
+                    updateNestedState("pickupModel", "name", event.target.value)
+                  }
+                />
+              </label>
+              <label className="flex flex-col gap-2">
+                <span className="text-xs font-medium">Slug</span>
+                <Input
+                  value={state.pickupModel.slug}
+                  onChange={(event) =>
+                    updateNestedState("pickupModel", "slug", event.target.value)
+                  }
+                />
+              </label>
+              <label className="flex flex-col gap-2">
+                <span className="text-xs font-medium">Brand</span>
+                <Input
+                  value={state.pickupModel.pickupBrandName}
+                  onChange={(event) =>
+                    updateNestedState("pickupModel", "pickupBrandName", event.target.value)
+                  }
+                  disabled
+                />
+              </label>
+              <label className="flex flex-col gap-2">
+                <span className="text-xs font-medium">Type</span>
+                <Input
+                  value={state.pickupModel.pickupTypeName}
+                  onChange={(event) =>
+                    updateNestedState("pickupModel", "pickupTypeName", event.target.value)
+                  }
+                  disabled
+                />
+              </label>
+              <label className="flex flex-col gap-2">
+                <span className="text-xs font-medium">Position</span>
+                <Input
+                  value={state.pickupModel.positionType}
+                  onChange={(event) =>
+                    updateNestedState("pickupModel", "positionType", event.target.value)
+                  }
+                />
+              </label>
+              <label className="flex flex-col gap-2">
+                <span className="text-xs font-medium">Wire Count</span>
+                <Input
+                  value={state.pickupModel.wireCount}
+                  onChange={(event) =>
+                    updateNestedState("pickupModel", "wireCount", event.target.value)
+                  }
+                />
+              </label>
+              <label className="flex flex-col gap-2">
+                <span className="text-xs font-medium">Magnet</span>
+                <Input
+                  value={state.pickupModel.magnetType}
+                  onChange={(event) =>
+                    updateNestedState("pickupModel", "magnetType", event.target.value)
+                  }
+                />
+              </label>
+              <label className="flex flex-col gap-2">
+                <span className="text-xs font-medium">DC Resistance</span>
+                <Input
+                  value={state.pickupModel.dcResistance}
+                  onChange={(event) =>
+                    updateNestedState("pickupModel", "dcResistance", event.target.value)
+                  }
+                />
+              </label>
+              <label className="flex flex-col gap-2">
+                <span className="text-xs font-medium">Output Level</span>
+                <Input
+                  value={state.pickupModel.outputLevel}
+                  onChange={(event) =>
+                    updateNestedState("pickupModel", "outputLevel", event.target.value)
                   }
                 />
               </label>

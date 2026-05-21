@@ -5,6 +5,7 @@ export type PublishType =
   | "pot-type"
   | "capacitor"
   | "resistor"
+  | "pickup-model"
   | "pickup-type"
   | "output-jack"
   | "mod";

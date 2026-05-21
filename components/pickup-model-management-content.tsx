@@ -17,6 +17,7 @@ import { PickupModelFormDialog } from "@/components/pickup-model-form-dialog";
 import { StatCard } from "@/components/stat-card";
 import { StatusPill } from "@/components/status-pill";
 import { Button } from "@/components/ui/button";
+import { AssetEditorButton } from "@/components/asset-editor-button";
 import { TableCell, TableHead, TableRow } from "@/components/ui/table";
 import {
   type PickupModelInput,
@@ -195,6 +196,7 @@ export function PickupModelManagementContent({
               </TableCell>
               <TableCell>
                 <div className="flex gap-2">
+                  <AssetEditorButton ownerType="pickup-model" ownerId={pickupModel.id} />
                   <Button
                     variant="outline"
                     size="sm"

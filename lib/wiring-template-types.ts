@@ -9,6 +9,19 @@ export type WiringTemplateDetailComponent = {
   componentType: string;
   assetId: string;
   assetName: string;
+  assetPreviewUrl: string | null;
+  assetWidth: number | null;
+  assetHeight: number | null;
+  assetAnchorPointsJson: string | null;
+  assetAuthorName: string | null;
+  assetAuthorPhoto: string | null;
+  detailTitle: string;
+  detailSubtitle: string | null;
+  detailDescription: string | null;
+  detailSpecs: Array<{
+    label: string;
+    value: string;
+  }>;
   positionX: number;
   positionY: number;
   rotation: number;

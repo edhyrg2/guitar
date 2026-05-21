@@ -1,26 +1,21 @@
 import { notFound } from "next/navigation";
 
-import { AppSidebar } from "@/components/app-sidebar";
 import { WiringTemplateDetailContent } from "@/components/wiring-template-detail-content";
-import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
+import { PublicGalleryNavbar } from "@/components/public-gallery-navbar";
 import { getSafeServerSession } from "@/lib/auth-session";
 import {
   getWiringTemplateDetailByIdForUser,
   incrementWiringTemplateViewCount,
 } from "@/lib/wiring-template-data";
 
-export default async function ExploreTemplateDetailPage(
-  props: PageProps<"/explore/[id]"> & {
-    searchParams?: Promise<{
-      authorView?: string;
-      editorHref?: string;
-    }>;
-  }
+export default async function PublicPreviewPage(
+  props: PageProps<"/preview/[id]">
 ) {
   const { id } = await props.params;
-  const searchParams = (await props.searchParams) ?? {};
   const session = await getSafeServerSession();
+
   await incrementWiringTemplateViewCount(id);
+
   const template = await getWiringTemplateDetailByIdForUser(
     id,
     session?.user?.id ?? null
@@ -31,15 +26,17 @@ export default async function ExploreTemplateDetailPage(
   }
 
   return (
-    <SidebarProvider>
-      <AppSidebar activePath="/explore" />
-      <SidebarInset>
+    <div className="flex min-h-screen flex-col">
+      <PublicGalleryNavbar />
+      <main className="flex-1">
         <WiringTemplateDetailContent
           template={template}
-          editHref={searchParams.editorHref?.trim() || "/custom-builder"}
-          showEditButton={searchParams.authorView?.trim() === "1"}
+          showEditButton={false}
+          backHref="/"
+          backLabel="Back to Gallery"
+          hideNavbar
         />
-      </SidebarInset>
-    </SidebarProvider>
+      </main>
+    </div>
   );
 }

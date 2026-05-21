@@ -50,7 +50,7 @@ async function ensureUniqueComponentAssetSlug(
 
 async function ensureUniqueOwnerSlug(params: {
   tx: Prisma.TransactionClient;
-  model: "switchType" | "pickupType" | "outputJack" | "mod";
+  model: "switchType" | "pickupModel" | "pickupType" | "outputJack" | "mod";
   baseSlug: string | null;
   currentOwnerId: string | null;
 }) {
@@ -76,6 +76,11 @@ async function ensureUniqueOwnerSlug(params: {
             where: { slug: candidate },
             select: { id: true },
           })
+        : model === "pickupModel"
+          ? await tx.pickupModel.findUnique({
+              where: { slug: candidate },
+              select: { id: true },
+            })
         : model === "pickupType"
           ? await tx.pickupType.findUnique({
               where: { slug: candidate },
@@ -203,6 +208,8 @@ function getComponentTypeLabel(publishType: PublishType) {
       return "Capacitor";
     case "resistor":
       return "Resistor";
+    case "pickup-model":
+      return "Pickup";
     case "pickup-type":
       return "Pickup Type";
     case "output-jack":
@@ -355,6 +362,49 @@ async function upsertOwner(
         });
 
     return { id: owner.id, name: owner.valueLabel, slug: null };
+  }
+
+  if (publishType === "pickup-model") {
+    const name = String(payload.name ?? "").trim();
+    const pickupBrandId = String(payload.pickupBrandId ?? "").trim();
+    const pickupTypeId = String(payload.pickupTypeId ?? "").trim();
+
+    if (!name || !pickupBrandId || !pickupTypeId) {
+      throw new Error("Pickup model requires brand, type, and name.");
+    }
+
+    const ownerSlug = await ensureUniqueOwnerSlug({
+      tx,
+      model: "pickupModel",
+      baseSlug: String(payload.slug ?? "").trim() || null,
+      currentOwnerId: editingOwnerId,
+    });
+
+    const data = {
+      pickupBrandId,
+      pickupTypeId,
+      name,
+      slug: ownerSlug,
+      positionType: String(payload.positionType ?? "").trim() || null,
+      wireCount: String(payload.wireCount ?? "").trim() || null,
+      magnetType: String(payload.magnetType ?? "").trim() || null,
+      dcResistance: String(payload.dcResistance ?? "").trim() || null,
+      outputLevel: String(payload.outputLevel ?? "").trim() || null,
+      colorCodeSchemaId: String(payload.colorCodeSchemaId ?? "").trim() || null,
+      description: String(payload.description ?? "").trim() || null,
+      isActivePickup: payload.isActivePickup === false ? false : true,
+    };
+
+    return editingOwnerId
+      ? await tx.pickupModel.update({
+          where: { id: editingOwnerId },
+          data,
+          select: { id: true, name: true, slug: true },
+        })
+      : await tx.pickupModel.create({
+          data,
+          select: { id: true, name: true, slug: true },
+        });
   }
 
   if (publishType === "pickup-type") {
@@ -547,6 +597,10 @@ async function syncOwnerVisualData(
     return;
   }
 
+  if (publishType === "pickup-model") {
+    return;
+  }
+
   if (publishType === "pickup-type") {
     await tx.pickupType.update({
       where: { id: ownerId },
@@ -635,6 +689,7 @@ export async function POST(request: Request) {
     publishType !== "pot-type" &&
     publishType !== "capacitor" &&
     publishType !== "resistor" &&
+    publishType !== "pickup-model" &&
     publishType !== "pickup-type" &&
     publishType !== "output-jack" &&
     publishType !== "mod"

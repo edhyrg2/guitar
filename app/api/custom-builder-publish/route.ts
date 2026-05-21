@@ -469,6 +469,38 @@ function parseOwnerReference(assetId: string) {
   };
 }
 
+function getComponentDomainReference(componentAsset: {
+  ownerType?: string | null;
+  ownerId?: string | null;
+}) {
+  const ownerType = componentAsset.ownerType?.trim() || null;
+  const ownerId = componentAsset.ownerId?.trim() || null;
+
+  if (!ownerType || !ownerId) {
+    return {
+      pickupModelId: null,
+      pickupTypeId: null,
+      switchTypeId: null,
+      potTypeId: null,
+      capacitorId: null,
+      resistorId: null,
+      modId: null,
+      outputJackId: null,
+    };
+  }
+
+  return {
+    pickupModelId: ownerType === "pickup-model" ? ownerId : null,
+    pickupTypeId: ownerType === "pickup-type" ? ownerId : null,
+    switchTypeId: ownerType === "switch-type" ? ownerId : null,
+    potTypeId: ownerType === "pot-type" ? ownerId : null,
+    capacitorId: ownerType === "capacitor" ? ownerId : null,
+    resistorId: ownerType === "resistor" ? ownerId : null,
+    modId: ownerType === "mod" ? ownerId : null,
+    outputJackId: ownerType === "output-jack" ? ownerId : null,
+  };
+}
+
 function formatSavedSetupResponse(setup: FormattedSavedSetup) {
   return {
     ...setup,
@@ -890,28 +922,34 @@ export async function POST(request: Request) {
       }
 
       await transactionClient.wiringTemplateComponent.createMany({
-        data: document.instances.map((instance) => ({
-          wiringTemplateId: createdTemplate.id,
-          componentRole: roleMap.get(instance.id) ?? instance.id,
-          componentType: instance.componentType,
-          assetId:
-            ((instance.componentAssetId ? assetMap.get(instance.componentAssetId) : null) ??
-              assetByOwnerMap.get(instance.assetId))?.id ?? instance.assetId,
-          positionX: instance.x,
-          positionY: instance.y,
-          rotation: instance.rotation,
-          scale: instance.scale,
-          showLabel: instance.showLabel,
-          metadataJson: {
-            width: instance.width,
-            height: instance.height,
-            renderWidth: instance.renderWidth,
-            renderHeight: instance.renderHeight,
-            originalInstanceId: instance.id,
-            labelOffsetX: instance.labelOffsetX,
-            labelOffsetY: instance.labelOffsetY,
-          } satisfies Prisma.InputJsonValue,
-        })),
+        data: document.instances.map((instance) => {
+          const componentAsset =
+            (instance.componentAssetId ? assetMap.get(instance.componentAssetId) : null) ??
+            assetByOwnerMap.get(instance.assetId);
+          const domainReference = getComponentDomainReference(componentAsset ?? {});
+
+          return {
+            wiringTemplateId: createdTemplate.id,
+            componentRole: roleMap.get(instance.id) ?? instance.id,
+            componentType: instance.componentType,
+            assetId: componentAsset?.id ?? instance.assetId,
+            ...domainReference,
+            positionX: instance.x,
+            positionY: instance.y,
+            rotation: instance.rotation,
+            scale: instance.scale,
+            showLabel: instance.showLabel,
+            metadataJson: {
+              width: instance.width,
+              height: instance.height,
+              renderWidth: instance.renderWidth,
+              renderHeight: instance.renderHeight,
+              originalInstanceId: instance.id,
+              labelOffsetX: instance.labelOffsetX,
+              labelOffsetY: instance.labelOffsetY,
+            } satisfies Prisma.InputJsonValue,
+          };
+        }),
       });
 
       await transactionClient.wiringTemplateConnection.createMany({
