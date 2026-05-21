@@ -4,9 +4,9 @@ import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
-  DashboardSquare01Icon,
-  PaintBrush02Icon,
+  HelpCircleIcon,
   ViewIcon,
+  Wrench01Icon,
 } from "@hugeicons/core-free-icons";
 
 import { AuthUserControl } from "@/components/auth-user-control";
@@ -17,9 +17,12 @@ import { cn } from "@/lib/utils";
 
 const navItems = [
   { label: "Gallery", href: "/", icon: ViewIcon, active: true },
-  { label: "Explore", href: "/explore", icon: ViewIcon },
-  { label: "Custom Builder", href: "/custom-builder", icon: PaintBrush02Icon },
-  { label: "Dashboard", href: "/dashboard", icon: DashboardSquare01Icon },
+  { label: "Wiring Builder", href: "/custom-builder", icon: Wrench01Icon },
+  { label: "Help", href: "/help", icon: HelpCircleIcon },
+];
+
+const authNavItems = [
+  { label: "Wiring Library", href: "/explore", icon: ViewIcon },
 ];
 
 export function PublicGalleryNavbar() {
@@ -73,6 +76,25 @@ export function PublicGalleryNavbar() {
                 </Link>
               </Button>
             ))}
+            {session?.user &&
+              authNavItems.map((item) => (
+                <Button
+                  key={item.label}
+                  variant="ghost"
+                  size="sm"
+                  asChild
+                  className="h-9 gap-1.5 text-sm"
+                >
+                  <Link href={item.href}>
+                    <HugeiconsIcon
+                      icon={item.icon}
+                      strokeWidth={2}
+                      className="size-4"
+                    />
+                    {item.label}
+                  </Link>
+                </Button>
+              ))}
           </nav>
         </div>
 

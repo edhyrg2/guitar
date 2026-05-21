@@ -25,7 +25,7 @@ export default async function GuitarBrandsPage() {
               { label: "Overview", href: "/", icon: DashboardSquare01Icon },
               { label: "Users", href: "/users", icon: UserAccountIcon },
               {
-                label: "Guitar Brand",
+                label: "Guitar Brands",
                 href: "/guitar/brands",
                 customIcon: GuitarIcon,
                 active: true,

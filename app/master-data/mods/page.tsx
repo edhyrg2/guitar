@@ -71,7 +71,7 @@ export default async function ModsPage() {
                 icon: ElectricPlugsIcon,
               },
               {
-                label: "Accessory / Mod",
+                label: "Mods & Accessories",
                 href: "/master-data/mods",
                 icon: Settings01Icon,
                 active: true,

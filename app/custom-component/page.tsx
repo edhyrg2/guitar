@@ -271,7 +271,7 @@ export default async function CustomComponentPage(props: {
                 icon: ElectricPlugsIcon,
               },
               {
-                label: "Custom Component",
+                label: "Component Studio",
                 href: "/custom-component",
                 icon: PaintBrush02Icon,
                 active: true,

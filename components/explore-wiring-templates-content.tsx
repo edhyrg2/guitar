@@ -235,7 +235,7 @@ export function ExploreWiringTemplatesContent({
         searchPlaceholder="Search published wiring, configuration, switch..."
         items={[
           { label: "Overview", href: "/dashboard", icon: DashboardSquare01Icon },
-          { label: "Explore", href: "/explore", icon: ViewIcon, active: true },
+          { label: "Wiring Library", href: "/explore", icon: ViewIcon, active: true },
           { label: "Custom Builder", href: "/custom-builder", icon: PaintBrush02Icon },
           { label: "Users", href: "/users", icon: UserAccountIcon },
         ]}

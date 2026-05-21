@@ -65,7 +65,7 @@ export default async function ResistorsPage() {
                 icon: ElectricPlugsIcon,
               },
               {
-                label: "Resistor",
+                label: "Resistors",
                 href: "/master-data/resistors",
                 icon: ElectricPlugsIcon,
                 active: true,

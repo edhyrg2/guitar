@@ -44,7 +44,7 @@ export default async function PickupConfigurationsPage() {
                 icon: ColorPickerIcon,
               },
               {
-                label: "Pickup Config",
+                label: "Pickup Configurations",
                 href: "/master-data/pickup-configurations",
                 icon: Tag01Icon,
                 active: true,

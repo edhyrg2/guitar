@@ -49,7 +49,7 @@ export default async function SwitchTypesPage() {
                 icon: Tag01Icon,
               },
               {
-                label: "Switch Type",
+                label: "Switch Types",
                 href: "/master-data/switch-types",
                 icon: ElectricPlugsIcon,
                 active: true,

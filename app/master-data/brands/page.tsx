@@ -28,7 +28,7 @@ export default async function BrandsPage() {
               { label: "Overview", href: "/", icon: DashboardSquare01Icon },
               { label: "Users", href: "/users", icon: UserAccountIcon },
               {
-                label: "Pickup Brand",
+                label: "Pickup Brands",
                 href: "/master-data/brands",
                 icon: NoteIcon,
                 active: true,

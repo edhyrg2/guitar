@@ -60,7 +60,7 @@ export default async function CapacitorsPage() {
                 icon: VolumeHighIcon,
               },
               {
-                label: "Capacitor",
+                label: "Capacitors",
                 href: "/master-data/capacitors",
                 icon: ElectricPlugsIcon,
                 active: true,

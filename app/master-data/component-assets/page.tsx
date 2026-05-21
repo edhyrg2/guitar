@@ -81,7 +81,7 @@ export default async function ComponentAssetsPage() {
                 icon: Settings01Icon,
               },
               {
-                label: "Component Asset",
+                label: "Component Assets",
                 href: "/master-data/component-assets",
                 icon: LibraryIcon,
                 active: true,

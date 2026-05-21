@@ -45,7 +45,7 @@ export default async function WireColorSchemasPage() {
                 icon: ViewIcon,
               },
               {
-                label: "Wire Color Schema",
+                label: "Wire Color Schemas",
                 href: "/master-data/wire-color-schemas",
                 icon: ColorPickerIcon,
                 active: true,

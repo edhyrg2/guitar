@@ -912,6 +912,40 @@ export async function getWiringTemplateDetailById(
   return getWiringTemplateDetailByIdForUser(id, null);
 }
 
+export async function getWiringTemplateDetailBySlugOrId(
+  slugOrId: string,
+  userId: string | null
+): Promise<WiringTemplateDetail | null> {
+  try {
+    const prisma = await getPrismaClient();
+
+    if (!prisma) {
+      // Fallback: try slug match first, then id
+      const bySlug = seedWiringTemplateRows.find((item) => item.slug === slugOrId) ?? null;
+      const match = bySlug ?? seedWiringTemplateRows.find((item) => item.id === slugOrId) ?? null;
+      if (!match) return null;
+      return { ...match, components: [], connections: [] };
+    }
+
+    // Try slug first, then id — single query with OR
+    const found = await prisma.wiringTemplate.findFirst({
+      where: {
+        OR: [
+          { slug: slugOrId },
+          { id: slugOrId },
+        ],
+      },
+      select: { id: true },
+    });
+
+    if (!found) return null;
+
+    return getWiringTemplateDetailByIdForUser(found.id, userId);
+  } catch {
+    return getWiringTemplateDetailByIdForUser(slugOrId, userId);
+  }
+}
+
 export async function getWiringTemplateDetailByIdForUser(
   id: string,
   userId: string | null

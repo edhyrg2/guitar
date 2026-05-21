@@ -4,26 +4,27 @@ import { WiringTemplateDetailContent } from "@/components/wiring-template-detail
 import { PublicGalleryNavbar } from "@/components/public-gallery-navbar";
 import { getSafeServerSession } from "@/lib/auth-session";
 import {
-  getWiringTemplateDetailByIdForUser,
+  getWiringTemplateDetailBySlugOrId,
   incrementWiringTemplateViewCount,
 } from "@/lib/wiring-template-data";
 
 export default async function PublicPreviewPage(
-  props: PageProps<"/preview/[id]">
+  props: PageProps<"/preview/[slug]">
 ) {
-  const { id } = await props.params;
+  const { slug } = await props.params;
   const session = await getSafeServerSession();
 
-  await incrementWiringTemplateViewCount(id);
-
-  const template = await getWiringTemplateDetailByIdForUser(
-    id,
+  // Resolve slug → id first so view count uses the real id
+  const template = await getWiringTemplateDetailBySlugOrId(
+    slug,
     session?.user?.id ?? null
   );
 
   if (!template) {
     notFound();
   }
+
+  await incrementWiringTemplateViewCount(template.id);
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -35,6 +36,7 @@ export default async function PublicPreviewPage(
           backHref="/"
           backLabel="Back to Gallery"
           hideNavbar
+          currentUserId={session?.user?.id ?? null}
         />
       </main>
     </div>

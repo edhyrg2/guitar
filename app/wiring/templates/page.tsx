@@ -51,7 +51,7 @@ export default async function WiringTemplatesPage() {
                 icon: ColorPickerIcon,
               },
               {
-                label: "Wiring Template",
+                label: "Wiring Templates",
                 href: "/wiring/templates",
                 icon: ViewIcon,
                 active: true,

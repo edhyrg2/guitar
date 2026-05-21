@@ -55,7 +55,7 @@ export default async function PotTypesPage() {
                 icon: ElectricPlugsIcon,
               },
               {
-                label: "Potentiometer",
+                label: "Potentiometers",
                 href: "/master-data/pot-types",
                 icon: VolumeHighIcon,
                 active: true,

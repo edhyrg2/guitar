@@ -18,6 +18,7 @@ import {
 
 import { HeartIcon } from "@/components/heart-icon";
 import { TopNavbar } from "@/components/top-navbar";
+import { WiringTemplateDiscussion } from "@/components/wiring-template-discussion";
 import { AppSelect } from "@/components/ui/app-select";
 import { Button } from "@/components/ui/button";
 import {
@@ -38,6 +39,7 @@ type WiringTemplateDetailContentProps = {
   backHref?: string;
   backLabel?: string;
   hideNavbar?: boolean;
+  currentUserId?: string | null;
 };
 
 type TemplateComponentMetadata = {
@@ -101,7 +103,7 @@ type HeaderTab =
   | "Components"
   | "Pin Connections"
   | "Switch Positions"
-  | "Notes"
+  | "Discussion"
   | "Source";
 
 const MIN_PREVIEW_ZOOM = 0.5;
@@ -870,6 +872,7 @@ export function WiringTemplateDetailContent({
   backHref = "/explore",
   backLabel = "Back to Explore",
   hideNavbar = false,
+  currentUserId,
 }: WiringTemplateDetailContentProps) {
   const router = useRouter();
   const [template, setTemplate] = React.useState(initialTemplate);
@@ -1069,7 +1072,7 @@ export function WiringTemplateDetailContent({
     "Components",
     "Pin Connections",
     "Switch Positions",
-    "Notes",
+    "Discussion",
     "Source",
   ];
   const componentByRole = new Map(
@@ -2027,10 +2030,18 @@ export function WiringTemplateDetailContent({
 
               {activeTab !== "Diagram" &&
               activeTab !== "Components" &&
-              activeTab !== "Pin Connections" ? (
+              activeTab !== "Pin Connections" &&
+              activeTab !== "Discussion" ? (
                 <div className="flex min-h-[320px] items-center justify-center rounded-2xl border border-dashed border-border/70 bg-muted/10 px-6 text-center text-sm text-muted-foreground">
                   Tab {activeTab} belum diaktifkan di halaman detail ini.
                 </div>
+              ) : null}
+
+              {activeTab === "Discussion" ? (
+                <WiringTemplateDiscussion
+                  templateId={template.id}
+                  currentUserId={currentUserId}
+                />
               ) : null}
 
             </CardContent>

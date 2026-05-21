@@ -41,7 +41,7 @@ export default async function AiDiagramImportPage() {
               { label: "Overview", href: "/", icon: DashboardSquare01Icon },
               { label: "Users", href: "/users", icon: UserAccountIcon },
               {
-                label: "AI Diagram Import",
+                label: "AI Import",
                 href: "/ai/diagram-import",
                 icon: StarsIcon,
                 active: true,

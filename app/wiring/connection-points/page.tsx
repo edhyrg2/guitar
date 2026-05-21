@@ -36,7 +36,7 @@ export default async function ConnectionPointsPage() {
                 icon: LibraryIcon,
               },
               {
-                label: "Connection Point",
+                label: "Connection Points",
                 href: "/wiring/connection-points",
                 icon: ElectricPlugsIcon,
                 active: true,

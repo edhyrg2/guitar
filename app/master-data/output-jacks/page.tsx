@@ -61,7 +61,7 @@ export default async function OutputJacksPage() {
                 icon: VolumeHighIcon,
               },
               {
-                label: "Output Jack",
+                label: "Output Jacks",
                 href: "/master-data/output-jacks",
                 icon: ElectricPlugsIcon,
                 active: true,

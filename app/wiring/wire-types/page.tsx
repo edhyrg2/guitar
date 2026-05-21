@@ -36,7 +36,7 @@ export default async function WireTypesPage() {
                 icon: ElectricPlugsIcon,
               },
               {
-                label: "Wire Type",
+                label: "Wire Types",
                 href: "/wiring/wire-types",
                 icon: ColorPickerIcon,
                 active: true,

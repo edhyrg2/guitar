@@ -48,7 +48,7 @@ export default async function DiagramSourcesPage() {
                 icon: ColorPickerIcon,
               },
               {
-                label: "Diagram Source",
+                label: "Diagram Sources",
                 href: "/wiring/diagram-sources",
                 icon: BookBookmark01Icon,
                 active: true,

@@ -192,7 +192,7 @@ export default async function MyDesignPage() {
             items={[
               { label: "Overview", href: "/", icon: DashboardSquare01Icon },
               { label: "Workspace", href: "/my-design", icon: PaintBrush02Icon },
-              { label: "My Design", href: "/my-design", icon: UserAccountIcon, active: true },
+              { label: "My Designs", href: "/my-design", icon: UserAccountIcon, active: true },
             ]}
           />
 

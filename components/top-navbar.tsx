@@ -2,11 +2,9 @@ import Link from "next/link";
 import type { ComponentType } from "react";
 import { HugeiconsIcon } from "@hugeicons/react";
 import type { IconSvgElement } from "@hugeicons/react";
-import { Search01Icon } from "@hugeicons/core-free-icons";
 
 import { ThemeControls } from "@/components/theme-controls";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 
 type TopNavbarItem = {
@@ -18,11 +16,12 @@ type TopNavbarItem = {
 };
 
 type TopNavbarProps = {
-  searchPlaceholder: string;
+  searchPlaceholder?: string;
   items: TopNavbarItem[];
 };
 
-export function TopNavbar({ searchPlaceholder, items }: TopNavbarProps) {
+export function TopNavbar({ items }: TopNavbarProps) {
+  const activeItem = items.find((item) => item.active);
   const activeIndex = items.findIndex((item) => item.active);
   const visibleItems =
     activeIndex === -1
@@ -34,26 +33,31 @@ export function TopNavbar({ searchPlaceholder, items }: TopNavbarProps) {
 
   return (
     <header className="border-b border-border/70 bg-background/90 backdrop-blur">
-      <div className="flex flex-col gap-4 px-4 py-4 sm:px-6 xl:flex-row xl:items-center xl:justify-between">
-        <div className="flex flex-1 items-center gap-3">
+      <div className="flex items-center justify-between gap-4 px-4 py-3 sm:px-6">
+        {/* Left: trigger + active page name */}
+        <div className="flex items-center gap-3">
           <SidebarTrigger />
-          <div className="relative max-w-3xl flex-1">
-            <HugeiconsIcon
-              icon={Search01Icon}
-              strokeWidth={2}
-              className="pointer-events-none absolute top-1/2 left-4 -translate-y-1/2 text-muted-foreground"
-            />
-            <Input
-              placeholder={searchPlaceholder}
-              className="h-12 rounded-2xl border-border/70 bg-card pl-11 pr-[4.5rem] text-sm shadow-sm"
-            />
-            <div className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 rounded-md border border-border/70 bg-background px-2 py-1 text-[0.65rem] font-medium text-muted-foreground">
-              Ctrl K
+          {activeItem && (
+            <div className="flex items-center gap-2">
+              {activeItem.icon && (
+                <HugeiconsIcon
+                  icon={activeItem.icon}
+                  strokeWidth={2}
+                  className="size-4 text-muted-foreground"
+                />
+              )}
+              {activeItem.customIcon && (
+                <activeItem.customIcon className="size-4 text-muted-foreground" />
+              )}
+              <h1 className="text-sm font-semibold text-foreground">
+                {activeItem.label}
+              </h1>
             </div>
-          </div>
+          )}
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        {/* Right: breadcrumb nav + theme */}
+        <div className="flex items-center gap-1.5">
           {visibleItems.map((item) => {
             const content = (
               <>

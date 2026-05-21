@@ -38,6 +38,7 @@ type PublicUserGalleryContentProps = {
   profile: PublicUserGalleryProfile;
   stats: MyDesignStats;
   items: MyDesignItem[];
+  hideNavbar?: boolean;
 };
 
 type PublishedFilter = "all" | "saved-setup" | "component-draft";
@@ -77,6 +78,7 @@ export function PublicUserGalleryContent({
   profile,
   stats,
   items,
+  hideNavbar = false,
 }: PublicUserGalleryContentProps) {
   const [query, setQuery] = React.useState("");
   const [activeFilter, setActiveFilter] = React.useState<PublishedFilter>("all");
@@ -116,20 +118,22 @@ export function PublicUserGalleryContent({
 
   return (
     <div className="flex flex-1 flex-col">
-      <TopNavbar
-        searchPlaceholder="Search creator profile and published gallery..."
-        items={[
-          { label: "Overview", href: "/dashboard", icon: DashboardSquare01Icon },
-          { label: "Explore", href: "/explore", icon: ViewIcon },
-          {
-            label: "Creator Gallery",
-            href: `/explore/creator/${profile.id}`,
-            icon: UserAccountIcon,
-            active: true,
-          },
-          { label: "My Design", href: "/my-design", icon: PaintBrush02Icon },
-        ]}
-      />
+      {!hideNavbar && (
+        <TopNavbar
+          searchPlaceholder="Search creator profile and published gallery..."
+          items={[
+            { label: "Overview", href: "/dashboard", icon: DashboardSquare01Icon },
+            { label: "Explore", href: "/explore", icon: ViewIcon },
+            {
+              label: "Creator Gallery",
+              href: `/explore/creator/${profile.id}`,
+              icon: UserAccountIcon,
+              active: true,
+            },
+            { label: "My Design", href: "/my-design", icon: PaintBrush02Icon },
+          ]}
+        />
+      )}
 
       <div className="flex flex-1 flex-col gap-6 bg-[linear-gradient(180deg,rgba(248,250,252,0.92),rgba(241,245,249,0.72))] px-4 py-6 text-foreground dark:bg-[linear-gradient(180deg,rgba(10,10,10,0.96),rgba(23,23,23,0.98))] sm:px-6">
         <section className="overflow-hidden rounded-[2rem] border border-border/70 bg-background/95 shadow-[0_30px_80px_rgba(15,23,42,0.08)] dark:bg-background/90 dark:shadow-[0_30px_80px_rgba(0,0,0,0.35)]">

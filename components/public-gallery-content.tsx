@@ -400,14 +400,14 @@ export function PublicGalleryContent({
           </div>
         ) : (
           <div className="px-4 py-6 sm:px-6">
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+            <div className="grid grid-cols-2 gap-8 sm:grid-cols-3 lg:grid-cols-4">
             {filteredTemplates.map((t, i) => {
               const summary = formatWiringTemplateInventorySummary(t.inventory);
               return (
                 <div key={t.id} className="group overflow-hidden rounded-xl border border-border/60 bg-card transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-lg">
                   {/* Image */}
                   <Link
-                    href={`/preview/${t.id}`}
+                    href={`/preview/${t.slug ?? t.id}`}
                     className="relative block aspect-[4/3] overflow-hidden bg-white dark:bg-neutral-100"
                   >
                     {t.thumbnailUrl ? (
@@ -476,16 +476,16 @@ export function PublicGalleryContent({
                   </Link>
 
                   {/* Footer */}
-                  <div className="flex items-center justify-between px-3 py-2.5">
+                  <div className="flex items-center justify-between px-4 py-3">
                     <Link
-                      href={t.creatorId ? `/explore/creator/${t.creatorId}` : "#"}
+                      href={t.creatorId ? `/creator/${t.creatorId}` : "#"}
                       className={cn(
-                        "flex min-w-0 items-center gap-2",
+                        "flex min-w-0 items-center gap-2.5",
                         t.creatorId ? "transition hover:opacity-80" : "pointer-events-none"
                       )}
                       onClick={(e) => e.stopPropagation()}
                     >
-                      <div className="relative flex size-6 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted text-[0.55rem] font-semibold text-foreground">
+                      <div className="relative flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted text-[0.65rem] font-semibold text-foreground">
                         {isImageSource(t.creatorPhoto) ? (
                           <Image src={t.creatorPhoto!} alt={t.creatorName} fill unoptimized className="object-cover" />
                         ) : (
@@ -493,21 +493,21 @@ export function PublicGalleryContent({
                         )}
                       </div>
                       <div className="min-w-0">
-                        <p className="truncate text-xs font-medium leading-tight text-foreground">{t.name}</p>
-                        <p className="truncate text-[0.68rem] leading-tight text-muted-foreground">{t.creatorName}</p>
+                        <p className="truncate text-sm font-medium leading-tight text-foreground">{t.name}</p>
+                        <p className="truncate text-xs leading-tight text-muted-foreground">{t.creatorName}</p>
                       </div>
                     </Link>
 
-                    <div className="flex shrink-0 items-center gap-2 pl-2 text-[0.7rem] text-muted-foreground">
-                      <span className="flex items-center gap-0.5">
+                    <div className="flex shrink-0 items-center gap-2.5 pl-2 text-xs text-muted-foreground">
+                      <span className="flex items-center gap-1">
                         <HeartIcon
                           filled={t.currentUserLoved}
-                          className={cn("size-3", t.currentUserLoved && "text-rose-500")}
+                          className={cn("size-3.5", t.currentUserLoved && "text-rose-500")}
                         />
                         {formatCompactMetric(t.loveCount)}
                       </span>
-                      <span className="flex items-center gap-0.5">
-                        <HugeiconsIcon icon={ViewIcon} strokeWidth={2} className="size-3" />
+                      <span className="flex items-center gap-1">
+                        <HugeiconsIcon icon={ViewIcon} strokeWidth={2} className="size-3.5" />
                         {formatCompactMetric(t.viewCount)}
                       </span>
                     </div>
