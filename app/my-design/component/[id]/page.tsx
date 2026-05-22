@@ -62,6 +62,7 @@ export default async function MyDesignComponentDetailPage(
     publishedTemplateName: draft.publishedComponentAssetId ? "Published asset" : null,
     createdAt: draft.createdAt.toISOString(),
     updatedAt: draft.updatedAt.toISOString(),
+    isPublished: draft.status === "PUBLISHED",
   };
 
   return (

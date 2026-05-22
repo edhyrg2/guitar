@@ -30,6 +30,9 @@ export default async function ExploreTemplateDetailPage(
     notFound();
   }
 
+  const userId = session?.user?.id ?? null;
+  const isAuthor = Boolean(userId && template.creatorId === userId);
+
   return (
     <SidebarProvider>
       <AppSidebar activePath="/explore" />
@@ -37,7 +40,9 @@ export default async function ExploreTemplateDetailPage(
         <WiringTemplateDetailContent
           template={template}
           editHref={searchParams.editorHref?.trim() || "/custom-builder"}
-          showEditButton={searchParams.authorView?.trim() === "1"}
+          showEditButton={isAuthor || searchParams.authorView?.trim() === "1"}
+          currentUserId={userId}
+          isAuthor={isAuthor}
         />
       </SidebarInset>
     </SidebarProvider>

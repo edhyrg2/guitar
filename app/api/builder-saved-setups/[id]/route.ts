@@ -14,6 +14,7 @@ type BuilderSavedSetupBody = {
   description?: string | null;
   status?: BuilderSavedSetupStatus;
   document?: unknown;
+  thumbnailDataUrl?: string | null;
 };
 
 type FormattedSavedSetup = {
@@ -42,6 +43,7 @@ type BuilderSavedSetupDelegate = {
       name: string;
       slug: string | null;
       description: string | null;
+      thumbnailUrl?: string | null;
       status: BuilderSavedSetupStatus;
       documentJson: Prisma.InputJsonValue;
       publishedTemplateId: string | null;
@@ -112,6 +114,7 @@ export async function PUT(
         name,
         slug: body.slug?.trim() || null,
         description: body.description?.trim() || null,
+        thumbnailUrl: body.thumbnailDataUrl ?? undefined,
         status: "DRAFT",
         documentJson: document as Prisma.InputJsonValue,
         publishedTemplateId: existingSetup.publishedTemplateId ?? null,

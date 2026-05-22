@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import * as React from "react";
 import type Konva from "konva";
@@ -18,6 +18,7 @@ import {
   Delete02Icon,
   Download01Icon,
   FloppyDiskIcon,
+  Image01Icon,
   Menu01Icon,
   Move01Icon,
   OvalIcon,
@@ -771,7 +772,7 @@ function formatSavedSetupLifecycleLabel(
   publishedTemplateId: string | null
 ) {
   if (publishedTemplateId) {
-    return "draft • published";
+    return "draft ï¿½ published";
   }
 
   if (status === "DRAFT") {
@@ -1148,6 +1149,33 @@ function BuilderAssetNode({
   );
 }
 
+function BuilderImageShapeRenderer({ shape }: { shape: { src: string; width: number; height: number; opacity: number } }) {
+  const image = useLoadedImage(shape.src);
+
+  if (!image) {
+    return (
+      <Rect
+        name="builder-export-content"
+        width={shape.width}
+        height={shape.height}
+        fill="#e2e8f0"
+        cornerRadius={8}
+        opacity={shape.opacity}
+      />
+    );
+  }
+
+  return (
+    <KonvaImage
+      name="builder-export-content"
+      image={image}
+      width={shape.width}
+      height={shape.height}
+      opacity={shape.opacity}
+    />
+  );
+}
+
 function BuilderShapeNode({
   shape,
   nodeRef,
@@ -1286,6 +1314,9 @@ function BuilderShapeNode({
             verticalAlign="middle"
           />
         </>
+      ) : null}
+      {shape.type === "image" ? (
+        <BuilderImageShapeRenderer shape={shape} />
       ) : null}
       {isSelected ? (
         <Rect
@@ -1506,6 +1537,11 @@ function BuilderTopbar({
   onExportJson,
   onPublish,
   onOpenSavedSetups,
+  showLeftPanel,
+  showRightPanel,
+  onToggleLeftPanel,
+  onToggleRightPanel,
+  onImportImage,
 }: {
   activeTool: BuilderTool;
   selectedWireTypeId: string;
@@ -1541,6 +1577,11 @@ function BuilderTopbar({
   onExportJson: () => void;
   onPublish: () => void;
   onOpenSavedSetups: () => void;
+  showLeftPanel: boolean;
+  showRightPanel: boolean;
+  onToggleLeftPanel: () => void;
+  onToggleRightPanel: () => void;
+  onImportImage: () => void;
 }) {
   const [menuOpen, setMenuOpen] = React.useState(false);
 
@@ -1703,6 +1744,20 @@ function BuilderTopbar({
             <Button variant="outline" size="sm" onClick={onClearCanvas}>
               Clear Canvas
             </Button>
+            <Button
+              variant={showLeftPanel ? "secondary" : "outline"}
+              size="sm"
+              onClick={onToggleLeftPanel}
+            >
+              {showLeftPanel ? "Hide Palette" : "Show Palette"}
+            </Button>
+            <Button
+              variant={showRightPanel ? "secondary" : "outline"}
+              size="sm"
+              onClick={onToggleRightPanel}
+            >
+              {showRightPanel ? "Hide Panel" : "Show Panel"}
+            </Button>
           </div>
 
           <div className="flex flex-wrap items-center justify-end gap-2">
@@ -1753,6 +1808,14 @@ function BuilderTopbar({
                 <HugeiconsIcon icon={item.icon} strokeWidth={2} />
               </Button>
             ))}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onImportImage}
+              title="Import Image"
+            >
+              <HugeiconsIcon icon={Image01Icon} strokeWidth={2} />
+            </Button>
           </div>
           <Button variant="secondary" size="sm" disabled={!canUndo} onClick={onUndo}>
             <HugeiconsIcon icon={Undo02Icon} strokeWidth={2} data-icon="inline-start" />
@@ -1831,8 +1894,10 @@ export function CustomBuilderContent({
   const [assetQuery, setAssetQuery] = React.useState("");
   const [assetComponentTypeFilter, setAssetComponentTypeFilter] = React.useState("all");
   const [canvasMessage, setCanvasMessage] = React.useState(
-    "Drag asset dari panel kiri ke canvas, lalu klik dua connection point untuk membuat wiring."
+    "Drag an asset from the left panel to the canvas, then click two connection points to create wiring."
   );
+  const [showLeftPanel, setShowLeftPanel] = React.useState(true);
+  const [showRightPanel, setShowRightPanel] = React.useState(true);
   const [stageSize, setStageSize] = React.useState({ width: 960, height: 720 });
   const [canvasScale, setCanvasScale] = React.useState(1);
   const [canvasOffset, setCanvasOffset] = React.useState({ x: 0, y: 0 });
@@ -1858,6 +1923,7 @@ export function CustomBuilderContent({
   const [saveDialogOpen, setSaveDialogOpen] = React.useState(false);
   const [saveDialogMode, setSaveDialogMode] = React.useState<"save" | "saveAs">("save");
   const [savedSetupBrowserOpen, setSavedSetupBrowserOpen] = React.useState(false);
+  const [savedSetupBrowserQuery, setSavedSetupBrowserQuery] = React.useState("");
   const [inlineTextEditor, setInlineTextEditor] =
     React.useState<InlineBuilderTextEditorState>(null);
   const [setupNameInput, setSetupNameInput] = React.useState("");
@@ -1882,6 +1948,7 @@ export function CustomBuilderContent({
   const [savedSetupActionId, setSavedSetupActionId] = React.useState<string | null>(null);
   const deferredAssetQuery = React.useDeferredValue(assetQuery);
   const importJsonInputRef = React.useRef<HTMLInputElement | null>(null);
+  const importImageInputRef = React.useRef<HTMLInputElement | null>(null);
   const stageWrapperRef = React.useRef<HTMLDivElement | null>(null);
   const transformerRef = React.useRef<Konva.Transformer | null>(null);
   const shapeTransformerRef = React.useRef<Konva.Transformer | null>(null);
@@ -2006,6 +2073,13 @@ export function CustomBuilderContent({
   const selectedShape = shapes.find((shape) => shape.id === selectedShapeId) ?? null;
   const selectedConnection =
     connections.find((connection) => connection.id === selectedConnectionId) ?? null;
+  const filteredSavedSetups = React.useMemo(() => {
+    if (!savedSetupBrowserQuery) return savedSetups;
+    const q = savedSetupBrowserQuery.toLowerCase();
+    return savedSetups.filter((s) =>
+      [s.name, s.description ?? "", s.slug ?? ""].join(" ").toLowerCase().includes(q)
+    );
+  }, [savedSetups, savedSetupBrowserQuery]);
   const publishCanvasInventory = React.useMemo(() => {
     const pickups = instances
       .filter((instance) => getBuilderComponentCategory(instance.componentType) === "pickup")
@@ -2936,7 +3010,7 @@ export function CustomBuilderContent({
         return normalizeConnectionForInstances(nextConnection, instances);
       })
     );
-    setCanvasMessage("Endpoint wiring dipindahkan ke connection point baru.");
+    setCanvasMessage("Wiring endpoint moved to a new connection point.");
   }
 
   function getSelectionRect(box: SelectionBox) {
@@ -3074,7 +3148,7 @@ export function CustomBuilderContent({
     setSelectedConnectionId(null);
     setActiveTool("select");
     setDraftShape(null);
-    setCanvasMessage(`${shape.name} ditambahkan ke canvas builder.`);
+    setCanvasMessage(`${shape.name} added to the builder canvas.`);
   }
 
   function addInstance(assetId: string, dropX?: number, dropY?: number) {
@@ -3113,7 +3187,7 @@ export function CustomBuilderContent({
     ]);
     setSelectedInstanceId(id);
     setSelectedInstanceIds([id]);
-    setCanvasMessage(`${asset.name} ditambahkan ke canvas dan siap di-drag.`);
+    setCanvasMessage(`${asset.name} added to the canvas and ready to drag.`);
   }
 
   const copySelectedInstances = React.useCallback(() => {
@@ -3122,7 +3196,7 @@ export function CustomBuilderContent({
     }
 
     clipboardRef.current = cloneInstances(selectedInstances);
-    setCanvasMessage(`${selectedInstances.length} komponen disalin ke clipboard builder.`);
+    setCanvasMessage(`${selectedInstances.length} component(s) copied to builder clipboard.`);
   }, [selectedInstances]);
 
   const pasteCopiedInstances = React.useCallback(() => {
@@ -3148,7 +3222,7 @@ export function CustomBuilderContent({
     setSelectedInstanceId(nextInstances[0]?.id ?? null);
     setSelectedInstanceIds(nextInstances.map((instance) => instance.id));
     setSelectedConnectionId(null);
-    setCanvasMessage(`${nextInstances.length} komponen ditempel ke canvas.`);
+    setCanvasMessage(`${nextInstances.length} component(s) pasted to canvas.`);
   }, []);
 
   function handlePointSelect(instanceId: string, pointKey: string) {
@@ -3158,7 +3232,7 @@ export function CustomBuilderContent({
     }
 
     if (!selectedWireTypeId) {
-      setCanvasMessage("Pilih wire type dulu sebelum membuat koneksi.");
+      setCanvasMessage("Please select a wire type before creating a connection.");
       return;
     }
 
@@ -3168,14 +3242,14 @@ export function CustomBuilderContent({
     ) {
       setSelectedPoint(null);
       setHoverPointTarget(null);
-      setCanvasMessage("Connection point dibatalkan.");
+      setCanvasMessage("Connection point deselected.");
       return;
     }
 
     if (!selectedPoint) {
       setSelectedPoint({ instanceId, pointKey });
       setHoverPointTarget(null);
-      setCanvasMessage("Titik pertama dipilih. Klik titik tujuan untuk menyambungkan wiring.");
+      setCanvasMessage("First point selected. Click the target point to connect wiring.");
       return;
     }
 
@@ -3203,7 +3277,7 @@ export function CustomBuilderContent({
     if (duplicate) {
       setSelectedPoint(null);
       setHoverPointTarget(null);
-      setCanvasMessage("Koneksi itu sudah ada di canvas.");
+      setCanvasMessage("That connection already exists on the canvas.");
       return;
     }
 
@@ -3215,7 +3289,7 @@ export function CustomBuilderContent({
     if (!from || !to) {
       setSelectedPoint(null);
       setHoverPointTarget(null);
-      setCanvasMessage("Gagal membuat koneksi karena titik referensi tidak ditemukan.");
+      setCanvasMessage("Failed to create connection because reference points were not found.");
       return;
     }
 
@@ -3240,12 +3314,12 @@ export function CustomBuilderContent({
     setSelectedInstanceId(null);
     setSelectedInstanceIds([]);
     setSelectedConnectionId(connectionId);
-    setCanvasMessage("Wiring berhasil dibuat berdasarkan connection point yang dipilih.");
+    setCanvasMessage("Wiring successfully created from the selected connection points.");
   }
 
   function straightenSelectedConnection() {
     if (!selectedConnectionId) {
-      setCanvasMessage("Pilih kabel dulu untuk merapikannya.");
+      setCanvasMessage("Please select a wire to straighten it.");
       return;
     }
 
@@ -3272,7 +3346,7 @@ export function CustomBuilderContent({
         };
       })
     );
-    setCanvasMessage("Kabel terpilih dirapikan ulang.");
+    setCanvasMessage("Selected wire straightened.");
   }
 
   function updateCanvasScale(nextScale: number) {
@@ -3312,13 +3386,13 @@ export function CustomBuilderContent({
           : instance
       )
     );
-    setCanvasMessage(checked ? "Label komponen ditampilkan." : "Label komponen disembunyikan.");
+    setCanvasMessage(checked ? "Component labels shown." : "Component labels hidden.");
   }
 
   function resetCanvasView() {
     setCanvasScale(1);
     setCanvasOffset({ x: 0, y: 0 });
-    setCanvasMessage("Zoom canvas direset ke 100%.");
+    setCanvasMessage("Canvas zoom reset to 100%.");
   }
 
   function removeSelectedInstances() {
@@ -3342,7 +3416,7 @@ export function CustomBuilderContent({
     setHoverPointTarget((current) =>
       current && selectedInstanceIds.includes(current.instanceId) ? null : current
     );
-    setCanvasMessage("Komponen terpilih dihapus dari canvas.");
+    setCanvasMessage("Selected component(s) removed from canvas.");
     setSelectedInstanceId(null);
     setSelectedInstanceIds([]);
     setSelectedConnectionId(null);
@@ -3356,7 +3430,7 @@ export function CustomBuilderContent({
     setShapes((current) => current.filter((shape) => !selectedShapeIds.includes(shape.id)));
     setSelectedShapeId(null);
     setSelectedShapeIds([]);
-    setCanvasMessage("Shape terpilih dihapus dari canvas.");
+    setCanvasMessage("Selected shape(s) removed from canvas.");
   }
 
   function clearCanvas() {
@@ -3372,7 +3446,7 @@ export function CustomBuilderContent({
     setHoverPointTarget(null);
     setDragConnectionPoint(null);
     setDraftShape(null);
-    setCanvasMessage("Canvas dibersihkan.");
+    setCanvasMessage("Canvas cleared.");
   }
 
   const loadSavedSetupIntoCanvas = React.useCallback(
@@ -3443,7 +3517,7 @@ export function CustomBuilderContent({
       const targetSetup = availableSetups.find((setup) => setup.id === initialSavedSetupId);
 
       if (!targetSetup) {
-        setCanvasMessage(`Saved setup "${initialSavedSetupId}" tidak ditemukan.`);
+        setCanvasMessage(`Saved setup "${initialSavedSetupId}" not found.`);
         initialSavedSetupLoadRef.current = initialSavedSetupId;
         return;
       }
@@ -3487,6 +3561,8 @@ export function CustomBuilderContent({
       setIsSavingSetup(true);
 
       try {
+        const thumbnailDataUrl = createPublishThumbnailDataUrl();
+
         const response = await fetch(
           targetSetupId
             ? `/api/builder-saved-setups/${targetSetupId}`
@@ -3502,6 +3578,7 @@ export function CustomBuilderContent({
               description: description || null,
               status: "DRAFT" satisfies BuilderSavedSetupStatus,
               document: persistedDocument,
+              thumbnailDataUrl,
             }),
           }
         );
@@ -3638,7 +3715,7 @@ export function CustomBuilderContent({
     setSavedSetupDescription("");
     setSetupNameInput("");
     setSetupDescriptionInput("");
-    setCanvasMessage("Canvas baru siap digunakan.");
+    setCanvasMessage("New canvas ready to use.");
   }, []);
 
   const exportJsonDocument = React.useCallback(() => {
@@ -3755,8 +3832,8 @@ export function CustomBuilderContent({
     const thumbnailDataUrl = createPublishThumbnailDataUrl();
 
     if (!thumbnailDataUrl) {
-      setPublishErrorMessage("Thumbnail publish tidak bisa dibuat dari canvas saat ini.");
-      setCanvasMessage("Thumbnail publish tidak bisa dibuat dari canvas saat ini.");
+      setPublishErrorMessage("Unable to generate publish thumbnail from the current canvas.");
+      setCanvasMessage("Unable to generate publish thumbnail from the current canvas.");
       return;
     }
 
@@ -3764,6 +3841,21 @@ export function CustomBuilderContent({
     setPublishErrorMessage(null);
 
     try {
+      // Save draft first so thumbnail and document are up to date
+      if (activeSavedSetupId && activeSavedSetupName) {
+        await fetch(`/api/builder-saved-setups/${activeSavedSetupId}`, {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            name: activeSavedSetupName,
+            description: savedSetupDescription || null,
+            status: "DRAFT",
+            document: persistedDocument,
+            thumbnailDataUrl,
+          }),
+        });
+      }
+
       const response = await fetch("/api/custom-builder-publish", {
         method: "POST",
         headers: {
@@ -3846,7 +3938,7 @@ export function CustomBuilderContent({
       current.filter((connection) => connection.id !== selectedConnectionId)
     );
     setSelectedConnectionId(null);
-    setCanvasMessage("Kabel terpilih dihapus.");
+    setCanvasMessage("Selected wire deleted.");
   }
 
   function updateInstance(
@@ -3943,6 +4035,19 @@ export function CustomBuilderContent({
             scaleX: 1,
             scaleY: 1,
           });
+        }
+
+        if (shape.type === "image") {
+          return {
+            ...shape,
+            x: nextX,
+            y: nextY,
+            rotation: nextRotation,
+            width: Math.max(10, shape.width * nextScaleX),
+            height: Math.max(10, shape.height * nextScaleY),
+            scaleX: 1,
+            scaleY: 1,
+          };
         }
 
         return {
@@ -4146,7 +4251,7 @@ export function CustomBuilderContent({
                 ? snapToGrid(Math.max(24, worldViewportHeight - height - 24))
                 : instance.y,
       });
-      setCanvasMessage("Komponen dirapikan sesuai alignment yang dipilih.");
+      setCanvasMessage("Components aligned to the selected alignment.");
       return;
     }
 
@@ -4203,7 +4308,7 @@ export function CustomBuilderContent({
                 : instance.y,
       };
     });
-    setCanvasMessage("Komponen dirapikan sesuai alignment yang dipilih.");
+    setCanvasMessage("Components aligned to the selected alignment.");
   }
 
   function moveBuilderLayer(
@@ -4216,18 +4321,18 @@ export function CustomBuilderContent({
 
     if (dragged.kind === "connection") {
       setConnections((current) => moveItemBefore(current, dragged.id, target.id));
-      setCanvasMessage("Urutan wiring layer diperbarui.");
+      setCanvasMessage("Wiring layer order updated.");
       return;
     }
 
     if (dragged.kind === "shape") {
       setShapes((current) => moveItemBefore(current, dragged.id, target.id));
-      setCanvasMessage("Urutan shape layer diperbarui.");
+      setCanvasMessage("Shape layer order updated.");
       return;
     }
 
     setInstances((current) => moveItemBefore(current, dragged.id, target.id));
-    setCanvasMessage("Urutan component layer diperbarui.");
+    setCanvasMessage("Component layer order updated.");
   }
 
   const handleShortcutDeleteSelection = React.useEffectEvent(() => {
@@ -4322,7 +4427,7 @@ export function CustomBuilderContent({
         setSelectedShapeIds([]);
         setDraftShape(null);
         setActiveTool("select");
-        setCanvasMessage("Seleksi dibersihkan.");
+        setCanvasMessage("Selection cleared.");
         return;
       }
 
@@ -4444,7 +4549,7 @@ export function CustomBuilderContent({
         event.preventDefault();
         setSelectedPoint(null);
         setHoverPointTarget(null);
-        setCanvasMessage("Mode wiring dibatalkan.");
+        setCanvasMessage("Wiring mode cancelled.");
       }
     }
 
@@ -4486,27 +4591,79 @@ export function CustomBuilderContent({
           event.target.value = "";
         }}
       />
-      <div className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden xl:grid-cols-[320px_minmax(0,1fr)_340px]">
+      <input
+        ref={importImageInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          if (!file) return;
+          const reader = new FileReader();
+          reader.onload = () => {
+            const dataUrl = String(reader.result);
+            const img = new window.Image();
+            img.onload = () => {
+              const maxW = 600;
+              const maxH = 400;
+              const scale = Math.min(1, maxW / img.naturalWidth, maxH / img.naturalHeight);
+              const width = Math.round(img.naturalWidth * scale);
+              const height = Math.round(img.naturalHeight * scale);
+              const imageShape: import("@/lib/custom-builder-saved-setup-types").BuilderSetupShape = {
+                id: `shape-img-${Date.now()}`,
+                type: "image",
+                name: file.name.replace(/\.[^/.]+$/, "") || "Reference Image",
+                x: 80,
+                y: 80,
+                width,
+                height,
+                src: dataUrl,
+                rotation: 0,
+                scaleX: 1,
+                scaleY: 1,
+                opacity: 1,
+                fill: "transparent",
+                stroke: "transparent",
+                strokeWidth: 0,
+                visible: true,
+                locked: false,
+              };
+              setShapes((current) => [...current, imageShape]);
+              setSelectedShapeId(imageShape.id);
+              setSelectedShapeIds([imageShape.id]);
+              setSelectedInstanceId(null);
+              setSelectedInstanceIds([]);
+              setSelectedConnectionId(null);
+              setCanvasMessage(`Image "${file.name}" added as a layer. Resize and position it as needed.`);
+            };
+            img.src = dataUrl;
+          };
+          reader.readAsDataURL(file);
+          event.target.value = "";
+        }}
+      />
+      <div className={`grid min-h-0 flex-1 grid-cols-1 overflow-hidden ${showLeftPanel && showRightPanel ? "xl:grid-cols-[320px_minmax(0,1fr)_340px]" : showLeftPanel ? "xl:grid-cols-[320px_minmax(0,1fr)]" : showRightPanel ? "xl:grid-cols-[minmax(0,1fr)_340px]" : ""}`}>
+        {showLeftPanel && (
         <div className="min-h-0 overflow-hidden border-r border-border/70 bg-background/95 p-4">
           <Card className="flex h-full min-h-0 flex-col overflow-hidden rounded-3xl border-border/70 shadow-sm">
             <CardHeader>
               <CardTitle>Component Palette</CardTitle>
               <CardDescription>
-                Asset aktif dengan connection point siap di-drop ke canvas builder.
+                Active assets with connection points ready to drop onto the builder canvas.
               </CardDescription>
             </CardHeader>
             <CardContent className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden">
               <Input
                 value={assetQuery}
                 onChange={(event) => setAssetQuery(event.target.value)}
-                placeholder="Cari asset, tipe, atau titik koneksi..."
+                placeholder="Search assets, types, or connection points..."
               />
               <AppSelect
                 value={assetComponentTypeFilter}
                 onValueChange={setAssetComponentTypeFilter}
                 className="h-9 px-3 text-sm"
                 options={[
-                  { value: "all", label: "Semua komponen" },
+                  { value: "all", label: "All components" },
                   ...assetComponentTypes.map((componentType) => ({
                     value: componentType,
                     label: componentType,
@@ -4568,7 +4725,7 @@ export function CustomBuilderContent({
                   ))}
                   {filteredAssets.length === 0 ? (
                     <div className="rounded-2xl border border-dashed border-border px-4 py-8 text-center text-muted-foreground">
-                      Tidak ada asset yang cocok dengan pencarian.
+                      No assets match the search.
                     </div>
                   ) : null}
                 </div>
@@ -4576,6 +4733,7 @@ export function CustomBuilderContent({
             </CardContent>
           </Card>
         </div>
+        )}
 
         <div className="min-h-0 overflow-visible bg-[linear-gradient(135deg,rgba(15,23,42,0.03),rgba(15,118,110,0.07))] p-4">
           <div className="flex h-full min-h-0 flex-col overflow-visible rounded-[2rem] border border-border/70 bg-background/95 shadow-[0_30px_80px_rgba(15,23,42,0.10)]">
@@ -4664,6 +4822,11 @@ export function CustomBuilderContent({
               onExportJson={exportJsonDocument}
               onPublish={openPublishDialog}
               onOpenSavedSetups={openSavedSetupBrowser}
+              showLeftPanel={showLeftPanel}
+              showRightPanel={showRightPanel}
+              onToggleLeftPanel={() => setShowLeftPanel((v) => !v)}
+              onToggleRightPanel={() => setShowRightPanel((v) => !v)}
+              onImportImage={() => importImageInputRef.current?.click()}
             />
             <div className="border-b border-border/70 px-4 py-3 text-sm text-muted-foreground">
               {canvasMessage}
@@ -4683,11 +4846,55 @@ export function CustomBuilderContent({
                       const assetId = event.dataTransfer.getData("application/x-builder-asset");
                       const bounds = stageWrapperRef.current?.getBoundingClientRect();
 
-                      if (!assetId || !bounds) {
+                      if (assetId && bounds) {
+                        addInstance(assetId, event.clientX - bounds.left, event.clientY - bounds.top);
                         return;
                       }
 
-                      addInstance(assetId, event.clientX - bounds.left, event.clientY - bounds.top);
+                      // Handle image file drop as image shape layer
+                      const file = event.dataTransfer.files?.[0];
+                      if (file && file.type.startsWith("image/")) {
+                        const reader = new FileReader();
+                        reader.onload = () => {
+                          const dataUrl = String(reader.result);
+                          const img = new window.Image();
+                          img.onload = () => {
+                            const maxW = 600;
+                            const maxH = 400;
+                            const scale = Math.min(1, maxW / img.naturalWidth, maxH / img.naturalHeight);
+                            const width = Math.round(img.naturalWidth * scale);
+                            const height = Math.round(img.naturalHeight * scale);
+                            const imageShape: import("@/lib/custom-builder-saved-setup-types").BuilderSetupShape = {
+                              id: `shape-img-${Date.now()}`,
+                              type: "image",
+                              name: file.name.replace(/\.[^/.]+$/, "") || "Dropped Image",
+                              x: 80,
+                              y: 80,
+                              width,
+                              height,
+                              src: dataUrl,
+                              rotation: 0,
+                              scaleX: 1,
+                              scaleY: 1,
+                              opacity: 1,
+                              fill: "transparent",
+                              stroke: "transparent",
+                              strokeWidth: 0,
+                              visible: true,
+                              locked: false,
+                            };
+                            setShapes((current) => [...current, imageShape]);
+                            setSelectedShapeId(imageShape.id);
+                            setSelectedShapeIds([imageShape.id]);
+                            setSelectedInstanceId(null);
+                            setSelectedInstanceIds([]);
+                            setSelectedConnectionId(null);
+                            setCanvasMessage(`Image "${file.name}" added as a layer.`);
+                          };
+                          img.src = dataUrl;
+                        };
+                        reader.readAsDataURL(file);
+                      }
                     }}
                   >
                     <Stage
@@ -5263,7 +5470,7 @@ export function CustomBuilderContent({
                                       setSelectedConnectionId(connection.id);
                                       setSelectedInstanceId(null);
                                       setSelectedInstanceIds([]);
-                                      setCanvasMessage("Titik belok baru ditambahkan ke kabel.");
+                                      setCanvasMessage("New bend point added to the wire.");
                                     }}
                                     onDragMove={(event) => {
                                       const delta = isVertical ? event.target.x() : event.target.y();
@@ -5312,7 +5519,7 @@ export function CustomBuilderContent({
                                       }}
                                       onDblClick={() => {
                                         handleConnectionControlPointRemove(connection.id, index);
-                                        setCanvasMessage("Titik belok kabel dihapus.");
+                                        setCanvasMessage("Wire bend point removed.");
                                       }}
                                       onDragMove={(event) => {
                                         handleConnectionControlPointDrag(
@@ -5563,9 +5770,9 @@ export function CustomBuilderContent({
                           <div className="mx-auto mb-3 flex size-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
                             <HugeiconsIcon icon={PaintBrush02Icon} strokeWidth={2} />
                           </div>
-                          <div className="font-medium text-foreground">Canvas masih kosong</div>
+                          <div className="font-medium text-foreground">Canvas is empty</div>
                           <div className="mt-1 text-sm text-muted-foreground">
-                            Drag asset dari kiri atau pilih tool shape untuk mulai gambar di builder.
+                            Drag an asset from the left or select a shape tool to start drawing in the builder.
                           </div>
                         </div>
                       </div>
@@ -5593,6 +5800,7 @@ export function CustomBuilderContent({
           </div>
         </div>
 
+        {showRightPanel && (
         <div className="min-h-0 overflow-auto border-l border-border/70 bg-background/95 p-4">
           <div className="grid gap-4">
             <Card className="rounded-3xl border-border/70 shadow-sm">
@@ -5604,10 +5812,10 @@ export function CustomBuilderContent({
                   <>
                     <div>
                       <div className="font-medium text-foreground">
-                        {selectedInstanceIds.length} komponen terseleksi
+                        {selectedInstanceIds.length} component(s) selected
                       </div>
                       <div className="text-muted-foreground">
-                        Gunakan align, drag, delete, atau toggle label untuk edit massal.
+                        Use align, drag, delete, or toggle label for bulk editing.
                       </div>
                     </div>
                     <Button
@@ -6021,7 +6229,7 @@ export function CustomBuilderContent({
                   </>
                 ) : (
                   <div className="text-muted-foreground">
-                    Pilih komponen atau kabel di canvas untuk mengubah propertinya.
+                    Select a component or wire on the canvas to edit its properties.
                   </div>
                 )}
               </CardContent>
@@ -6032,7 +6240,7 @@ export function CustomBuilderContent({
               </CardHeader>
               <CardContent className="grid gap-3">
                 <div className="rounded-2xl border border-dashed border-border/70 bg-muted/15 px-3 py-2 text-xs text-muted-foreground">
-                  Drag layer card untuk mengubah urutan depan-belakang pada kategori yang sama.
+                  Drag layer cards to reorder front-to-back within the same category.
                 </div>
                 <div className="grid gap-2">
                   {visibleLayers.map((layer) => (
@@ -6105,7 +6313,7 @@ export function CustomBuilderContent({
                 </div>
                 {visibleLayers.length === 0 ? (
                   <div className="rounded-2xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
-                    Belum ada layer aktif di builder.
+                    No active layers in the builder yet.
                   </div>
                 ) : null}
               </CardContent>
@@ -6115,21 +6323,22 @@ export function CustomBuilderContent({
                 <CardTitle className="text-base">Shortcuts</CardTitle>
               </CardHeader>
               <CardContent className="grid gap-2 text-sm text-muted-foreground">
-                <div>Delete / Backspace untuk hapus seleksi.</div>
-                <div>Arrow Keys untuk geser komponen per grid.</div>
-                <div>Shift + Arrow Keys untuk geser lebih jauh.</div>
-                <div>Shift + Drag di area kosong untuk menggeser canvas.</div>
-                <div>Shift/Ctrl/Cmd + Click untuk multi-select komponen.</div>
-                <div>Drag mouse di area kosong canvas untuk box select.</div>
-                <div>Ctrl/Cmd + C dan Ctrl/Cmd + V untuk copy paste komponen.</div>
-                <div>Ctrl/Cmd + Z dan Ctrl/Cmd + Shift + Z / Y untuk undo redo.</div>
-                <div>Ctrl/Cmd + +, -, 0 untuk zoom in, out, dan reset.</div>
-                <div>S untuk straighten wire, L untuk toggle label, C untuk cancel wiring.</div>
-                <div>Esc untuk membersihkan seleksi aktif.</div>
+                <div>Delete / Backspace to delete selection.</div>
+                <div>Arrow Keys to move components per grid.</div>
+                <div>Shift + Arrow Keys to move further.</div>
+                <div>Shift + Drag on empty area to pan the canvas.</div>
+                <div>Shift/Ctrl/Cmd + Click to multi-select components.</div>
+                <div>Drag mouse on empty canvas area for box select.</div>
+                <div>Ctrl/Cmd + C and Ctrl/Cmd + V to copy paste components.</div>
+                <div>Ctrl/Cmd + Z and Ctrl/Cmd + Shift + Z / Y for undo redo.</div>
+                <div>Ctrl/Cmd + +, -, 0 for zoom in, out, and reset.</div>
+                <div>S to straighten wire, L to toggle label, C to cancel wiring.</div>
+                <div>Esc to clear active selection.</div>
               </CardContent>
             </Card>
           </div>
         </div>
+        )}
       </div>
 
       <Dialog open={saveDialogOpen} onOpenChange={setSaveDialogOpen}>
@@ -6138,8 +6347,8 @@ export function CustomBuilderContent({
             <DialogTitle>{saveDialogMode === "saveAs" ? "Save As" : "Save Draft"}</DialogTitle>
             <DialogDescription>
               {saveDialogMode === "saveAs"
-                ? "Simpan setup builder saat ini sebagai draft baru."
-                : "Simpan setup builder saat ini sebagai draft."}
+                ? "Save the current builder setup as a new draft."
+                : "Save the current builder setup as a draft."}
             </DialogDescription>
           </DialogHeader>
 
@@ -6152,7 +6361,7 @@ export function CustomBuilderContent({
                 id="builder-setup-name"
                 value={setupNameInput}
                 onChange={(event) => setSetupNameInput(event.target.value)}
-                placeholder="Mis. Strat HSS Modern Wiring"
+                placeholder="e.g. Strat HSS Modern Wiring"
               />
             </div>
             <div className="grid gap-1.5">
@@ -6166,7 +6375,7 @@ export function CustomBuilderContent({
                 id="builder-setup-description"
                 value={setupDescriptionInput}
                 onChange={(event) => setSetupDescriptionInput(event.target.value)}
-                placeholder="Catatan singkat tentang setup ini."
+                placeholder="Brief notes about this setup."
                 className="min-h-24 rounded-md border border-input bg-input/20 px-3 py-2 text-sm outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
               />
             </div>
@@ -6199,7 +6408,7 @@ export function CustomBuilderContent({
           <DialogHeader className="items-center text-center">
             <DialogTitle>Saving Draft</DialogTitle>
             <DialogDescription>
-              Mohon tunggu. Draft builder sedang disimpan.
+              Please wait. The builder draft is being saved.
             </DialogDescription>
           </DialogHeader>
         </DialogContent>
@@ -6210,7 +6419,7 @@ export function CustomBuilderContent({
           <DialogHeader>
             <DialogTitle>Publish to Wiring Templates</DialogTitle>
             <DialogDescription>
-              Buat template resmi dari custom builder dan simpan ke tabel wiring template.
+              Create an official template from the custom builder and save it to the wiring templates table.
             </DialogDescription>
           </DialogHeader>
 
@@ -6379,7 +6588,7 @@ export function CustomBuilderContent({
                 }
                 rows={3}
                 className="min-h-20 rounded-md border border-input bg-input/20 px-3 py-2 text-sm outline-none"
-                placeholder="Catatan singkat tentang wiring template ini."
+                placeholder="Brief notes about this wiring template."
               />
             </label>
             <label className="flex items-center gap-2 text-sm text-muted-foreground sm:col-span-2">
@@ -6393,7 +6602,7 @@ export function CustomBuilderContent({
                   }))
                 }
               />
-              Tandai template sebagai verified
+              Mark template as verified
             </label>
           </div>
 
@@ -6420,86 +6629,87 @@ export function CustomBuilderContent({
       </Dialog>
 
       <Dialog open={savedSetupBrowserOpen} onOpenChange={setSavedSetupBrowserOpen}>
-        <DialogContent className="max-w-3xl">
+        <DialogContent className="max-w-4xl">
           <DialogHeader>
-            <DialogTitle>Saved Setups</DialogTitle>
+            <DialogTitle>Open Design</DialogTitle>
             <DialogDescription>
-              Muat ulang, review, atau hapus setup builder yang tersimpan.
+              Browse, search, and load your saved wiring setups.
             </DialogDescription>
           </DialogHeader>
 
           <div className="grid gap-3 px-6 pb-2">
-            <div className="flex items-center justify-between gap-3 rounded-md border border-border/70 bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
-              <span>
-                {session?.user?.email
-                  ? `Signed in as ${session.user.email}`
-                  : "No active session."}
-              </span>
+            <div className="flex items-center gap-3">
+              <input
+                type="text"
+                placeholder="Search setups..."
+                className="h-9 flex-1 rounded-lg border border-border/70 bg-background px-3 text-sm outline-none transition placeholder:text-muted-foreground/60 focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
+                onChange={(e) => setSavedSetupBrowserQuery(e.target.value.toLowerCase())}
+              />
               <Button
                 variant="outline"
                 size="sm"
                 disabled={!canPersistSavedSetups || isLoadingSavedSetups}
-                onClick={() => {
-                  void loadSavedSetups();
-                }}
+                onClick={() => { void loadSavedSetups(); }}
               >
-                {isLoadingSavedSetups ? "Refreshing..." : "Refresh"}
+                {isLoadingSavedSetups ? "Loading..." : "Refresh"}
               </Button>
             </div>
 
-            <div className="max-h-96 overflow-auto rounded-md border border-border/70">
-              {savedSetups.length === 0 ? (
-                <div className="px-4 py-8 text-center text-sm text-muted-foreground">
-                  {isLoadingSavedSetups
-                    ? "Loading saved setups..."
-                    : "Belum ada saved setup untuk user ini."}
+            <div className="max-h-[60vh] overflow-auto">
+              {filteredSavedSetups.length === 0 ? (
+                <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border/70 py-12 text-center">
+                  <div className="text-sm text-muted-foreground">
+                    {isLoadingSavedSetups
+                      ? "Loading setups..."
+                      : savedSetups.length === 0
+                        ? "No saved setups yet. Save your first wiring to see it here."
+                        : "No setups match your search."}
+                  </div>
                 </div>
               ) : (
-                <div className="divide-y divide-border/70">
-                  {savedSetups.map((setup) => (
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {filteredSavedSetups.map((setup) => (
                     <div
                       key={setup.id}
-                      className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+                      className="group overflow-hidden rounded-xl border border-border/60 bg-card transition hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-md"
                     >
-                      <div className="min-w-0">
-                        <div className="truncate text-sm font-medium text-foreground">
-                          {setup.name}
+                      <button
+                        type="button"
+                        className="relative block aspect-[4/3] w-full overflow-hidden bg-white dark:bg-neutral-100"
+                        onClick={() => {
+                          loadSavedSetupIntoCanvas(setup);
+                          setSavedSetupBrowserOpen(false);
+                        }}
+                      >
+                        {setup.thumbnailUrl ? (
+                          <img
+                            src={setup.thumbnailUrl}
+                            alt={setup.name}
+                            className="h-full w-full object-contain object-center"
+                          />
+                        ) : (
+                          <div className="absolute inset-0 bg-gradient-to-br from-slate-900/90 to-teal-700/70" />
+                        )}
+                      </button>
+                      <div className="flex items-center justify-between gap-2 px-3 py-2.5">
+                        <div className="min-w-0">
+                          <p className="truncate text-xs font-medium text-foreground">{setup.name}</p>
+                          <p className="truncate text-[0.65rem] text-muted-foreground">
+                            {setup.status}{setup.publishedTemplateId ? " • Published" : ""}
+                            {" • "}{new Date(setup.updatedAt).toLocaleDateString()}
+                          </p>
                         </div>
-                        <div className="mt-1 text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
-                          {setup.status}
-                          {setup.publishedTemplateId ? " • linked to template" : ""}
-                          {setup.slug ? ` • ${setup.slug}` : ""}
-                        </div>
-                        {setup.description ? (
-                          <div className="mt-1 text-xs text-muted-foreground">
-                            {setup.description}
-                          </div>
-                        ) : null}
-                        <div className="mt-1 text-[11px] text-muted-foreground">
-                          Updated {new Date(setup.updatedAt).toLocaleString()}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
                         <Button
-                          variant="outline"
+                          variant="ghost"
                           size="sm"
+                          className="shrink-0 text-destructive hover:text-destructive"
                           disabled={savedSetupActionId === setup.id}
-                          onClick={() => {
-                            loadSavedSetupIntoCanvas(setup);
-                            setSavedSetupBrowserOpen(false);
-                          }}
-                        >
-                          Load
-                        </Button>
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          disabled={savedSetupActionId === setup.id}
-                          onClick={() => {
+                          onClick={(e) => {
+                            e.stopPropagation();
                             void deleteSavedSetup(setup.id);
                           }}
                         >
-                          {savedSetupActionId === setup.id ? "Deleting..." : "Delete"}
+                          {savedSetupActionId === setup.id ? "..." : "Delete"}
                         </Button>
                       </div>
                     </div>

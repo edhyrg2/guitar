@@ -42,7 +42,7 @@ export async function POST(
 
   if (!draft.publishedComponentAssetId) {
     return NextResponse.json(
-      { error: "Draft ini belum memiliki komponen yang dipublish." },
+      { error: "This draft does not have a published component." },
       { status: 400 }
     );
   }

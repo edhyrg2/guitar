@@ -36,7 +36,7 @@ export function LayersPanel() {
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         <div className="rounded-2xl border border-dashed border-border/70 bg-muted/15 px-3 py-2 text-xs text-muted-foreground">
-          Drag layer card untuk mengubah urutan depan-belakang.
+          Drag layer cards to change front-to-back order.
         </div>
 
         <div className="flex max-h-[380px] flex-col gap-2 overflow-auto">
@@ -128,7 +128,7 @@ export function LayersPanel() {
 
           {visibleLayers.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
-              Belum ada layer. Mulai dengan menambahkan shape, text, draw, atau image.
+              No layers yet. Start by adding a shape, text, draw, or image.
             </div>
           ) : null}
         </div>

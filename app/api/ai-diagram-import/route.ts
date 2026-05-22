@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 
+import { getSafeServerSession } from "@/lib/auth-session";
 import { getPrismaClient } from "@/lib/prisma";
 
 type ImportTemplateInput = {
@@ -376,6 +377,9 @@ export async function POST(request: Request) {
   }
 
   try {
+    const session = await getSafeServerSession();
+    const userId = session?.user?.id ?? null;
+
     const result = await prisma.$transaction(async (tx) => {
       const template = await tx.wiringTemplate.create({
         data: {
@@ -429,12 +433,76 @@ export async function POST(request: Request) {
         })),
       });
 
-      return template;
+      // Create a builder saved setup so user can open it in Wiring Builder
+      let savedSetupId: string | null = null;
+
+      if (userId) {
+        const builderInstances = parsed.components.map((component) => ({
+          id: `builder-instance-${component.componentRole.replace(/\s+/g, "-").toLowerCase()}`,
+          assetId: component.assetId,
+          componentAssetId: component.assetId,
+          name: assetMap.get(component.assetId)?.name ?? component.componentRole,
+          componentType: component.componentType,
+          x: component.positionX,
+          y: component.positionY,
+          width: 180,
+          height: 120,
+          renderWidth: 180,
+          renderHeight: 120,
+          scale: 1,
+          rotation: component.rotation,
+          showLabel: true,
+          labelOffsetX: 0,
+          labelOffsetY: 0,
+        }));
+
+        const roleToInstanceId = new Map(
+          parsed.components.map((component) => [
+            component.componentRole.toLowerCase(),
+            `builder-instance-${component.componentRole.replace(/\s+/g, "-").toLowerCase()}`,
+          ])
+        );
+
+        const builderConnections = parsed.connections.map((connection, index) => ({
+          id: `builder-connection-${index + 1}`,
+          fromInstanceId: roleToInstanceId.get(connection.fromComponentRole.toLowerCase()) ?? "",
+          fromPointKey: connection.fromPointKey,
+          toInstanceId: roleToInstanceId.get(connection.toComponentRole.toLowerCase()) ?? "",
+          toPointKey: connection.toPointKey,
+          wireTypeId: connection.wireTypeId,
+          controlPoints: [] as Array<{ x: number; y: number }>,
+        }));
+
+        const builderDocument = {
+          version: 1,
+          selectedWireTypeId: parsed.connections[0]?.wireTypeId ?? null,
+          instances: builderInstances,
+          connections: builderConnections,
+          shapes: [],
+        };
+
+        const savedSetup = await tx.builderSavedSetup.create({
+          data: {
+            userId,
+            name: `AI Import: ${parsed.template.name}`,
+            description: parsed.template.description ?? "Imported from AI diagram analysis.",
+            status: "DRAFT",
+            documentJson: builderDocument as unknown as Prisma.InputJsonValue,
+            publishedTemplateId: template.id,
+          },
+          select: { id: true },
+        });
+
+        savedSetupId = savedSetup.id;
+      }
+
+      return { template, savedSetupId };
     });
 
     return NextResponse.json(
       {
-        template: result,
+        template: result.template,
+        savedSetupId: result.savedSetupId,
         importedCounts: {
           components: parsed.components.length,
           connections: parsed.connections.length,

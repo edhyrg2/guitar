@@ -14,6 +14,7 @@ type BuilderSavedSetupBody = {
   description?: string | null;
   status?: BuilderSavedSetupStatus;
   document?: unknown;
+  thumbnailDataUrl?: string | null;
 };
 
 type FormattedSavedSetup = {
@@ -23,7 +24,9 @@ type FormattedSavedSetup = {
   description: string | null;
   status: BuilderSavedSetupStatus;
   documentJson: Prisma.JsonValue;
+  thumbnailUrl: string | null;
   publishedTemplateId: string | null;
+  publishedTemplate?: { thumbnailUrl: string | null } | null;
   publishedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
@@ -33,6 +36,7 @@ type BuilderSavedSetupDelegate = {
   findMany: (args: {
     where: { userId: string };
     orderBy: Array<Record<string, "asc" | "desc">>;
+    include?: { publishedTemplate?: { select: { thumbnailUrl: boolean } } };
   }) => Promise<FormattedSavedSetup[]>;
   create: (args: {
     data: {
@@ -52,6 +56,7 @@ function formatSavedSetupResponse(setup: FormattedSavedSetup) {
   return {
     ...setup,
     status: "DRAFT" as const,
+    thumbnailUrl: setup.thumbnailUrl ?? setup.publishedTemplate?.thumbnailUrl ?? null,
     publishedAt: setup.publishedAt?.toISOString() ?? null,
     createdAt: setup.createdAt.toISOString(),
     updatedAt: setup.updatedAt.toISOString(),
@@ -81,6 +86,7 @@ export async function GET() {
   const setups = await builderSavedSetup.findMany({
     where: { userId: session.user.id },
     orderBy: [{ updatedAt: "desc" }, { name: "asc" }],
+    include: { publishedTemplate: { select: { thumbnailUrl: true } } },
   });
 
   return NextResponse.json(
@@ -123,6 +129,7 @@ export async function POST(request: Request) {
         name,
         slug: body.slug?.trim() || null,
         description: body.description?.trim() || null,
+        thumbnailUrl: body.thumbnailDataUrl || null,
         status: "DRAFT",
         documentJson: document as Prisma.InputJsonValue,
         publishedTemplateId: null,

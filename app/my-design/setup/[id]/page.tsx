@@ -58,8 +58,11 @@ export default async function MyDesignSetupDetailPage(
           <WiringTemplateDetailContent
             template={template}
             editHref={`/custom-builder?savedSetupId=${encodeURIComponent(setup.id)}`}
+            showEditButton
             backHref="/my-design"
             backLabel="Back to My Design"
+            currentUserId={session?.user?.id ?? null}
+            isAuthor
           />
         ) : (
           <MyDesignSetupDetailContent

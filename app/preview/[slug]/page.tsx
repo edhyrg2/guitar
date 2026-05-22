@@ -26,17 +26,22 @@ export default async function PublicPreviewPage(
 
   await incrementWiringTemplateViewCount(template.id);
 
+  const userId = session?.user?.id ?? null;
+  const isAuthor = Boolean(userId && template.creatorId === userId);
+
   return (
     <div className="flex min-h-screen flex-col">
       <PublicGalleryNavbar />
       <main className="flex-1">
         <WiringTemplateDetailContent
           template={template}
-          showEditButton={false}
+          showEditButton={isAuthor}
+          editHref={`/custom-builder?savedSetupId=${template.id}`}
           backHref="/"
           backLabel="Back to Gallery"
           hideNavbar
-          currentUserId={session?.user?.id ?? null}
+          currentUserId={userId}
+          isAuthor={isAuthor}
         />
       </main>
     </div>

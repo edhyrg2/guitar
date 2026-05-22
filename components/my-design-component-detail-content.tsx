@@ -1,13 +1,17 @@
 "use client";
 
+import * as React from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
   ArrowLeft01Icon,
+  Cancel01Icon,
   DashboardSquare01Icon,
   Edit02Icon,
   PaintBrush02Icon,
+  Rocket01Icon,
   UserAccountIcon,
 } from "@hugeicons/core-free-icons";
 
@@ -25,12 +29,13 @@ type MyDesignComponentDetailContentProps = {
     publishedTemplateName: string | null;
     createdAt: string;
     updatedAt: string;
+    isPublished: boolean;
   };
 };
 
 function formatDate(value: string) {
   try {
-    return new Date(value).toLocaleDateString("id-ID", {
+    return new Date(value).toLocaleDateString("en-US", {
       day: "numeric",
       month: "short",
       year: "numeric",
@@ -43,13 +48,31 @@ function formatDate(value: string) {
 export function MyDesignComponentDetailContent({
   item,
 }: MyDesignComponentDetailContentProps) {
+  const router = useRouter();
+  const [isPublished, setIsPublished] = React.useState(item.isPublished);
+  const [isPending, setIsPending] = React.useState(false);
+
+  async function handleUnpublish() {
+    setIsPending(true);
+    try {
+      const response = await fetch(`/api/custom-component-drafts/${item.id}/unpublish`, {
+        method: "POST",
+      });
+      if (!response.ok) {
+        const data = (await response.json()) as { error?: string };
+        throw new Error(data?.error || "Failed to unpublish.");
+      }
+      setIsPublished(false);
+    } finally {
+      setIsPending(false);
+    }
+  }
+
   return (
     <div className="flex flex-1 flex-col">
       <TopNavbar
-        searchPlaceholder="Browse component draft detail and preview..."
         items={[
-          { label: "Overview", href: "/", icon: DashboardSquare01Icon },
-          { label: "Workspace", href: "/my-design", icon: PaintBrush02Icon },
+          { label: "My Designs", href: "/my-design", icon: PaintBrush02Icon },
           {
             label: "Component Detail",
             href: `/my-design/component/${item.id}`,
@@ -64,33 +87,49 @@ export function MyDesignComponentDetailContent({
           <CardHeader className="gap-4 border-b border-border/70 pb-4">
             <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
               <div className="min-w-0">
-                <Button variant="ghost" size="sm" className="mb-2 -ml-3 px-3" asChild>
+                <Button variant="ghost" size="sm" className="mb-2 -ml-3 gap-2.5 px-3" asChild>
                   <Link href="/my-design">
-                    <HugeiconsIcon
-                      icon={ArrowLeft01Icon}
-                      strokeWidth={2}
-                      data-icon="inline-start"
-                    />
-                    Back to My Design
+                    <span className="flex size-7 items-center justify-center rounded-full border border-border/70 bg-muted/50">
+                      <HugeiconsIcon
+                        icon={ArrowLeft01Icon}
+                        strokeWidth={2}
+                        className="size-3.5"
+                      />
+                    </span>
+                    Back to My Designs
                   </Link>
                 </Button>
                 <CardTitle className="text-2xl sm:text-4xl">{item.title}</CardTitle>
                 <div className="mt-3 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-                  <span>{item.status}</span>
+                  <span>{isPublished ? "Published" : item.status}</span>
                   {item.publishedTemplateName ? <span>• {item.publishedTemplateName}</span> : null}
                 </div>
               </div>
 
-              <Button size="lg" asChild>
-                <Link href="/custom-component">
-                  <HugeiconsIcon
-                    icon={Edit02Icon}
-                    strokeWidth={2}
-                    data-icon="inline-start"
-                  />
-                  Open Editor
-                </Link>
-              </Button>
+              <div className="flex flex-wrap items-center gap-2">
+                {isPublished ? (
+                  <Button
+                    size="lg"
+                    variant="destructive"
+                    disabled={isPending}
+                    onClick={() => void handleUnpublish()}
+                  >
+                    <HugeiconsIcon icon={Cancel01Icon} strokeWidth={2} data-icon="inline-start" />
+                    {isPending ? "Processing..." : "Unpublish"}
+                  </Button>
+                ) : (
+                  <Button size="lg" variant="outline" disabled>
+                    <HugeiconsIcon icon={Rocket01Icon} strokeWidth={2} data-icon="inline-start" />
+                    Not Published
+                  </Button>
+                )}
+                <Button size="lg" asChild>
+                  <Link href={`/custom-component?draftId=${item.id}`}>
+                    <HugeiconsIcon icon={Edit02Icon} strokeWidth={2} data-icon="inline-start" />
+                    Open Editor
+                  </Link>
+                </Button>
+              </div>
             </div>
           </CardHeader>
 
@@ -117,7 +156,7 @@ export function MyDesignComponentDetailContent({
                       Description
                     </div>
                     <div className="mt-2 text-sm leading-6 text-foreground">
-                      {item.description || "Belum ada deskripsi untuk component draft ini."}
+                      {item.description || "No description provided for this component draft."}
                     </div>
                   </div>
                   <div>

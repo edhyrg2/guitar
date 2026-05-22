@@ -70,6 +70,7 @@ type ValidationState = {
 type ImportState = {
   status: "idle" | "success" | "error";
   message: string | null;
+  savedSetupId?: string | null;
 };
 
 type PromptPayload = {
@@ -814,6 +815,7 @@ export function AiDiagramImportContent({
         template?: {
           name: string;
         };
+        savedSetupId?: string | null;
         importedCounts?: {
           components: number;
           connections: number;
@@ -827,6 +829,7 @@ export function AiDiagramImportContent({
       setImportState({
         status: "success",
         message: `Template "${payload.template?.name ?? "Untitled"}" imported with ${payload.importedCounts?.components ?? 0} components and ${payload.importedCounts?.connections ?? 0} connections.`,
+        savedSetupId: payload.savedSetupId ?? null,
       });
     } catch (error) {
       setImportState({
@@ -902,9 +905,9 @@ export function AiDiagramImportContent({
                     Import wiring diagrams with a clearer AI-to-system flow
                   </h2>
                   <p className="mt-2 max-w-xl text-sm text-muted-foreground">
-                    Halaman ini menyiapkan prompt, memberi batasan master data, lalu
-                    mengecek hasil ChatGPT sebelum data benar-benar masuk ke template
-                    wiring di sistem.
+                    This page prepares the prompt, enforces master data constraints, and
+                    validates ChatGPT output before data is actually imported into the
+                    wiring template system.
                   </p>
                 </div>
                 <div className="rounded-2xl border border-border/70 bg-background/80 px-4 py-4 shadow-sm backdrop-blur">
@@ -1366,8 +1369,18 @@ export function AiDiagramImportContent({
                   "border-border/70 bg-background text-muted-foreground"
               )}
             >
-              {importState.message ??
-                "After validation passes, use Import to System to create the wiring template and its related records."}
+              <div>
+                {importState.message ??
+                  "After validation passes, use Import to System to create the wiring template and its related records."}
+              </div>
+              {importState.status === "success" && importState.savedSetupId && (
+                <a
+                  href={`/custom-builder?savedSetupId=${importState.savedSetupId}`}
+                  className="mt-3 inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-600"
+                >
+                  Open in Wiring Builder →
+                </a>
+              )}
             </div>
 
             <div className="grid gap-3">

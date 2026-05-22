@@ -8,6 +8,7 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import {
   ArrowLeft01Icon,
   Bookmark02Icon,
+  Cancel01Icon,
   DashboardSquare01Icon,
   Edit02Icon,
   ElectricPlugsIcon,
@@ -40,6 +41,7 @@ type WiringTemplateDetailContentProps = {
   backLabel?: string;
   hideNavbar?: boolean;
   currentUserId?: string | null;
+  isAuthor?: boolean;
 };
 
 type TemplateComponentMetadata = {
@@ -752,6 +754,54 @@ function parseDiagramJsonComponents(value: string): DiagramJsonComponent[] {
   }
 }
 
+type DiagramJsonShape = {
+  type: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  src: string;
+  rotation: number;
+  scaleX: number;
+  scaleY: number;
+  opacity: number;
+};
+
+function parseDiagramJsonShapes(value: string): DiagramJsonShape[] {
+  try {
+    const parsed = JSON.parse(value) as Record<string, unknown>;
+
+    // Shapes are stored at diagramJson.builder.shapes
+    const builder = parsed.builder as Record<string, unknown> | undefined;
+    const shapesArray = Array.isArray(builder?.shapes) ? builder.shapes : Array.isArray(parsed.shapes) ? parsed.shapes : [];
+
+    if (shapesArray.length === 0) {
+      return [];
+    }
+
+    return shapesArray
+      .filter((shape): shape is Record<string, unknown> => {
+        if (!shape || typeof shape !== "object") return false;
+        const s = shape as Record<string, unknown>;
+        return s.type === "image" && typeof s.src === "string";
+      })
+      .map((shape) => ({
+        type: "image",
+        x: typeof shape.x === "number" ? shape.x : 0,
+        y: typeof shape.y === "number" ? shape.y : 0,
+        width: typeof shape.width === "number" ? shape.width : 200,
+        height: typeof shape.height === "number" ? shape.height : 150,
+        src: shape.src as string,
+        rotation: typeof shape.rotation === "number" ? shape.rotation : 0,
+        scaleX: typeof shape.scaleX === "number" ? shape.scaleX : 1,
+        scaleY: typeof shape.scaleY === "number" ? shape.scaleY : 1,
+        opacity: typeof shape.opacity === "number" ? shape.opacity : 1,
+      }));
+  } catch {
+    return [];
+  }
+}
+
 function InfoRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-center justify-between gap-3 border-b border-border/50 pb-3 last:border-b-0 last:pb-0">
@@ -873,6 +923,7 @@ export function WiringTemplateDetailContent({
   backLabel = "Back to Explore",
   hideNavbar = false,
   currentUserId,
+  isAuthor = false,
 }: WiringTemplateDetailContentProps) {
   const router = useRouter();
   const [template, setTemplate] = React.useState(initialTemplate);
@@ -883,9 +934,12 @@ export function WiringTemplateDetailContent({
   const [isLoveAnimating, setIsLoveAnimating] = React.useState(false);
   const [isSavePending, setIsSavePending] = React.useState(false);
   const [isSaveAnimating, setIsSaveAnimating] = React.useState(false);
+  const [isUnpublishing, setIsUnpublishing] = React.useState(false);
+  const [isUnpublished, setIsUnpublished] = React.useState(false);
   const [previewZoom, setPreviewZoom] = React.useState(1);
   const [isPreviewPanning, setIsPreviewPanning] = React.useState(false);
   const [activeTab, setActiveTab] = React.useState<HeaderTab>("Diagram");
+  const [discussionCount, setDiscussionCount] = React.useState(0);
   const previewViewportRef = React.useRef<HTMLDivElement | null>(null);
   const previewPanStateRef = React.useRef<PreviewPanState | null>(null);
   const inventory = parseWiringTemplateInventory(
@@ -908,6 +962,20 @@ export function WiringTemplateDetailContent({
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
     return () => observer.disconnect();
   }, []);
+
+  React.useEffect(() => {
+    fetch(`/api/wiring-templates/${template.id}/comments`)
+      .then((r) => r.json())
+      .then((data: { comments?: Array<{ replies?: unknown[] }> }) => {
+        const comments = data.comments ?? [];
+        const total = comments.reduce(
+          (sum, c) => sum + 1 + (Array.isArray(c.replies) ? c.replies.length : 0),
+          0
+        );
+        setDiscussionCount(total);
+      })
+      .catch(() => {});
+  }, [template.id]);
 
   const inventorySections = [
     {
@@ -934,7 +1002,9 @@ export function WiringTemplateDetailContent({
   ];
 
   const previewData = (() => {
-    if (template.components.length === 0) {
+    const diagramShapes = parseDiagramJsonShapes(template.diagramJson);
+
+    if (template.components.length === 0 && diagramShapes.length === 0) {
       return null;
     }
 
@@ -1037,6 +1107,16 @@ export function WiringTemplateDetailContent({
       })
       .filter((connection): connection is NonNullable<typeof connection> => connection !== null);
 
+    // Include image shapes in bounds calculation
+    for (const shape of diagramShapes) {
+      points.push({ x: shape.x, y: shape.y });
+      points.push({ x: shape.x + shape.width * shape.scaleX, y: shape.y + shape.height * shape.scaleY });
+    }
+
+    if (points.length === 0) {
+      points.push({ x: 0, y: 0 }, { x: 600, y: 400 });
+    }
+
     const minX = Math.min(...points.map((point) => point.x));
     const minY = Math.min(...points.map((point) => point.y));
     const maxX = Math.max(...points.map((point) => point.x));
@@ -1057,6 +1137,7 @@ export function WiringTemplateDetailContent({
       componentBoxes,
       connections,
       wireBridges,
+      shapes: diagramShapes,
       viewBox: {
         x: viewBoxX,
         y: viewBoxY,
@@ -1152,6 +1233,58 @@ export function WiringTemplateDetailContent({
       }));
     } finally {
       setIsSavePending(false);
+    }
+  }
+
+  async function handleUnpublish() {
+    if (!isAuthor || isUnpublishing) return;
+    setIsUnpublishing(true);
+
+    try {
+      const response = await fetch(`/api/wiring-templates/${template.id}`, {
+        method: "DELETE",
+      });
+
+      if (response.status === 401) {
+        router.push("/login?callbackUrl=/");
+        return;
+      }
+
+      if (!response.ok) {
+        const data = (await response.json()) as { error?: string };
+        throw new Error(data?.error || "Failed to unpublish.");
+      }
+
+      setIsUnpublished(true);
+    } finally {
+      setIsUnpublishing(false);
+    }
+  }
+
+  async function handlePublish() {
+    if (!isAuthor || isUnpublishing) return;
+    setIsUnpublishing(true);
+
+    try {
+      const response = await fetch(`/api/wiring-templates/${template.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isPublished: true }),
+      });
+
+      if (response.status === 401) {
+        router.push("/login?callbackUrl=/");
+        return;
+      }
+
+      if (!response.ok) {
+        const data = (await response.json()) as { error?: string };
+        throw new Error(data?.error || "Failed to publish.");
+      }
+
+      setIsUnpublished(false);
+    } finally {
+      setIsUnpublishing(false);
     }
   }
 
@@ -1267,9 +1400,8 @@ export function WiringTemplateDetailContent({
       return;
     }
 
-    event.preventDefault();
-
     if (event.ctrlKey || event.metaKey) {
+      event.preventDefault();
       const direction = event.deltaY > 0 ? -1 : 1;
       const nextZoom = Number((previewZoom + direction * PREVIEW_WHEEL_ZOOM_STEP).toFixed(2));
 
@@ -1278,12 +1410,16 @@ export function WiringTemplateDetailContent({
     }
 
     if (event.shiftKey && Math.abs(event.deltaX) < 0.5) {
+      event.preventDefault();
       viewport.scrollLeft += event.deltaY;
       return;
     }
 
-    viewport.scrollLeft += event.deltaX;
-    viewport.scrollTop += event.deltaY;
+    // Allow normal page scroll — only prevent default if there's horizontal scroll content
+    if (Math.abs(event.deltaX) > 0.5) {
+      event.preventDefault();
+      viewport.scrollLeft += event.deltaX;
+    }
   }
 
   return (
@@ -1311,13 +1447,15 @@ export function WiringTemplateDetailContent({
             <CardHeader className="gap-4 border-b border-border/70 pb-4">
               <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                 <div className="min-w-0">
-                  <Button variant="ghost" size="sm" className="mb-2 -ml-3 px-3" asChild>
+                  <Button variant="ghost" size="sm" className="mb-2 -ml-3 gap-2.5 px-3" asChild>
                     <Link href={backHref}>
-                      <HugeiconsIcon
-                        icon={ArrowLeft01Icon}
-                        strokeWidth={2}
-                        data-icon="inline-start"
-                      />
+                      <span className="flex size-7 items-center justify-center rounded-full border border-border/70 bg-muted/50">
+                        <HugeiconsIcon
+                          icon={ArrowLeft01Icon}
+                          strokeWidth={2}
+                          className="size-3.5"
+                        />
+                      </span>
                       {backLabel}
                     </Link>
                   </Button>
@@ -1430,8 +1568,38 @@ export function WiringTemplateDetailContent({
                     />
                     {formatCompactMetric(template.loveCount)}
                   </Button>
+                  {isAuthor && !isUnpublished ? (
+                    <Button
+                      size="lg"
+                      variant="destructive"
+                      disabled={isUnpublishing}
+                      onClick={() => void handleUnpublish()}
+                    >
+                      <HugeiconsIcon
+                        icon={Cancel01Icon}
+                        strokeWidth={2}
+                        data-icon="inline-start"
+                      />
+                      {isUnpublishing ? "Processing..." : "Unpublish"}
+                    </Button>
+                  ) : null}
+                  {isAuthor && isUnpublished ? (
+                    <Button
+                      size="lg"
+                      variant="default"
+                      disabled={isUnpublishing}
+                      onClick={() => void handlePublish()}
+                    >
+                      <HugeiconsIcon
+                        icon={Share08Icon}
+                        strokeWidth={2}
+                        data-icon="inline-start"
+                      />
+                      {isUnpublishing ? "Processing..." : "Publish"}
+                    </Button>
+                  ) : null}
                   {showEditButton ? (
-                    <Button size="lg" asChild>
+                    <Button size="lg" className="ml-auto" asChild>
                       <Link href={editHref}>
                         <HugeiconsIcon
                           icon={Edit02Icon}
@@ -1457,7 +1625,14 @@ export function WiringTemplateDetailContent({
                     }`}
                     onClick={() => setActiveTab(tab)}
                   >
-                    {tab}
+                    <span className="flex items-center gap-1.5">
+                      {tab}
+                      {tab === "Discussion" && discussionCount > 0 && (
+                        <span className="inline-flex size-5 items-center justify-center rounded-full bg-primary/10 text-[0.6rem] font-semibold text-primary">
+                          {discussionCount}
+                        </span>
+                      )}
+                    </span>
                     {activeTab === tab ? (
                       <span className="absolute inset-x-1.5 -bottom-px h-0.5 rounded-full bg-primary" />
                     ) : null}
@@ -1513,9 +1688,7 @@ export function WiringTemplateDetailContent({
                     onPointerCancel={handlePreviewPointerEnd}
                     onWheel={handlePreviewWheel}
                     style={{
-                      touchAction: "none",
                       userSelect: "none",
-                      overscrollBehavior: "contain",
                     }}
                   >
                     {previewData ? (
@@ -1603,6 +1776,20 @@ export function WiringTemplateDetailContent({
                               </g>
                             ) : null}
                           </g>
+                        ))}
+
+                        {/* Image shapes from builder */}
+                        {previewData.shapes.map((shape, idx) => (
+                          <image
+                            key={`shape-img-${idx}`}
+                            href={shape.src}
+                            x={shape.x}
+                            y={shape.y}
+                            width={shape.width * shape.scaleX}
+                            height={shape.height * shape.scaleY}
+                            opacity={shape.opacity}
+                            transform={shape.rotation ? `rotate(${shape.rotation} ${shape.x + (shape.width * shape.scaleX) / 2} ${shape.y + (shape.height * shape.scaleY) / 2})` : undefined}
+                          />
                         ))}
 
                         {previewData.componentBoxes.map((component) => (
@@ -1698,7 +1885,7 @@ export function WiringTemplateDetailContent({
                       </div>
                     ) : (
                       <div className="flex min-h-[560px] items-center justify-center bg-white px-6 text-center text-sm text-muted-foreground">
-                        Belum ada posisi komponen yang bisa divisualisasikan.
+                        No component positions available to visualize.
                       </div>
                     )}
                   </div>
@@ -1801,7 +1988,7 @@ export function WiringTemplateDetailContent({
                           <InfoRow label="Asset" value={component.name} />
                           <InfoRow
                             label="Detail"
-                            value="Belum tersedia untuk template lama ini."
+                            value="Details not available for this legacy template."
                           />
                         </div>
                       </div>
@@ -1809,7 +1996,7 @@ export function WiringTemplateDetailContent({
                   </div>
                 ) : (
                   <div className="flex min-h-[320px] items-center justify-center rounded-2xl border border-dashed border-border/70 bg-muted/10 px-6 text-center text-sm text-muted-foreground">
-                    Tidak ada komponen tersimpan pada template ini.
+                    No components saved for this template.
                   </div>
                 )
               ) : null}
@@ -1931,7 +2118,7 @@ export function WiringTemplateDetailContent({
                       <div className="grid gap-3">
                         {filtered.length === 0 ? (
                           <div className="flex min-h-[120px] items-center justify-center rounded-2xl border border-dashed border-border/70 bg-muted/10 text-sm text-muted-foreground">
-                            Tidak ada koneksi yang cocok dengan filter.
+                            No connections match the current filter.
                           </div>
                         ) : (
                           filtered.map(({ connection, fromComponent, toComponent, displayColor }) => (
@@ -2023,7 +2210,7 @@ export function WiringTemplateDetailContent({
                   );
                 })() : (
                   <div className="flex min-h-[320px] items-center justify-center rounded-2xl border border-dashed border-border/70 bg-muted/10 px-6 text-center text-sm text-muted-foreground">
-                    Tidak ada koneksi pin tersimpan pada template ini.
+                    No pin connections saved for this template.
                   </div>
                 )
               ) : null}
@@ -2033,7 +2220,7 @@ export function WiringTemplateDetailContent({
               activeTab !== "Pin Connections" &&
               activeTab !== "Discussion" ? (
                 <div className="flex min-h-[320px] items-center justify-center rounded-2xl border border-dashed border-border/70 bg-muted/10 px-6 text-center text-sm text-muted-foreground">
-                  Tab {activeTab} belum diaktifkan di halaman detail ini.
+                  The {activeTab} tab is not yet available on this page.
                 </div>
               ) : null}
 
@@ -2041,6 +2228,7 @@ export function WiringTemplateDetailContent({
                 <WiringTemplateDiscussion
                   templateId={template.id}
                   currentUserId={currentUserId}
+                  onCountChange={setDiscussionCount}
                 />
               ) : null}
 
@@ -2052,7 +2240,7 @@ export function WiringTemplateDetailContent({
               <CardHeader>
                 <CardTitle>Detected Inventory</CardTitle>
                 <CardDescription>
-                  Ringkasan komponen yang dibaca dari payload publish.
+                  Component summary extracted from the published payload.
                 </CardDescription>
               </CardHeader>
               <CardContent className="flex flex-col gap-3">
@@ -2066,7 +2254,7 @@ export function WiringTemplateDetailContent({
               <CardHeader>
                 <CardTitle>Diagram Info</CardTitle>
                 <CardDescription>
-                  Metadata tambahan untuk validasi dan referensi.
+                  Additional metadata for validation and reference.
                 </CardDescription>
               </CardHeader>
               <CardContent className="flex flex-col gap-3">
@@ -2082,7 +2270,7 @@ export function WiringTemplateDetailContent({
               <CardHeader>
                 <CardTitle>Switch Logic JSON</CardTitle>
                 <CardDescription>
-                  Payload logic yang tersimpan untuk template ini.
+                  Stored switch logic payload for this template.
                 </CardDescription>
               </CardHeader>
               <CardContent>

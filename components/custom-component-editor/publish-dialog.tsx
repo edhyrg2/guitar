@@ -349,8 +349,8 @@ export function PublishDialog({
         <DialogHeader>
           <DialogTitle>Publish Custom Component</DialogTitle>
           <DialogDescription>
-            Pilih target komponen, lalu isi field master datanya. Visual canvas dan
-            connection point akan dipublikasikan sebagai asset milik komponen ini.
+            Choose the target component, then fill in its master data fields. The visual
+            canvas and connection points will be published as an asset belonging to this component.
           </DialogDescription>
         </DialogHeader>
 

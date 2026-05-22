@@ -32,6 +32,7 @@ type Comment = {
 type WiringTemplateDiscussionProps = {
   templateId: string;
   currentUserId?: string | null;
+  onCountChange?: (count: number) => void;
 };
 
 function isImageSource(value: string | null | undefined) {
@@ -317,6 +318,7 @@ function CommentItem({
 export function WiringTemplateDiscussion({
   templateId,
   currentUserId,
+  onCountChange,
 }: WiringTemplateDiscussionProps) {
   const router = useRouter();
   const [comments, setComments] = React.useState<Comment[]>([]);
@@ -380,6 +382,10 @@ export function WiringTemplateDiscussion({
   }
 
   const totalCount = (comments ?? []).reduce((sum, c) => sum + 1 + c.replies.length, 0);
+
+  React.useEffect(() => {
+    onCountChange?.(totalCount);
+  }, [totalCount, onCountChange]);
 
   return (
     <div className="flex flex-col gap-6">

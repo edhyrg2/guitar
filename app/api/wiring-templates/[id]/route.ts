@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 
+import { getSafeServerSession } from "@/lib/auth-session";
 import { getPrismaClient } from "@/lib/prisma";
 
 function parseJsonField(value: string) {
@@ -166,6 +167,12 @@ export async function DELETE(
   _request: Request,
   context: RouteContext<"/api/wiring-templates/[id]">
 ) {
+  const session = await getSafeServerSession();
+
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const prisma = await getPrismaClient();
 
   if (!prisma) {
@@ -177,9 +184,71 @@ export async function DELETE(
 
   const { id } = await context.params;
 
-  await prisma.wiringTemplate.delete({
+  // Verify the user is the creator
+  const template = await prisma.wiringTemplate.findUnique({
     where: { id },
+    select: { id: true, createdBy: true },
   });
 
-  return NextResponse.json({ success: true });
+  if (!template) {
+    return NextResponse.json({ error: "Template not found." }, { status: 404 });
+  }
+
+  // Check ownership by matching createdBy with user name/email
+  const user = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { name: true, email: true },
+  });
+
+  const isOwner =
+    user &&
+    (template.createdBy === user.name ||
+      template.createdBy === user.email ||
+      template.createdBy === session.user.id);
+
+  if (!isOwner) {
+    return NextResponse.json({ error: "Forbidden. Only the author can unpublish." }, { status: 403 });
+  }
+
+  // Soft unpublish — hide from public without deleting
+  await prisma.wiringTemplate.update({
+    where: { id },
+    data: { isPublished: false },
+  });
+
+  return NextResponse.json({ success: true, isPublished: false });
+}
+
+export async function PATCH(
+  request: Request,
+  context: RouteContext<"/api/wiring-templates/[id]">
+) {
+  const session = await getSafeServerSession();
+
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const prisma = await getPrismaClient();
+
+  if (!prisma) {
+    return NextResponse.json(
+      { error: "Database connection is not available." },
+      { status: 503 }
+    );
+  }
+
+  const { id } = await context.params;
+  const body = (await request.json()) as { isPublished?: boolean };
+
+  if (typeof body.isPublished === "boolean") {
+    await prisma.wiringTemplate.update({
+      where: { id },
+      data: { isPublished: body.isPublished },
+    });
+
+    return NextResponse.json({ success: true, isPublished: body.isPublished });
+  }
+
+  return NextResponse.json({ error: "No valid fields to update." }, { status: 400 });
 }

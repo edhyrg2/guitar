@@ -19,6 +19,7 @@ import { getPrismaClient } from "@/lib/prisma";
 type SearchParams = Promise<{
   ownerType?: string;
   ownerId?: string;
+  draftId?: string;
 }>;
 
 async function getInitialTarget(
@@ -250,10 +251,51 @@ export default async function CustomComponentPage(props: {
   searchParams: SearchParams;
 }) {
   const searchParams = await props.searchParams;
-  const initialTarget = await getInitialTarget(
-    searchParams.ownerType,
-    searchParams.ownerId
-  );
+
+  let initialTarget: CustomComponentEditorTarget | null = null;
+
+  if (searchParams.draftId) {
+    const prisma = await getPrismaClient();
+    if (prisma) {
+      const draft = await prisma.customComponentDraft.findUnique({
+        where: { id: searchParams.draftId },
+        select: {
+          id: true,
+          name: true,
+          documentJson: true,
+          publishedComponentAssetId: true,
+          publishedComponentAsset: {
+            select: {
+              id: true,
+              ownerType: true,
+              ownerId: true,
+              slug: true,
+              styleType: true,
+            },
+          },
+        },
+      });
+
+      if (draft) {
+        const document = normalizeEditorDocument(draft.documentJson);
+        initialTarget = {
+          ownerType: (draft.publishedComponentAsset?.ownerType as CustomComponentEditorTarget["ownerType"]) ?? "switch-type",
+          ownerId: draft.publishedComponentAsset?.ownerId ?? draft.id,
+          assetId: draft.publishedComponentAssetId,
+          assetName: draft.name,
+          assetSlug: draft.publishedComponentAsset?.slug ?? "",
+          styleType: draft.publishedComponentAsset?.styleType ?? null,
+          payload: {},
+          document,
+        };
+      }
+    }
+  } else {
+    initialTarget = await getInitialTarget(
+      searchParams.ownerType,
+      searchParams.ownerId
+    );
+  }
 
   return (
     <SidebarProvider>

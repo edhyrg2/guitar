@@ -351,15 +351,12 @@ export function MyDesignContent({
                         {profile.location}
                       </span>
                     ) : null}
-                    <span className="rounded-full bg-sky-100 px-3 py-1 text-sky-900 dark:bg-sky-950/60 dark:text-sky-200">
-                      {profile.level}
-                    </span>
                   </div>
                 </div>
 
                 <p className="max-w-3xl text-sm leading-7 text-muted-foreground sm:text-base">
                   {profile.profileBio ||
-                    "Tambahkan deskripsi profil untuk menjelaskan gaya wiring, fokus eksperimen, atau signature design kamu."}
+                    "Add a profile description to explain your wiring style, experimental focus, or signature design approach."}
                 </p>
 
                 <div className="flex flex-wrap gap-2">
@@ -382,7 +379,7 @@ export function MyDesignContent({
                     ))
                   ) : (
                     <div className="rounded-full border border-dashed border-border/70 bg-background/40 px-3 py-1.5 text-sm text-muted-foreground dark:bg-background/20">
-                      Belum ada social link
+                      No social links yet
                     </div>
                   )}
                 </div>
@@ -417,14 +414,14 @@ export function MyDesignContent({
             <div>
               <CardTitle className="text-2xl">My Designs</CardTitle>
               <p className="mt-2 text-sm text-muted-foreground">
-                Semua setup dan draft komponen milik akun ini.
+                All setups and component drafts for this account.
               </p>
             </div>
             <div className="w-full sm:w-[320px]">
               <Input
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="Cari design, draft, atau template..."
+                placeholder="Search designs, drafts, or templates..."
               />
             </div>
           </CardHeader>
@@ -458,7 +455,7 @@ export function MyDesignContent({
               {filteredItems.map((item) => (
                 <div
                   key={item.id}
-                  className="group overflow-hidden rounded-[1.5rem] border border-border/70 bg-background transition hover:-translate-y-0.5 hover:border-primary/35 dark:bg-card"
+                  className="group relative overflow-hidden rounded-[1.5rem] border border-border/70 bg-background transition hover:-translate-y-0.5 hover:border-primary/35 dark:bg-card"
                 >
                   <Link
                     href={
@@ -488,48 +485,20 @@ export function MyDesignContent({
                           }}
                         />
                       )}
-                      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/82 via-black/40 to-transparent p-5 text-white">
-                        <div className="flex items-end justify-between gap-4">
-                          <div className="pb-0.5">
-                            <div className="line-clamp-2 text-2xl font-semibold leading-tight">
-                              {item.title}
-                            </div>
-                            <div className="mt-2 text-sm text-white/80">{item.status}</div>
-                          </div>
+                      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent p-4 text-white">
+                        <div className="line-clamp-1 text-sm font-semibold leading-tight">
+                          {item.title}
                         </div>
+                        <div className="mt-1 text-xs text-white/70">{item.status}</div>
                       </div>
                     </div>
                   </Link>
-                  {item.canUnpublish ? (
-                    <div className="border-t border-border/70 px-4 py-3">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={isPending || activeItemId === item.id}
-                        onClick={() =>
-                          startTransition(() => {
-                            void unpublishComponentDraft(item.id).catch(
-                              (error: unknown) => {
-                                setFeedback(
-                                  error instanceof Error
-                                    ? error.message
-                                    : "Failed to unpublish component."
-                                );
-                              }
-                            );
-                          })
-                        }
-                      >
-                        Unpublish
-                      </Button>
-                    </div>
-                  ) : null}
                 </div>
               ))}
 
               {filteredItems.length === 0 ? (
                 <div className="rounded-[1.5rem] border border-dashed border-border bg-background px-6 py-12 text-center text-muted-foreground md:col-span-2 dark:bg-card">
-                  Tidak ada design yang cocok dengan filter atau pencarian saat ini.
+                  No designs match the current filter or search.
                 </div>
               ) : null}
             </div>
@@ -564,7 +533,7 @@ export function MyDesignContent({
           <DialogHeader>
             <DialogTitle>Edit Profile</DialogTitle>
             <DialogDescription>
-              Perbarui deskripsi profil, lokasi, dan social media untuk halaman My Design.
+              Update your profile description, location, and social media for the My Design page.
             </DialogDescription>
           </DialogHeader>
 
@@ -588,8 +557,8 @@ export function MyDesignContent({
                 <div>
                   <div className="text-sm font-medium text-foreground">Profile Avatar</div>
                   <div className="mt-1 text-sm text-muted-foreground">
-                    Upload avatar JPG, PNG, atau WEBP. Gambar akan dipotong
-                    otomatis menjadi format persegi.
+                    Upload a JPG, PNG, or WEBP avatar. The image will be automatically
+                    cropped to a square.
                   </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
@@ -643,7 +612,7 @@ export function MyDesignContent({
                 onChange={(event) => updateField("profileBio", event.target.value)}
                 rows={5}
                 className="min-h-36 w-full rounded-2xl border border-input bg-input/20 px-4 py-3 text-sm leading-6 outline-none transition focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 dark:bg-input/30"
-                placeholder="Ceritakan fokus design kamu, referensi wiring favorit, atau pendekatan eksperimental yang sering dipakai."
+                placeholder="Describe your design focus, favorite wiring references, or experimental approaches you often use."
               />
             </div>
 

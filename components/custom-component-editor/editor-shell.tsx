@@ -188,6 +188,7 @@ export function EditorShell({ initialTarget = null }: EditorShellProps) {
   const [saveDialogOpen, setSaveDialogOpen] = React.useState(false);
   const [saveDialogMode, setSaveDialogMode] = React.useState<"create" | "save-as">("create");
   const [draftBrowserOpen, setDraftBrowserOpen] = React.useState(false);
+  const [draftBrowserQuery, setDraftBrowserQuery] = React.useState("");
   const [draftName, setDraftName] = React.useState("");
   const [draftDescription, setDraftDescription] = React.useState("");
   const [isSavingDraft, setIsSavingDraft] = React.useState(false);
@@ -204,6 +205,12 @@ export function EditorShell({ initialTarget = null }: EditorShellProps) {
     () => objects.filter((object) => selectedIds.includes(object.id)),
     [objects, selectedIds]
   );
+  const filteredDrafts = React.useMemo(() => {
+    if (!draftBrowserQuery) return drafts;
+    return drafts.filter((d) =>
+      [d.name, d.description ?? ""].join(" ").toLowerCase().includes(draftBrowserQuery)
+    );
+  }, [drafts, draftBrowserQuery]);
   const selectedItemCount = selectedIds.length + selectedConnectionPointIds.length;
   const canPersistDraft = sessionStatus === "authenticated";
   const documentSnapshot = React.useMemo(
@@ -921,6 +928,21 @@ export function EditorShell({ initialTarget = null }: EditorShellProps) {
       setIsPublishing(true);
 
       try {
+        // Save draft first so thumbnail and document are up to date
+        if (activeDraftId && activeDraftName) {
+          const document = serializeEditorDocument(objects, background, connectionPoints);
+          await fetch(`/api/custom-component-drafts/${activeDraftId}`, {
+            method: "PUT",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              name: activeDraftName,
+              description: activeDraftDescription || null,
+              thumbnailDataUrl: exported.url,
+              document,
+            }),
+          });
+        }
+
         const imageFile = await dataUrlToFile(exported.url, `${value.assetSlug ?? "custom-component"}.png`);
         const formData = new FormData();
 
@@ -1131,8 +1153,8 @@ export function EditorShell({ initialTarget = null }: EditorShellProps) {
             <DialogTitle>{saveDialogMode === "save-as" ? "Save As" : "Save Draft"}</DialogTitle>
             <DialogDescription>
               {saveDialogMode === "save-as"
-                ? "Simpan salinan draft custom component sebagai file baru."
-                : "Simpan draft custom component ke database user yang sedang login."}
+                ? "Save a copy of the custom component draft as a new file."
+                : "Save the custom component draft to the currently signed-in user's database."}
             </DialogDescription>
           </DialogHeader>
 
@@ -1145,7 +1167,7 @@ export function EditorShell({ initialTarget = null }: EditorShellProps) {
                 id="draft-name"
                 value={draftName}
                 onChange={(event) => setDraftName(event.target.value)}
-                placeholder="Mis. Humbucker base v1"
+                placeholder="e.g. Humbucker base v1"
               />
             </div>
             <div className="grid gap-1.5">
@@ -1159,7 +1181,7 @@ export function EditorShell({ initialTarget = null }: EditorShellProps) {
                 id="draft-description"
                 value={draftDescription}
                 onChange={(event) => setDraftDescription(event.target.value)}
-                placeholder="Catatan singkat perubahan atau tujuan draft ini."
+                placeholder="Brief notes about changes or the purpose of this draft."
                 className="min-h-24 rounded-md border border-input bg-input/20 px-3 py-2 text-sm outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
               />
             </div>
@@ -1192,95 +1214,99 @@ export function EditorShell({ initialTarget = null }: EditorShellProps) {
           <DialogHeader className="items-center text-center">
             <DialogTitle>Saving Draft</DialogTitle>
             <DialogDescription>
-              Mohon tunggu. Draft custom component sedang disimpan.
+              Please wait. The custom component draft is being saved.
             </DialogDescription>
           </DialogHeader>
         </DialogContent>
       </Dialog>
 
       <Dialog open={draftBrowserOpen} onOpenChange={setDraftBrowserOpen}>
-        <DialogContent className="max-w-3xl">
+        <DialogContent className="max-w-4xl">
           <DialogHeader>
-            <DialogTitle>Draft Database</DialogTitle>
+            <DialogTitle>Open Design</DialogTitle>
             <DialogDescription>
-              Muat ulang, review, atau hapus draft custom component yang tersimpan.
+              Browse, search, and load your saved component drafts.
             </DialogDescription>
           </DialogHeader>
 
           <div className="grid gap-3 px-6 pb-2">
-            <div className="flex items-center justify-between gap-3 rounded-md border border-border/70 bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
-              <span>
-                {session?.user?.email
-                  ? `Signed in as ${session.user.email}`
-                  : "No active session."}
-              </span>
+            <div className="flex items-center gap-3">
+              <input
+                type="text"
+                placeholder="Search drafts..."
+                className="h-9 flex-1 rounded-lg border border-border/70 bg-background px-3 text-sm outline-none transition placeholder:text-muted-foreground/60 focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
+                onChange={(e) => {
+                  const q = e.target.value.toLowerCase();
+                  setDraftBrowserQuery(q);
+                }}
+              />
               <Button
                 variant="outline"
                 size="sm"
                 disabled={!canPersistDraft || isLoadingDrafts}
-                onClick={() => {
-                  void loadDrafts();
-                }}
+                onClick={() => { void loadDrafts(); }}
               >
-                {isLoadingDrafts ? "Refreshing..." : "Refresh"}
+                {isLoadingDrafts ? "Loading..." : "Refresh"}
               </Button>
             </div>
 
-            <div className="max-h-96 overflow-auto rounded-md border border-border/70">
-              {drafts.length === 0 ? (
-                <div className="px-4 py-8 text-center text-sm text-muted-foreground">
-                  {isLoadingDrafts
-                    ? "Loading drafts..."
-                    : "Belum ada draft tersimpan untuk user ini."}
+            <div className="max-h-[60vh] overflow-auto">
+              {filteredDrafts.length === 0 ? (
+                <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border/70 py-12 text-center">
+                  <div className="text-sm text-muted-foreground">
+                    {isLoadingDrafts
+                      ? "Loading drafts..."
+                      : drafts.length === 0
+                        ? "No saved drafts yet. Save your first design to see it here."
+                        : "No drafts match your search."}
+                  </div>
                 </div>
               ) : (
-                <div className="divide-y divide-border/70">
-                  {drafts.map((draft) => (
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {filteredDrafts.map((draft) => (
                     <div
                       key={draft.id}
-                      className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+                      className="group overflow-hidden rounded-xl border border-border/60 bg-card transition hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-md"
                     >
-                      <div className="min-w-0">
-                        <div className="truncate text-sm font-medium text-foreground">
-                          {draft.name}
+                      <button
+                        type="button"
+                        className="relative block aspect-[4/3] w-full overflow-hidden bg-white"
+                        onClick={() => {
+                          handleDocumentLoaded(
+                            normalizeEditorDocument(draft.documentJson),
+                            { id: draft.id, name: draft.name, description: draft.description }
+                          );
+                          setDraftBrowserOpen(false);
+                        }}
+                      >
+                        {draft.thumbnailUrl ? (
+                          <img
+                            src={draft.thumbnailUrl}
+                            alt={draft.name}
+                            className="h-full w-full object-contain object-center"
+                          />
+                        ) : (
+                          <div className="absolute inset-0 bg-gradient-to-br from-purple-900/80 to-pink-500/60" />
+                        )}
+                      </button>
+                      <div className="flex items-center justify-between gap-2 px-3 py-2.5">
+                        <div className="min-w-0">
+                          <p className="truncate text-xs font-medium text-foreground">{draft.name}</p>
+                          <p className="truncate text-[0.65rem] text-muted-foreground">
+                            {new Date(draft.updatedAt).toLocaleDateString()}
+                          </p>
                         </div>
-                        {draft.description ? (
-                          <div className="mt-1 text-xs text-muted-foreground">
-                            {draft.description}
-                          </div>
-                        ) : null}
-                        <div className="mt-1 text-[11px] text-muted-foreground">
-                          Updated {new Date(draft.updatedAt).toLocaleString()}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
                         <Button
-                          variant="outline"
+                          variant="ghost"
                           size="sm"
+                          className="shrink-0 text-destructive hover:text-destructive"
                           disabled={draftActionId === draft.id}
-                          onClick={() => {
-                            handleDocumentLoaded(
-                              normalizeEditorDocument(draft.documentJson),
-                              {
-                                id: draft.id,
-                                name: draft.name,
-                                description: draft.description,
-                              }
-                            );
-                            setDraftBrowserOpen(false);
-                          }}
-                        >
-                          Load
-                        </Button>
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          disabled={draftActionId === draft.id}
-                          onClick={() => {
+                          onClick={(e) => {
+                            e.stopPropagation();
                             void deleteDraft(draft.id);
                           }}
                         >
-                          {draftActionId === draft.id ? "Deleting..." : "Delete"}
+                          {draftActionId === draft.id ? "..." : "Delete"}
                         </Button>
                       </div>
                     </div>

@@ -892,9 +892,9 @@ export function CanvasEditor({ stageRef }: CanvasEditorProps) {
           <div className="max-w-md rounded-[2rem] border border-border/70 bg-background/92 px-6 py-5 text-center shadow-sm">
             <div className="text-lg font-semibold text-foreground">Start drawing</div>
             <div className="mt-2 text-sm leading-6 text-muted-foreground">
-              Gunakan toolbar kiri untuk membuat rectangle, triangle, ellipse,
-              line, text, free draw, atau upload image. Tool `pan` untuk geser
-              canvas dan wheel mouse untuk zoom.
+              Use the left toolbar to create a rectangle, triangle, ellipse,
+              line, text, free draw, or upload an image. Use the pan tool to
+              scroll the canvas and the mouse wheel to zoom.
             </div>
           </div>
         </div>

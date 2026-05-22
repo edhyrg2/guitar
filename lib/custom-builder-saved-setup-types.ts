@@ -1,6 +1,7 @@
 import type { Prisma } from "@prisma/client";
 import type {
   EllipseObject,
+  ImageObject,
   LineObject,
   RectangleObject,
   TextObject,
@@ -37,7 +38,7 @@ export type BuilderSetupConnection = {
   controlPoints: { x: number; y: number }[];
 };
 
-export type BuilderSetupShape = RectangleObject | EllipseObject | LineObject | TextObject;
+export type BuilderSetupShape = RectangleObject | EllipseObject | LineObject | TextObject | ImageObject;
 
 export type BuilderSavedSetupDocument = {
   version: 1;
@@ -54,6 +55,7 @@ export type BuilderSavedSetupRow = {
   description: string | null;
   status: BuilderSavedSetupStatus;
   documentJson: Prisma.JsonValue;
+  thumbnailUrl: string | null;
   publishedTemplateId: string | null;
   publishedAt: string | null;
   createdAt: string;
@@ -307,6 +309,38 @@ export function normalizeBuilderSavedSetupDocument(
           fontFamily: value.fontFamily,
           fontStyle: value.fontStyle,
           textAlign: value.textAlign,
+        });
+      }
+
+      if (value.type === "image") {
+        const imgValue = value as Partial<import("@/lib/custom-component-editor-types").ImageObject>;
+        if (
+          !isFiniteNumber(imgValue.width) ||
+          !isFiniteNumber(imgValue.height) ||
+          typeof imgValue.src !== "string"
+        ) {
+          return result;
+        }
+
+        result.push({
+          id: value.id,
+          groupId: value.groupId,
+          type: "image",
+          name: value.name,
+          x: value.x!,
+          y: value.y!,
+          rotation: value.rotation!,
+          opacity: value.opacity!,
+          fill: value.fill,
+          stroke: value.stroke,
+          strokeWidth: value.strokeWidth!,
+          scaleX: value.scaleX!,
+          scaleY: value.scaleY!,
+          visible: value.visible,
+          locked: value.locked,
+          width: imgValue.width!,
+          height: imgValue.height!,
+          src: imgValue.src,
         });
       }
 

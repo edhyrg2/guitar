@@ -205,8 +205,8 @@ export function PropertiesPanel() {
           </CardTitle>
         </CardHeader>
         <CardContent className="text-sm text-muted-foreground">
-          Pilih object di canvas untuk mengubah warna, ukuran, opacity, rotasi, dan
-          properti spesifik object.
+          Select an object on the canvas to change its color, size, opacity, rotation, and
+          object-specific properties.
         </CardContent>
       </Card>
     );
@@ -234,8 +234,8 @@ export function PropertiesPanel() {
           </CardTitle>
         </CardHeader>
         <CardContent className="text-sm text-muted-foreground">
-          {selectedConnectionPointIds.length} points selected. Gunakan tombol align di
-          toolbar untuk merapikan posisi, atau pilih satu point untuk edit detailnya.
+          {selectedConnectionPointIds.length} points selected. Use the align buttons in the
+          toolbar to tidy up positions, or select a single point to edit its details.
         </CardContent>
       </Card>
     );
@@ -320,8 +320,8 @@ export function PropertiesPanel() {
       <CardContent className="flex flex-col gap-4">
         {hasMixedSelection ? (
           <div className="rounded-2xl border border-border/70 bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
-            {selectedConnectionPointIds.length} connection point juga sedang terseleksi.
-            Properties panel saat ini menampilkan object aktif.
+            {selectedConnectionPointIds.length} connection point(s) also selected.
+            The properties panel is currently showing the active object.
           </div>
         ) : null}
 

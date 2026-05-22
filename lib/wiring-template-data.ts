@@ -839,6 +839,7 @@ export async function getWiringTemplateRowsForUser(
 
     const [templates, users, loves, saves] = await Promise.all([
       prisma.wiringTemplate.findMany({
+        where: { isPublished: true },
         orderBy: [{ isVerified: "desc" }, { name: "asc" }],
         include: {
           pickupConfiguration: {
