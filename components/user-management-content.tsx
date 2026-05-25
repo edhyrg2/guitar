@@ -109,17 +109,18 @@ export function UserManagementContent({
               <TableCell>{user.email}</TableCell>
               <TableCell>{user.level}</TableCell>
               <TableCell>
-                {user.photo ? (
+                {user.photo && (user.photo.startsWith("/") || /^https?:\/\//i.test(user.photo)) ? (
                   <Image
                     src={user.photo}
                     alt={user.name}
                     width={28}
                     height={28}
+                    unoptimized
                     className="size-7 rounded-full object-cover"
                   />
                 ) : (
                   <div className="flex size-7 items-center justify-center rounded-full bg-muted text-xs font-semibold uppercase text-muted-foreground">
-                    {user.name[0]}
+                    {user.photo || user.name.slice(0, 2)}
                   </div>
                 )}
               </TableCell>

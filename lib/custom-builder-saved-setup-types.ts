@@ -36,6 +36,7 @@ export type BuilderSetupConnection = {
   toPointKey: string;
   wireTypeId: string;
   controlPoints: { x: number; y: number }[];
+  tension: number;
 };
 
 export type BuilderSetupShape = RectangleObject | EllipseObject | LineObject | TextObject | ImageObject;
@@ -160,6 +161,7 @@ export function normalizeBuilderSavedSetupDocument(
           toPointKey: value.toPointKey,
           wireTypeId: value.wireTypeId,
           controlPoints,
+          tension: typeof (value as { tension?: unknown }).tension === "number" ? (value as { tension: number }).tension : 0,
         } satisfies BuilderSetupConnection;
       })
       .filter((connection): connection is BuilderSetupConnection => connection !== null),

@@ -149,6 +149,7 @@ type BuilderConnection = {
   toPointKey: string;
   wireTypeId: string;
   controlPoints: { x: number; y: number }[];
+  tension: number;
 };
 
 type PathSegment = {
@@ -2203,11 +2204,13 @@ export function CustomBuilderContent({
           return null;
         }
 
-        const renderedControlPoints = normalizeConnectionControlPoints(
-          connection.controlPoints,
-          from,
-          to
-        );
+        const renderedControlPoints = connection.tension > 0
+          ? connection.controlPoints
+          : normalizeConnectionControlPoints(
+              connection.controlPoints,
+              from,
+              to
+            );
         const pathPoints = [from, ...renderedControlPoints, to];
 
         return {
@@ -2387,6 +2390,16 @@ export function CustomBuilderContent({
 
           if (!from || !to) {
             return connection;
+          }
+
+          // Curved wires: free movement without orthogonal normalization
+          if (connection.tension > 0) {
+            return {
+              ...connection,
+              controlPoints: connection.controlPoints.map((point, index) =>
+                index === controlPointIndex ? snapPointToGrid({ x, y }) : point
+              ),
+            };
           }
 
           return {
@@ -3307,6 +3320,7 @@ export function CustomBuilderContent({
           from,
           to
         ),
+        tension: 0,
       },
     ]);
     setSelectedPoint(null);
@@ -5400,27 +5414,89 @@ export function CustomBuilderContent({
                           const to = pathPoints[pathPoints.length - 1];
                           const renderedControlPoints = pathPoints.slice(1, -1);
                           const visualStrokeWidth = isSelected ? 5 : 4;
+                          const isCurved = connection.tension > 0;
 
                           return (
                             <React.Fragment key={connection.id}>
-                              {pathPoints.slice(0, -1).map((point, index) => {
-                                const nextPoint = pathPoints[index + 1];
+                              {isCurved ? (
+                                <Line
+                                  name="builder-export-content"
+                                  points={pathPoints.flatMap((p) => [p.x, p.y])}
+                                  stroke={color}
+                                  strokeWidth={visualStrokeWidth}
+                                  lineCap="round"
+                                  lineJoin="round"
+                                  tension={connection.tension}
+                                  listening={false}
+                                />
+                              ) : (
+                                pathPoints.slice(0, -1).map((point, index) => {
+                                  const nextPoint = pathPoints[index + 1];
 
-                                if (!nextPoint) {
-                                  return null;
-                                }
+                                  if (!nextPoint) {
+                                    return null;
+                                  }
 
-                                return renderWireSegmentWithBridges({
-                                  connectionId: connection.id,
-                                  segmentIndex: index,
-                                  start: point,
-                                  end: nextPoint,
-                                  bridges,
-                                  color,
-                                  strokeWidth: visualStrokeWidth,
-                                });
-                              })}
-                              {pathPoints.slice(0, -1).map((point, index) => {
+                                  return renderWireSegmentWithBridges({
+                                    connectionId: connection.id,
+                                    segmentIndex: index,
+                                    start: point,
+                                    end: nextPoint,
+                                    bridges,
+                                    color,
+                                    strokeWidth: visualStrokeWidth,
+                                  });
+                                })
+                              )}
+                              {isCurved ? (
+                                <Line
+                                  key={`${connection.id}-hit-curved`}
+                                  name="builder-export-hidden"
+                                  points={pathPoints.flatMap((p) => [p.x, p.y])}
+                                  stroke="rgba(15, 23, 42, 0.01)"
+                                  strokeWidth={WIRE_HIT_STROKE_WIDTH}
+                                  lineCap="round"
+                                  tension={connection.tension}
+                                  listening={!wiringSelectionActive}
+                                  onClick={() => {
+                                    setSelectedConnectionId(connection.id);
+                                    setSelectedInstanceId(null);
+                                    setSelectedInstanceIds([]);
+                                  }}
+                                  onTap={() => {
+                                    setSelectedConnectionId(connection.id);
+                                    setSelectedInstanceId(null);
+                                    setSelectedInstanceIds([]);
+                                  }}
+                                  onDblClick={(event) => {
+                                    const stage = event.target.getStage();
+                                    const position = stage?.getPointerPosition();
+                                    if (!position) return;
+                                    const worldPoint = {
+                                      x: (position.x - canvasOffset.x) / canvasScale,
+                                      y: (position.y - canvasOffset.y) / canvasScale,
+                                    };
+                                    // Find nearest segment to insert point
+                                    let bestIndex = 0;
+                                    let bestDist = Infinity;
+                                    for (let i = 0; i < pathPoints.length - 1; i++) {
+                                      const midX = (pathPoints[i].x + pathPoints[i + 1].x) / 2;
+                                      const midY = (pathPoints[i].y + pathPoints[i + 1].y) / 2;
+                                      const dist = Math.hypot(worldPoint.x - midX, worldPoint.y - midY);
+                                      if (dist < bestDist) {
+                                        bestDist = dist;
+                                        bestIndex = i;
+                                      }
+                                    }
+                                    handleConnectionSegmentInsert(connection.id, bestIndex, worldPoint);
+                                    setSelectedConnectionId(connection.id);
+                                    setSelectedInstanceId(null);
+                                    setSelectedInstanceIds([]);
+                                    setCanvasMessage("New control point added to the curved wire.");
+                                  }}
+                                />
+                              ) : (
+                              pathPoints.slice(0, -1).map((point, index) => {
                                 const nextPoint = pathPoints[index + 1];
                                 const isVertical =
                                   Math.abs(point.x - nextPoint.x) < Math.abs(point.y - nextPoint.y);
@@ -5490,7 +5566,8 @@ export function CustomBuilderContent({
                                     }}
                                   />
                                 );
-                              })}
+                              })
+                              )}
                               {isSelected
                                 ? renderedControlPoints.map((controlPoint, index) => (
                                     <Circle
@@ -6223,6 +6300,51 @@ export function CustomBuilderContent({
                         }))}
                       />
                     </label>
+                    <label className="grid gap-1.5">
+                      <span className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Wire Style</span>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant={selectedConnection.tension === 0 ? "secondary" : "outline"}
+                          size="sm"
+                          onClick={() => {
+                            setConnections((cur) =>
+                              cur.map((c) => c.id === selectedConnection.id ? { ...c, tension: 0 } : c)
+                            );
+                          }}
+                        >
+                          Straight
+                        </Button>
+                        <Button
+                          variant={selectedConnection.tension > 0 ? "secondary" : "outline"}
+                          size="sm"
+                          onClick={() => {
+                            setConnections((cur) =>
+                              cur.map((c) => c.id === selectedConnection.id ? { ...c, tension: 0.35 } : c)
+                            );
+                          }}
+                        >
+                          Curved
+                        </Button>
+                      </div>
+                    </label>
+                    {selectedConnection.tension > 0 && (
+                      <label className="grid gap-1.5">
+                        <span className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Curve Amount</span>
+                        <Input
+                          type="number"
+                          min="0.1"
+                          max="1"
+                          step="0.05"
+                          value={selectedConnection.tension}
+                          onChange={(e) => {
+                            const val = Math.max(0.05, Math.min(1, Number(e.target.value || 0.35)));
+                            setConnections((cur) =>
+                              cur.map((c) => c.id === selectedConnection.id ? { ...c, tension: val } : c)
+                            );
+                          }}
+                        />
+                      </label>
+                    )}
                     <Button variant="outline" size="sm" onClick={straightenSelectedConnection}>
                       Straighten Wire
                     </Button>

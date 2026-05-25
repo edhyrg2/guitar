@@ -149,7 +149,7 @@ export function SavedSetupsContent({
               Saved Setups
             </h1>
             <p className="mt-2 text-sm text-muted-foreground">
-              Galeri wiring template yang kamu simpan dari halaman explore.
+              Your collection of saved wiring templates from the explore page.
             </p>
           </div>
           <div className="w-full lg:w-[360px]">
@@ -162,7 +162,7 @@ export function SavedSetupsContent({
               <Input
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="Cari saved setup..."
+                placeholder="Search saved setups..."
                 className="h-12 rounded-2xl border-border/70 bg-background/90 pl-10 shadow-sm"
               />
             </div>
@@ -207,9 +207,9 @@ export function SavedSetupsContent({
                       />
                       <div className="absolute inset-0 flex items-center justify-center px-6 text-center text-white/90">
                         <div>
-                          <div className="text-sm font-medium">Preview belum tersedia</div>
+                          <div className="text-sm font-medium">Preview not available</div>
                           <div className="mt-2 text-xs text-white/75">
-                            Template ini belum punya thumbnail.
+                            This template doesn&apos;t have a thumbnail yet.
                           </div>
                         </div>
                       </div>
@@ -296,10 +296,10 @@ export function SavedSetupsContent({
         <Card className="rounded-[1.8rem] border border-dashed border-border/80 bg-card/80 py-10">
           <CardContent className="text-center">
             <div className="text-base font-medium text-foreground">
-              Belum ada setup yang disimpan
+              No saved setups yet
             </div>
             <div className="mt-2 text-sm text-muted-foreground">
-              Simpan wiring dari halaman explore, lalu galeri yang kamu bookmark akan muncul di sini.
+              Save wiring templates from the explore page, and your bookmarked setups will appear here.
             </div>
           </CardContent>
         </Card>
