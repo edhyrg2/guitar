@@ -99,8 +99,8 @@ export async function POST(request: Request) {
         pointKey,
         label,
         pointType,
-        x: body.x,
-        y: body.y,
+        x: body.x as number,
+        y: body.y as number,
         description: body.description?.trim() || null,
       },
       include: {

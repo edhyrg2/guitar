@@ -74,9 +74,9 @@ function parsePickupList(value: unknown) {
       return {
         name,
         role: role || undefined,
-      } satisfies WiringTemplateInventoryPickup;
+      };
     })
-    .filter((item): item is WiringTemplateInventoryPickup => item !== null);
+    .filter((item): item is NonNullable<typeof item> => item !== null) as WiringTemplateInventoryPickup[];
 }
 
 function parsePotentiometerList(value: unknown) {
@@ -101,9 +101,9 @@ function parsePotentiometerList(value: unknown) {
       return {
         name,
         role: role || undefined,
-      } satisfies WiringTemplateInventoryPotentiometer;
+      };
     })
-    .filter((item): item is WiringTemplateInventoryPotentiometer => item !== null);
+    .filter((item): item is NonNullable<typeof item> => item !== null) as WiringTemplateInventoryPotentiometer[];
 }
 
 function parseInventoryRecord(value: unknown): WiringTemplateInventory | null {

@@ -465,6 +465,7 @@ model WiringTemplate {
   switchLogicJson       Json                @map("switch_logic_json")
   isVerified            Boolean             @default(false) @map("is_verified")
   isPublished           Boolean             @default(true) @map("is_published")
+  tags                  String[]            @default([])
   sourceType            String?             @map("source_type")
   sourceUrl             String?             @map("source_url")
   createdBy             String              @map("created_by")

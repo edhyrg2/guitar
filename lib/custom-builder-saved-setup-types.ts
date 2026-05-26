@@ -120,8 +120,8 @@ export function normalizeBuilderSavedSetupDocument(
           scale: value.scale!,
           rotation: value.rotation!,
           showLabel: Boolean(value.showLabel),
-          labelOffsetX: isFiniteNumber(value.labelOffsetX) ? value.labelOffsetX : 0,
-          labelOffsetY: isFiniteNumber(value.labelOffsetY) ? value.labelOffsetY : 0,
+          labelOffsetX: isFiniteNumber(value.labelOffsetX) ? value.labelOffsetX! : 0,
+          labelOffsetY: isFiniteNumber(value.labelOffsetY) ? value.labelOffsetY! : 0,
         } satisfies BuilderSetupInstance;
       })
       .filter((instance): instance is BuilderSetupInstance => instance !== null),

@@ -44,6 +44,7 @@ type BuilderSavedSetupDelegate = {
       name: string;
       slug: string | null;
       description: string | null;
+      thumbnailUrl?: string | null;
       status: BuilderSavedSetupStatus;
       documentJson: Prisma.InputJsonValue;
       publishedTemplateId: string | null;

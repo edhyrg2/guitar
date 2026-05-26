@@ -242,6 +242,7 @@ type BuilderPublishFormState = {
   sourceType: string;
   sourceUrl: string;
   isVerified: boolean;
+  tags: string;
 };
 
 type InlineBuilderTextEditorState = {
@@ -1943,6 +1944,7 @@ export function CustomBuilderContent({
     sourceType: "Custom Builder",
     sourceUrl: "",
     isVerified: false,
+    tags: "",
   });
   const [isSavingSetup, setIsSavingSetup] = React.useState(false);
   const [isLoadingSavedSetups, setIsLoadingSavedSetups] = React.useState(false);
@@ -2622,8 +2624,32 @@ export function CustomBuilderContent({
     lastSnapshotRef.current = currentSnapshot;
   }
 
-  function getAsset(assetId: string) {
-    return assets.find((asset) => asset.id === assetId) ?? null;
+  function getAsset(assetId: string): BuilderAssetDefinition | null {
+    const found = assets.find((asset) =>
+      asset.id === assetId ||
+      asset.componentAssetId === assetId ||
+      (asset.slug && asset.slug === assetId)
+    );
+    if (found) return found;
+
+    // Fallback: create a minimal asset definition from instance data
+    const instance = instances.find((i) => i.assetId === assetId);
+    if (instance) {
+      return {
+        id: assetId,
+        componentAssetId: instance.componentAssetId ?? assetId,
+        componentType: instance.componentType,
+        name: instance.name,
+        slug: null,
+        width: instance.renderWidth || 180,
+        height: instance.renderHeight || 120,
+        previewUrl: null,
+        styleType: null,
+        connectionPoints: [],
+      };
+    }
+
+    return null;
   }
 
   function getPointForInstances(
@@ -3807,6 +3833,7 @@ export function CustomBuilderContent({
       sourceType: "Custom Builder",
       sourceUrl: "",
       isVerified: false,
+      tags: "",
     });
     setPublishErrorMessage(null);
     setPublishDialogOpen(true);
@@ -3889,6 +3916,7 @@ export function CustomBuilderContent({
           sourceType: publishForm.sourceType.trim() || null,
           sourceUrl: publishForm.sourceUrl.trim() || null,
           isVerified: publishForm.isVerified,
+          tags: publishForm.tags.split(",").map((t) => t.trim()).filter(Boolean),
           document: persistedDocument,
         }),
       });
@@ -4588,7 +4616,7 @@ export function CustomBuilderContent({
   ]);
 
   return (
-    <div className="flex flex-1 flex-col overflow-visible">
+    <div className="flex flex-1 flex-col overflow-hidden">
       <input
         ref={importJsonInputRef}
         type="file"
@@ -4656,17 +4684,15 @@ export function CustomBuilderContent({
           event.target.value = "";
         }}
       />
-      <div className={`grid min-h-0 flex-1 grid-cols-1 overflow-hidden ${showLeftPanel && showRightPanel ? "xl:grid-cols-[320px_minmax(0,1fr)_340px]" : showLeftPanel ? "xl:grid-cols-[320px_minmax(0,1fr)]" : showRightPanel ? "xl:grid-cols-[minmax(0,1fr)_340px]" : ""}`}>
+      <div className={`grid h-[calc(100vh-140px)] min-h-0 flex-1 grid-cols-1 overflow-hidden ${showLeftPanel && showRightPanel ? "xl:grid-cols-[320px_minmax(0,1fr)_340px]" : showLeftPanel ? "xl:grid-cols-[320px_minmax(0,1fr)]" : showRightPanel ? "xl:grid-cols-[minmax(0,1fr)_340px]" : ""}`}>
         {showLeftPanel && (
-        <div className="min-h-0 overflow-hidden border-r border-border/70 bg-background/95 p-4">
-          <Card className="flex h-full min-h-0 flex-col overflow-hidden rounded-3xl border-border/70 shadow-sm">
-            <CardHeader>
-              <CardTitle>Component Palette</CardTitle>
-              <CardDescription>
+        <div className="flex min-h-0 flex-col border-r border-border/70 bg-background/95">
+          <div className="shrink-0 border-b border-border/70 p-4">
+              <h3 className="text-base font-semibold">Component Palette</h3>
+              <p className="mt-1 text-xs text-muted-foreground">
                 Active assets with connection points ready to drop onto the builder canvas.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden">
+              </p>
+              <div className="mt-3 flex flex-col gap-2">
               <Input
                 value={assetQuery}
                 onChange={(event) => setAssetQuery(event.target.value)}
@@ -4684,8 +4710,10 @@ export function CustomBuilderContent({
                   })),
                 ]}
               />
-              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1">
-                <div className="grid gap-3">
+              </div>
+          </div>
+          <div className="flex-1 overflow-y-auto p-3">
+                <div className="grid gap-1.5">
                   {filteredAssets.map((asset) => (
                     <button
                       key={asset.id}
@@ -4696,10 +4724,10 @@ export function CustomBuilderContent({
                         event.dataTransfer.effectAllowed = "copy";
                       }}
                       onClick={() => addInstance(asset.id)}
-                      className="w-full rounded-2xl border border-border/70 bg-card p-3 text-left transition hover:border-primary/50 hover:bg-muted/40"
+                      className="w-full rounded-xl border border-border/60 bg-card p-2 text-left transition hover:border-primary/50 hover:bg-muted/40"
                     >
-                      <div className="flex items-start gap-3">
-                        <div className="flex size-20 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-border/70 bg-muted/30">
+                      <div className="flex items-center gap-2.5">
+                        <div className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border/60 bg-white">
                           {asset.previewUrl ? (
                             <Image
                               src={asset.previewUrl}
@@ -4710,30 +4738,20 @@ export function CustomBuilderContent({
                               className="h-full w-full object-contain"
                             />
                           ) : (
-                            <div className="flex flex-col items-center gap-1 text-[0.65rem] text-muted-foreground">
-                              <HugeiconsIcon icon={PaintBrush02Icon} strokeWidth={1.8} />
-                              <span>No preview</span>
-                            </div>
+                            <HugeiconsIcon icon={PaintBrush02Icon} strokeWidth={1.8} className="size-4 text-muted-foreground" />
                           )}
                         </div>
                         <div className="min-w-0 flex-1">
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0">
-                              <div className="truncate font-medium text-foreground">{asset.name}</div>
-                              <div className="text-xs text-muted-foreground">{asset.componentType}</div>
-                            </div>
-                            <HugeiconsIcon
-                              icon={PlusSignIcon}
-                              strokeWidth={2}
-                              className="mt-0.5 shrink-0"
-                            />
+                          <div className="truncate text-xs font-medium text-foreground">{asset.name}</div>
+                          <div className="truncate text-[0.65rem] text-muted-foreground">
+                            {asset.componentType}{asset.styleType ? ` • ${asset.styleType}` : ""}
                           </div>
-                          {asset.styleType ? (
-                            <div className="mt-2 text-[0.7rem] uppercase tracking-[0.14em] text-muted-foreground">
-                              {asset.styleType}
-                            </div>
-                          ) : null}
                         </div>
+                        <HugeiconsIcon
+                          icon={PlusSignIcon}
+                          strokeWidth={2}
+                          className="size-3.5 shrink-0 text-muted-foreground"
+                        />
                       </div>
                     </button>
                   ))}
@@ -4744,8 +4762,6 @@ export function CustomBuilderContent({
                   ) : null}
                 </div>
               </div>
-            </CardContent>
-          </Card>
         </div>
         )}
 
@@ -4861,7 +4877,12 @@ export function CustomBuilderContent({
                       const bounds = stageWrapperRef.current?.getBoundingClientRect();
 
                       if (assetId && bounds) {
-                        addInstance(assetId, event.clientX - bounds.left, event.clientY - bounds.top);
+                        // Convert screen position to world coordinates
+                        const screenX = event.clientX - bounds.left;
+                        const screenY = event.clientY - bounds.top;
+                        const worldX = (screenX - canvasOffset.x) / canvasScale;
+                        const worldY = (screenY - canvasOffset.y) / canvasScale;
+                        addInstance(assetId, worldX, worldY);
                         return;
                       }
 
@@ -6712,6 +6733,22 @@ export function CustomBuilderContent({
                 className="min-h-20 rounded-md border border-input bg-input/20 px-3 py-2 text-sm outline-none"
                 placeholder="Brief notes about this wiring template."
               />
+            </label>
+            <label className="flex flex-col gap-2 sm:col-span-2">
+              <span className="text-xs font-medium">Tags</span>
+              <Input
+                value={publishForm.tags}
+                onChange={(event) =>
+                  setPublishForm((current) => ({
+                    ...current,
+                    tags: event.target.value,
+                  }))
+                }
+                placeholder="strat, sss, 5-way, vintage (comma separated)"
+              />
+              <span className="text-[0.65rem] text-muted-foreground">
+                Separate tags with commas. Used for search and filtering.
+              </span>
             </label>
             <label className="flex items-center gap-2 text-sm text-muted-foreground sm:col-span-2">
               <input

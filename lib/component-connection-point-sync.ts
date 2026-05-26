@@ -27,7 +27,7 @@ type PrismaClientLike = {
   componentAsset: {
     update: (args: {
       where: { id: string };
-      data: { anchorPointsJson: Prisma.InputJsonValue | Prisma.JsonNull };
+      data: { anchorPointsJson: Prisma.InputJsonValue | typeof Prisma.JsonNull };
     }) => Promise<unknown>;
   };
 };

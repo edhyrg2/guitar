@@ -20,6 +20,7 @@ type PublishBody = {
   volumeCount?: number;
   toneCount?: number;
   difficultyLevel?: string | null;
+  tags?: unknown[];
   sourceType?: string | null;
   sourceUrl?: string | null;
   isVerified?: boolean;
@@ -87,6 +88,7 @@ type WiringTemplateDelegate = {
       diagramJson: Prisma.InputJsonValue;
       switchLogicJson: Prisma.InputJsonValue;
       isVerified: boolean;
+      tags: string[];
       sourceType: string;
       sourceUrl: string | null;
       createdBy: string;
@@ -112,6 +114,7 @@ type WiringTemplateDelegate = {
       diagramJson: Prisma.InputJsonValue;
       switchLogicJson: Prisma.InputJsonValue;
       isVerified: boolean;
+      tags: string[];
       sourceType: string;
       sourceUrl: string | null;
       createdBy: string;
@@ -453,6 +456,7 @@ function createConnectionPathJson(connection: BuilderSavedSetupDocument["connect
   return {
     kind: "builder-wire-path",
     controlPoints: connection.controlPoints,
+    tension: connection.tension ?? 0,
   } satisfies Prisma.InputJsonValue;
 }
 
@@ -873,6 +877,7 @@ export async function POST(request: Request) {
               diagramJson: createDiagramJson(document, roleMap),
               switchLogicJson: createSwitchLogicJson(document, roleMap),
               isVerified: Boolean(body.isVerified),
+              tags: Array.isArray(body.tags) ? body.tags.filter((t: unknown) => typeof t === "string" && (t as string).trim()).map((t: unknown) => (t as string).trim()) : [],
               sourceType: body.sourceType?.trim() || "Custom Builder",
               sourceUrl: body.sourceUrl?.trim() || null,
               createdBy,
@@ -897,6 +902,7 @@ export async function POST(request: Request) {
               diagramJson: createDiagramJson(document, roleMap),
               switchLogicJson: createSwitchLogicJson(document, roleMap),
               isVerified: Boolean(body.isVerified),
+              tags: Array.isArray(body.tags) ? body.tags.filter((t: unknown) => typeof t === "string" && (t as string).trim()).map((t: unknown) => (t as string).trim()) : [],
               sourceType: body.sourceType?.trim() || "Custom Builder",
               sourceUrl: body.sourceUrl?.trim() || null,
               createdBy,

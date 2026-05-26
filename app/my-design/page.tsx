@@ -138,7 +138,7 @@ export default async function MyDesignPage() {
       title: item.name,
       description: item.description,
       thumbnailUrl: item.publishedTemplate?.thumbnailUrl ?? null,
-      status: item.publishedTemplateId ? "Published" : "Draft",
+      status: (item.publishedTemplateId ? "Published" : "Draft") as "Published" | "Draft",
       editorHref: `/custom-builder?savedSetupId=${encodeURIComponent(item.id)}`,
       targetId: item.id,
       createdAt: item.createdAt.toISOString(),
@@ -157,10 +157,10 @@ export default async function MyDesignPage() {
           : item.thumbnailUrl,
       status:
         item.status === CustomComponentDraftStatus.PUBLISHED
-          ? "Published Component"
+          ? ("Published Component" as const)
           : item.status === CustomComponentDraftStatus.UNPUBLISHED
-            ? "Unpublished Component"
-            : "Component Draft",
+            ? ("Unpublished Component" as const)
+            : ("Component Draft" as const),
       editorHref: "/custom-component",
       targetId: item.id,
       createdAt: item.createdAt.toISOString(),

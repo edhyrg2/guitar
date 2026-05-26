@@ -396,7 +396,7 @@ export async function POST(request: Request) {
           isVerified: parsed.template.isVerified,
           sourceType: parsed.template.sourceType,
           sourceUrl: parsed.template.sourceUrl,
-          createdBy: parsed.template.createdBy,
+          createdBy: session?.user?.name ?? session?.user?.email ?? parsed.template.createdBy,
         },
         select: {
           id: true,
@@ -437,24 +437,39 @@ export async function POST(request: Request) {
       let savedSetupId: string | null = null;
 
       if (userId) {
-        const builderInstances = parsed.components.map((component) => ({
-          id: `builder-instance-${component.componentRole.replace(/\s+/g, "-").toLowerCase()}`,
-          assetId: component.assetId,
-          componentAssetId: component.assetId,
-          name: assetMap.get(component.assetId)?.name ?? component.componentRole,
-          componentType: component.componentType,
-          x: component.positionX,
-          y: component.positionY,
-          width: 180,
-          height: 120,
-          renderWidth: 180,
-          renderHeight: 120,
-          scale: 1,
-          rotation: component.rotation,
-          showLabel: true,
-          labelOffsetX: 0,
-          labelOffsetY: 0,
-        }));
+        // Lookup component asset details to build correct palette IDs
+        const assetDetails = await tx.componentAsset.findMany({
+          where: { id: { in: parsed.components.map((c) => c.assetId) } },
+          select: { id: true, ownerType: true, ownerId: true, name: true, width: true, height: true },
+        });
+        const assetDetailMap = new Map(assetDetails.map((a) => [a.id, a]));
+
+        const builderInstances = parsed.components.map((component) => {
+          const assetDetail = assetDetailMap.get(component.assetId);
+          // Use owner-based ID format if asset has an owner, otherwise use asset ID directly
+          const paletteAssetId = assetDetail?.ownerType && assetDetail?.ownerId
+            ? `${assetDetail.ownerType}:${assetDetail.ownerId}`
+            : component.assetId;
+
+          return {
+            id: `builder-instance-${component.componentRole.replace(/\s+/g, "-").toLowerCase()}`,
+            assetId: paletteAssetId,
+            componentAssetId: component.assetId,
+            name: assetMap.get(component.assetId)?.name ?? component.componentRole,
+            componentType: component.componentType,
+            x: component.positionX,
+            y: component.positionY,
+            width: assetDetail?.width ?? 180,
+            height: assetDetail?.height ?? 120,
+            renderWidth: assetDetail?.width ?? 180,
+            renderHeight: assetDetail?.height ?? 120,
+            scale: 1,
+            rotation: component.rotation,
+            showLabel: true,
+            labelOffsetX: 0,
+            labelOffsetY: 0,
+          };
+        });
 
         const roleToInstanceId = new Map(
           parsed.components.map((component) => [
@@ -471,6 +486,7 @@ export async function POST(request: Request) {
           toPointKey: connection.toPointKey,
           wireTypeId: connection.wireTypeId,
           controlPoints: [] as Array<{ x: number; y: number }>,
+          tension: 0,
         }));
 
         const builderDocument = {

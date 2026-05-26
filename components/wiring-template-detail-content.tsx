@@ -198,6 +198,16 @@ function parseConnectionControlPoints(value: string | null) {
   }
 }
 
+function parseConnectionTension(value: string | null): number {
+  if (!value) return 0;
+  try {
+    const parsed = JSON.parse(value) as Record<string, unknown>;
+    return typeof parsed.tension === "number" ? parsed.tension : 0;
+  } catch {
+    return 0;
+  }
+}
+
 function parseAssetConnectionPoints(value: string | null): TemplateAssetConnectionPoint[] {
   if (!value) {
     return [];
@@ -1097,6 +1107,7 @@ export function WiringTemplateDetailContent({
             pathPoints,
             path: pathPoints.map((point) => `${point.x},${point.y}`).join(" "),
             wireColor: connection.wireColor,
+            tension: parseConnectionTension(connection.pathJson),
             label: connection.label,
             from: pathPoints[0],
             to: pathPoints[pathPoints.length - 1],
@@ -1702,82 +1713,6 @@ export function WiringTemplateDetailContent({
                           minHeight: previewData.viewBox.height * previewZoom,
                         }}
                       >
-                        {previewData.connections.map((connection) => (
-                          <g key={connection.id}>
-                            {connection.pathPoints
-                              .slice(0, -1)
-                              .map((start, segmentIndex) => {
-                                const end = connection.pathPoints[segmentIndex + 1];
-
-                                if (!start || !end) {
-                                  return null;
-                                }
-
-                                return (
-                                  <React.Fragment key={`${connection.id}-${segmentIndex}`}>
-                                    {renderPreviewWireSegmentWithBridges({
-                                      connectionId: connection.id,
-                                      segmentIndex,
-                                      start,
-                                      end,
-                                      bridges:
-                                        previewData.wireBridges.get(connection.id) ?? [],
-                                      color: connection.wireColor || "#0f766e",
-                                      strokeWidth: PREVIEW_WIRE_STROKE_WIDTH,
-                                      midPoint: connection.midPoint,
-                                      labelHalfWidth: connection.labelHalfWidth,
-                                      labelHalfHeight: connection.labelHalfHeight,
-                                    })}
-                                  </React.Fragment>
-                                );
-                              })}
-                            {(previewData.wireBridges.get(connection.id) ?? []).map((bridge) =>
-                              renderPreviewWireBridgeArc({
-                                connectionId: connection.id,
-                                bridge,
-                                color: connection.wireColor || "#0f766e",
-                                strokeWidth: PREVIEW_WIRE_STROKE_WIDTH,
-                              })
-                            )}
-                            <circle
-                              cx={connection.from.x}
-                              cy={connection.from.y}
-                              r={PREVIEW_WIRE_ENDPOINT_RADIUS}
-                              fill={connection.wireColor || "#0f766e"}
-                            />
-                            <circle
-                              cx={connection.to.x}
-                              cy={connection.to.y}
-                              r={PREVIEW_WIRE_ENDPOINT_RADIUS}
-                              fill={connection.wireColor || "#0f766e"}
-                            />
-                            {connection.label ? (
-                              <g>
-                                <rect
-                                  x={connection.midPoint.x - (connection.labelHalfWidth ?? 0)}
-                                  y={connection.midPoint.y - (connection.labelHalfHeight ?? 0)}
-                                  width={(connection.labelHalfWidth ?? 0) * 2}
-                                  height={(connection.labelHalfHeight ?? 0) * 2}
-                                  rx={10}
-                                  fill={"rgba(255,255,255,0.95)"}
-                                  stroke={connection.wireColor || "#e5e7eb"}
-                                  strokeWidth={1}
-                                />
-                                <text
-                                  x={connection.midPoint.x}
-                                  y={connection.midPoint.y + 5}
-                                  fontSize="14"
-                                  fill="#475569"
-                                  textAnchor="middle"
-                                  alignmentBaseline="middle"
-                                >
-                                  {connection.label}
-                                </text>
-                              </g>
-                            ) : null}
-                          </g>
-                        ))}
-
                         {/* Image shapes from builder */}
                         {previewData.shapes.map((shape, idx) => (
                           <image
@@ -1861,6 +1796,112 @@ export function WiringTemplateDetailContent({
                               >
                                 {component.assetName}
                               </text>
+                            ) : null}
+                          </g>
+                        ))}
+
+                        {previewData.connections.map((connection) => (
+                          <g key={connection.id}>
+                            {connection.tension > 0 ? (
+                              <path
+                                d={(() => {
+                                  const pts = connection.pathPoints;
+                                  if (pts.length < 2) return "";
+                                  if (pts.length === 2) return `M ${pts[0].x} ${pts[0].y} L ${pts[1].x} ${pts[1].y}`;
+                                  // Catmull-Rom to Bezier conversion for smooth curve
+                                  let d = `M ${pts[0].x} ${pts[0].y}`;
+                                  const t = connection.tension;
+                                  for (let i = 0; i < pts.length - 1; i++) {
+                                    const p0 = pts[Math.max(0, i - 1)];
+                                    const p1 = pts[i];
+                                    const p2 = pts[i + 1];
+                                    const p3 = pts[Math.min(pts.length - 1, i + 2)];
+                                    const cp1x = p1.x + (p2.x - p0.x) * t / 3;
+                                    const cp1y = p1.y + (p2.y - p0.y) * t / 3;
+                                    const cp2x = p2.x - (p3.x - p1.x) * t / 3;
+                                    const cp2y = p2.y - (p3.y - p1.y) * t / 3;
+                                    d += ` C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${p2.x} ${p2.y}`;
+                                  }
+                                  return d;
+                                })()}
+                                fill="none"
+                                stroke={connection.wireColor || "#0f766e"}
+                                strokeWidth={PREVIEW_WIRE_STROKE_WIDTH}
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
+                            ) : (
+                            connection.pathPoints
+                              .slice(0, -1)
+                              .map((start, segmentIndex) => {
+                                const end = connection.pathPoints[segmentIndex + 1];
+
+                                if (!start || !end) {
+                                  return null;
+                                }
+
+                                return (
+                                  <React.Fragment key={`${connection.id}-${segmentIndex}`}>
+                                    {renderPreviewWireSegmentWithBridges({
+                                      connectionId: connection.id,
+                                      segmentIndex,
+                                      start,
+                                      end,
+                                      bridges:
+                                        previewData.wireBridges.get(connection.id) ?? [],
+                                      color: connection.wireColor || "#0f766e",
+                                      strokeWidth: PREVIEW_WIRE_STROKE_WIDTH,
+                                      midPoint: connection.midPoint,
+                                      labelHalfWidth: connection.labelHalfWidth,
+                                      labelHalfHeight: connection.labelHalfHeight,
+                                    })}
+                                  </React.Fragment>
+                                );
+                              })
+                            )}
+                            {(previewData.wireBridges.get(connection.id) ?? []).map((bridge) =>
+                              renderPreviewWireBridgeArc({
+                                connectionId: connection.id,
+                                bridge,
+                                color: connection.wireColor || "#0f766e",
+                                strokeWidth: PREVIEW_WIRE_STROKE_WIDTH,
+                              })
+                            )}
+                            <circle
+                              cx={connection.from.x}
+                              cy={connection.from.y}
+                              r={PREVIEW_WIRE_ENDPOINT_RADIUS}
+                              fill={connection.wireColor || "#0f766e"}
+                            />
+                            <circle
+                              cx={connection.to.x}
+                              cy={connection.to.y}
+                              r={PREVIEW_WIRE_ENDPOINT_RADIUS}
+                              fill={connection.wireColor || "#0f766e"}
+                            />
+                            {connection.label && template.sourceType !== "AI Import" ? (
+                              <g>
+                                <rect
+                                  x={connection.midPoint.x - (connection.labelHalfWidth ?? 0)}
+                                  y={connection.midPoint.y - (connection.labelHalfHeight ?? 0)}
+                                  width={(connection.labelHalfWidth ?? 0) * 2}
+                                  height={(connection.labelHalfHeight ?? 0) * 2}
+                                  rx={10}
+                                  fill={"rgba(255,255,255,0.95)"}
+                                  stroke={connection.wireColor || "#e5e7eb"}
+                                  strokeWidth={1}
+                                />
+                                <text
+                                  x={connection.midPoint.x}
+                                  y={connection.midPoint.y + 5}
+                                  fontSize="14"
+                                  fill="#475569"
+                                  textAnchor="middle"
+                                  alignmentBaseline="middle"
+                                >
+                                  {connection.label}
+                                </text>
+                              </g>
                             ) : null}
                           </g>
                         ))}

@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { WiringTemplateDetailContent } from "@/components/wiring-template-detail-content";
 import { PublicGalleryNavbar } from "@/components/public-gallery-navbar";
 import { getSafeServerSession } from "@/lib/auth-session";
+import { getPrismaClient } from "@/lib/prisma";
 import {
   getWiringTemplateDetailBySlugOrId,
   incrementWiringTemplateViewCount,
@@ -29,6 +30,22 @@ export default async function PublicPreviewPage(
   const userId = session?.user?.id ?? null;
   const isAuthor = Boolean(userId && template.creatorId === userId);
 
+  // Find the saved setup linked to this template for the edit button
+  let editHref = "/custom-builder";
+  if (isAuthor) {
+    const prisma = await getPrismaClient();
+    if (prisma) {
+      const linkedSetup = await prisma.builderSavedSetup.findFirst({
+        where: { publishedTemplateId: template.id, userId: userId! },
+        select: { id: true },
+        orderBy: { updatedAt: "desc" },
+      });
+      if (linkedSetup) {
+        editHref = `/custom-builder?savedSetupId=${linkedSetup.id}`;
+      }
+    }
+  }
+
   return (
     <div className="flex min-h-screen flex-col">
       <PublicGalleryNavbar />
@@ -36,7 +53,7 @@ export default async function PublicPreviewPage(
         <WiringTemplateDetailContent
           template={template}
           showEditButton={isAuthor}
-          editHref={`/custom-builder?savedSetupId=${template.id}`}
+          editHref={editHref}
           backHref="/"
           backLabel="Back to Gallery"
           hideNavbar

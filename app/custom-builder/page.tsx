@@ -131,8 +131,8 @@ function buildGenericBuilderAssets(assets: NamedOwnerRecord[]) {
 
       return {
         id: asset.id,
-        componentAssetId: asset.id,
-        componentType: asset.componentType,
+        componentAssetId: asset.id as string | null,
+        componentType: asset.componentType!,
         name: asset.name,
         slug: asset.slug ?? null,
         width: asset.width ?? 220,
@@ -273,7 +273,11 @@ async function getBuilderAssets(): Promise<BuilderAssetDefinition[]> {
     }),
     prisma.componentAsset.findMany({
       where: {
-        ownerType: null,
+        OR: [
+          { ownerType: null },
+          { ownerType: "pickup-type" },
+          { ownerType: "output-jack" },
+        ],
       },
       orderBy: [{ isActive: "desc" }, { componentType: "asc" }, { name: "asc" }],
       select: {
@@ -424,7 +428,6 @@ async function getBuilderAssets(): Promise<BuilderAssetDefinition[]> {
     ),
     buildGenericBuilderAssets(
       genericAssets
-        .filter((item) => item.ownerType === null)
         .map((item) => ({
         id: item.id,
         name: item.name,

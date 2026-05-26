@@ -241,10 +241,14 @@ export function PropertiesPanel() {
     );
   }
 
-  const dimensions = getObjectDimensions(selectedObject);
+  const dimensions = getObjectDimensions(selectedObject as CanvasObject);
+
+  // Safe to use — early returns above guarantee selectedObject is defined
+  const obj = selectedObject as CanvasObject;
+  const selectedObj = obj;
 
   function getInputValue(key: string, fallback: number) {
-    if (draftState.ownerId !== selectedObject.id) {
+    if (draftState.ownerId !== selectedObj.id) {
       return String(fallback);
     }
 
@@ -253,9 +257,9 @@ export function PropertiesPanel() {
 
   function setDraftValue(key: string, value: string) {
     setDraftState((current) => ({
-      ownerId: selectedObject.id,
+      ownerId: selectedObj.id,
       values:
-        current.ownerId === selectedObject.id
+        current.ownerId === selectedObj.id
           ? {
               ...current.values,
               [key]: value,
@@ -268,14 +272,14 @@ export function PropertiesPanel() {
 
   function clearDraftValue(key: string) {
     setDraftState((current) => {
-      if (current.ownerId !== selectedObject.id) {
+      if (current.ownerId !== selectedObj.id) {
         return current;
       }
 
       const next = { ...current.values };
       delete next[key];
       return {
-        ownerId: selectedObject.id,
+        ownerId: selectedObj.id,
         values: next,
       };
     });
@@ -327,9 +331,9 @@ export function PropertiesPanel() {
 
         <PropertyRow label="Name">
           <Input
-            value={selectedObject.name}
+            value={selectedObj.name}
             onChange={(event) =>
-              updateObject(selectedObject.id, { name: event.target.value })
+              updateObject(selectedObj.id, { name: event.target.value })
             }
           />
         </PropertyRow>
@@ -338,14 +342,14 @@ export function PropertiesPanel() {
           <PropertyRow label="X">
             <Input
               type="number"
-              value={getInputValue("x", Math.round(selectedObject.x))}
+              value={getInputValue("x", Math.round(selectedObj.x))}
               onChange={(event) => setDraftValue("x", event.target.value)}
               onBlur={() =>
                 handleNumericCommit({
                   key: "x",
-                  value: getInputValue("x", Math.round(selectedObject.x)),
+                  value: getInputValue("x", Math.round(selectedObj.x)),
                   commit: (value) => {
-                    const next = updateNumericField(selectedObject, "x", value);
+                    const next = updateNumericField(selectedObj, "x", value);
                     if (next) replaceObject(next);
                   },
                 })
@@ -353,9 +357,9 @@ export function PropertiesPanel() {
               onKeyDown={(event) =>
                 onNumericKeyDown(event, {
                   key: "x",
-                  value: getInputValue("x", Math.round(selectedObject.x)),
+                  value: getInputValue("x", Math.round(selectedObj.x)),
                   commit: (value) => {
-                    const next = updateNumericField(selectedObject, "x", value);
+                    const next = updateNumericField(selectedObj, "x", value);
                     if (next) replaceObject(next);
                   },
                 })
@@ -365,14 +369,14 @@ export function PropertiesPanel() {
           <PropertyRow label="Y">
             <Input
               type="number"
-              value={getInputValue("y", Math.round(selectedObject.y))}
+              value={getInputValue("y", Math.round(selectedObj.y))}
               onChange={(event) => setDraftValue("y", event.target.value)}
               onBlur={() =>
                 handleNumericCommit({
                   key: "y",
-                  value: getInputValue("y", Math.round(selectedObject.y)),
+                  value: getInputValue("y", Math.round(selectedObj.y)),
                   commit: (value) => {
-                    const next = updateNumericField(selectedObject, "y", value);
+                    const next = updateNumericField(selectedObj, "y", value);
                     if (next) replaceObject(next);
                   },
                 })
@@ -380,9 +384,9 @@ export function PropertiesPanel() {
               onKeyDown={(event) =>
                 onNumericKeyDown(event, {
                   key: "y",
-                  value: getInputValue("y", Math.round(selectedObject.y)),
+                  value: getInputValue("y", Math.round(selectedObj.y)),
                   commit: (value) => {
-                    const next = updateNumericField(selectedObject, "y", value);
+                    const next = updateNumericField(selectedObj, "y", value);
                     if (next) replaceObject(next);
                   },
                 })
@@ -403,7 +407,7 @@ export function PropertiesPanel() {
                   key: "width",
                   value: getInputValue("width", Math.round(dimensions.width)),
                   commit: (value) => {
-                    const next = resizeObject(selectedObject, "width", value);
+                    const next = resizeObject(selectedObj, "width", value);
                     if (next) replaceObject(next);
                   },
                 })
@@ -413,7 +417,7 @@ export function PropertiesPanel() {
                   key: "width",
                   value: getInputValue("width", Math.round(dimensions.width)),
                   commit: (value) => {
-                    const next = resizeObject(selectedObject, "width", value);
+                    const next = resizeObject(selectedObj, "width", value);
                     if (next) replaceObject(next);
                   },
                 })
@@ -431,7 +435,7 @@ export function PropertiesPanel() {
                   key: "height",
                   value: getInputValue("height", Math.round(dimensions.height)),
                   commit: (value) => {
-                    const next = resizeObject(selectedObject, "height", value);
+                    const next = resizeObject(selectedObj, "height", value);
                     if (next) replaceObject(next);
                   },
                 })
@@ -441,7 +445,7 @@ export function PropertiesPanel() {
                   key: "height",
                   value: getInputValue("height", Math.round(dimensions.height)),
                   commit: (value) => {
-                    const next = resizeObject(selectedObject, "height", value);
+                    const next = resizeObject(selectedObj, "height", value);
                     if (next) replaceObject(next);
                   },
                 })
@@ -454,14 +458,14 @@ export function PropertiesPanel() {
           <PropertyRow label="Rotation">
             <Input
               type="number"
-              value={getInputValue("rotation", Math.round(selectedObject.rotation))}
+              value={getInputValue("rotation", Math.round(selectedObj.rotation))}
               onChange={(event) => setDraftValue("rotation", event.target.value)}
               onBlur={() =>
                 handleNumericCommit({
                   key: "rotation",
-                  value: getInputValue("rotation", Math.round(selectedObject.rotation)),
+                  value: getInputValue("rotation", Math.round(selectedObj.rotation)),
                   commit: (value) => {
-                    const next = updateNumericField(selectedObject, "rotation", value);
+                    const next = updateNumericField(selectedObj, "rotation", value);
                     if (next) replaceObject(next);
                   },
                 })
@@ -469,9 +473,9 @@ export function PropertiesPanel() {
               onKeyDown={(event) =>
                 onNumericKeyDown(event, {
                   key: "rotation",
-                  value: getInputValue("rotation", Math.round(selectedObject.rotation)),
+                  value: getInputValue("rotation", Math.round(selectedObj.rotation)),
                   commit: (value) => {
-                    const next = updateNumericField(selectedObject, "rotation", value);
+                    const next = updateNumericField(selectedObj, "rotation", value);
                     if (next) replaceObject(next);
                   },
                 })
@@ -484,14 +488,14 @@ export function PropertiesPanel() {
               min="0"
               max="1"
               step="0.05"
-              value={getInputValue("opacity", selectedObject.opacity)}
+              value={getInputValue("opacity", selectedObj.opacity)}
               onChange={(event) => setDraftValue("opacity", event.target.value)}
               onBlur={() =>
                 handleNumericCommit({
                   key: "opacity",
-                  value: getInputValue("opacity", selectedObject.opacity),
+                  value: getInputValue("opacity", selectedObj.opacity),
                   commit: (value) => {
-                    const next = updateNumericField(selectedObject, "opacity", value);
+                    const next = updateNumericField(selectedObj, "opacity", value);
                     if (next) replaceObject(next);
                   },
                 })
@@ -499,9 +503,9 @@ export function PropertiesPanel() {
               onKeyDown={(event) =>
                 onNumericKeyDown(event, {
                   key: "opacity",
-                  value: getInputValue("opacity", selectedObject.opacity),
+                  value: getInputValue("opacity", selectedObj.opacity),
                   commit: (value) => {
-                    const next = updateNumericField(selectedObject, "opacity", value);
+                    const next = updateNumericField(selectedObj, "opacity", value);
                     if (next) replaceObject(next);
                   },
                 })
@@ -516,20 +520,20 @@ export function PropertiesPanel() {
               <Input
                 type="color"
                 className="h-9 w-14 shrink-0 px-1"
-                disabled={isTransparentColor(selectedObject.fill)}
-                value={isTransparentColor(selectedObject.fill) ? "#ffffff" : selectedObject.fill}
+                disabled={isTransparentColor(selectedObj.fill)}
+                value={isTransparentColor(selectedObj.fill) ? "#ffffff" : selectedObj.fill}
                 onPointerDown={() => beginColorHistorySession("object-fill")}
                 onFocus={() => beginColorHistorySession("object-fill")}
                 onBlur={() => endColorHistorySession("object-fill")}
                 onChange={(event) =>
-                  updateObject(selectedObject.id, { fill: event.target.value })
+                  updateObject(selectedObj.id, { fill: event.target.value })
                 }
               />
               <label className="flex items-center gap-2 text-xs text-muted-foreground">
                 <Checkbox
-                  checked={isTransparentColor(selectedObject.fill)}
+                  checked={isTransparentColor(selectedObj.fill)}
                   onCheckedChange={(checked) =>
-                    updateObject(selectedObject.id, {
+                    updateObject(selectedObj.id, {
                       fill: checked ? "transparent" : "#f59e0b",
                     })
                   }
@@ -541,12 +545,12 @@ export function PropertiesPanel() {
           <PropertyRow label="Stroke">
             <Input
               type="color"
-              value={selectedObject.stroke === "transparent" ? "#ffffff" : selectedObject.stroke}
+              value={selectedObj.stroke === "transparent" ? "#ffffff" : selectedObj.stroke}
               onPointerDown={() => beginColorHistorySession("object-stroke")}
               onFocus={() => beginColorHistorySession("object-stroke")}
               onBlur={() => endColorHistorySession("object-stroke")}
               onChange={(event) =>
-                updateObject(selectedObject.id, { stroke: event.target.value })
+                updateObject(selectedObj.id, { stroke: event.target.value })
               }
             />
           </PropertyRow>
@@ -557,14 +561,14 @@ export function PropertiesPanel() {
             type="number"
             min="0"
             step="1"
-            value={getInputValue("strokeWidth", selectedObject.strokeWidth)}
+            value={getInputValue("strokeWidth", selectedObj.strokeWidth)}
             onChange={(event) => setDraftValue("strokeWidth", event.target.value)}
             onBlur={() =>
               handleNumericCommit({
                 key: "strokeWidth",
-                value: getInputValue("strokeWidth", selectedObject.strokeWidth),
+                value: getInputValue("strokeWidth", selectedObj.strokeWidth),
                 commit: (value) => {
-                  const next = updateNumericField(selectedObject, "strokeWidth", value);
+                  const next = updateNumericField(selectedObj, "strokeWidth", value);
                   if (next) replaceObject(next);
                 },
               })
@@ -572,9 +576,9 @@ export function PropertiesPanel() {
             onKeyDown={(event) =>
               onNumericKeyDown(event, {
                 key: "strokeWidth",
-                value: getInputValue("strokeWidth", selectedObject.strokeWidth),
+                value: getInputValue("strokeWidth", selectedObj.strokeWidth),
                 commit: (value) => {
-                  const next = updateNumericField(selectedObject, "strokeWidth", value);
+                  const next = updateNumericField(selectedObj, "strokeWidth", value);
                   if (next) replaceObject(next);
                 },
               })
@@ -582,18 +586,18 @@ export function PropertiesPanel() {
           />
         </PropertyRow>
 
-        {selectedObject.type === "rectangle" || selectedObject.type === "triangle" ? (
+        {selectedObj.type === "rectangle" || selectedObj.type === "triangle" ? (
           <PropertyRow label="Corner Radius">
             <Input
               type="number"
               min="0"
               step="1"
-              value={getInputValue("cornerRadius", selectedObject.cornerRadius)}
+              value={getInputValue("cornerRadius", (selectedObj as any).cornerRadius)}
               onChange={(event) => setDraftValue("cornerRadius", event.target.value)}
               onBlur={() =>
                 handleNumericCommit({
                   key: "cornerRadius",
-                  value: getInputValue("cornerRadius", selectedObject.cornerRadius),
+                  value: getInputValue("cornerRadius", (selectedObj as any).cornerRadius),
                   commit: (value) => {
                     const nextValue = Number(value);
 
@@ -601,7 +605,7 @@ export function PropertiesPanel() {
                       return;
                     }
 
-                    updateObject(selectedObject.id, {
+                    updateObject(selectedObj.id, {
                       cornerRadius: Math.max(0, nextValue),
                     });
                   },
@@ -610,7 +614,7 @@ export function PropertiesPanel() {
               onKeyDown={(event) =>
                 onNumericKeyDown(event, {
                   key: "cornerRadius",
-                  value: getInputValue("cornerRadius", selectedObject.cornerRadius),
+                  value: getInputValue("cornerRadius", (selectedObj as any).cornerRadius),
                   commit: (value) => {
                     const nextValue = Number(value);
 
@@ -618,7 +622,7 @@ export function PropertiesPanel() {
                       return;
                     }
 
-                    updateObject(selectedObject.id, {
+                    updateObject(selectedObj.id, {
                       cornerRadius: Math.max(0, nextValue),
                     });
                   },
@@ -628,15 +632,15 @@ export function PropertiesPanel() {
           </PropertyRow>
         ) : null}
 
-        {selectedObject.type === "text" ? (
+        {selectedObj.type === "text" ? (
           <>
             <PropertyRow label="Text">
               <Input
-                value={selectedObject.text}
+                value={(selectedObj as any).text}
                 onChange={(event) =>
                   replaceObject(
                     withAutoSizedTextDimensions({
-                      ...selectedObject,
+                      ...selectedObj,
                       text: event.target.value,
                     })
                   )
@@ -647,12 +651,12 @@ export function PropertiesPanel() {
               <Input
                 type="number"
                 min="8"
-                value={getInputValue("fontSize", selectedObject.fontSize)}
+                value={getInputValue("fontSize", selectedObj.fontSize as number)}
                 onChange={(event) => setDraftValue("fontSize", event.target.value)}
                 onBlur={() =>
                   handleNumericCommit({
                     key: "fontSize",
-                    value: getInputValue("fontSize", selectedObject.fontSize),
+                    value: getInputValue("fontSize", selectedObj.fontSize as number),
                     commit: (value) => {
                       const nextValue = Number(value);
 
@@ -662,7 +666,7 @@ export function PropertiesPanel() {
 
                       replaceObject(
                         withAutoSizedTextDimensions({
-                          ...selectedObject,
+                          ...selectedObj,
                           fontSize: Math.max(8, nextValue),
                         })
                       );
@@ -672,7 +676,7 @@ export function PropertiesPanel() {
                 onKeyDown={(event) =>
                   onNumericKeyDown(event, {
                     key: "fontSize",
-                    value: getInputValue("fontSize", selectedObject.fontSize),
+                    value: getInputValue("fontSize", selectedObj.fontSize),
                     commit: (value) => {
                       const nextValue = Number(value);
 
@@ -682,7 +686,7 @@ export function PropertiesPanel() {
 
                       replaceObject(
                         withAutoSizedTextDimensions({
-                          ...selectedObject,
+                          ...selectedObj,
                           fontSize: Math.max(8, nextValue),
                         })
                       );
@@ -696,13 +700,13 @@ export function PropertiesPanel() {
                 <Button
                   type="button"
                   variant={
-                    (selectedObject.fontStyle ?? "normal").includes("bold")
+                    (selectedObj.fontStyle ?? "normal").includes("bold")
                       ? "secondary"
                       : "outline"
                   }
                   size="sm"
                   onClick={() =>
-                    replaceObject(toggleTextStyle(selectedObject, "bold"))
+                    replaceObject(toggleTextStyle(selectedObj as any, "bold"))
                   }
                 >
                   Bold
@@ -710,13 +714,13 @@ export function PropertiesPanel() {
                 <Button
                   type="button"
                   variant={
-                    (selectedObject.fontStyle ?? "normal").includes("italic")
+                    (selectedObj.fontStyle ?? "normal").includes("italic")
                       ? "secondary"
                       : "outline"
                   }
                   size="sm"
                   onClick={() =>
-                    replaceObject(toggleTextStyle(selectedObject, "italic"))
+                    replaceObject(toggleTextStyle(selectedObj as any, "italic"))
                   }
                 >
                   Italic
@@ -727,10 +731,10 @@ export function PropertiesPanel() {
               <div className="flex gap-2">
                 <Button
                   type="button"
-                  variant={selectedObject.textAlign === "left" ? "secondary" : "outline"}
+                  variant={selectedObj.textAlign === "left" ? "secondary" : "outline"}
                   size="sm"
                   onClick={() =>
-                    updateObject(selectedObject.id, { textAlign: "left" })
+                    updateObject(selectedObj.id, { textAlign: "left" })
                   }
                 >
                   <HugeiconsIcon
@@ -742,10 +746,10 @@ export function PropertiesPanel() {
                 </Button>
                 <Button
                   type="button"
-                  variant={selectedObject.textAlign === "center" ? "secondary" : "outline"}
+                  variant={selectedObj.textAlign === "center" ? "secondary" : "outline"}
                   size="sm"
                   onClick={() =>
-                    updateObject(selectedObject.id, { textAlign: "center" })
+                    updateObject(selectedObj.id, { textAlign: "center" })
                   }
                 >
                   <HugeiconsIcon
@@ -757,10 +761,10 @@ export function PropertiesPanel() {
                 </Button>
                 <Button
                   type="button"
-                  variant={selectedObject.textAlign === "right" ? "secondary" : "outline"}
+                  variant={selectedObj.textAlign === "right" ? "secondary" : "outline"}
                   size="sm"
                   onClick={() =>
-                    updateObject(selectedObject.id, { textAlign: "right" })
+                    updateObject(selectedObj.id, { textAlign: "right" })
                   }
                 >
                   <HugeiconsIcon
@@ -775,9 +779,9 @@ export function PropertiesPanel() {
           </>
         ) : null}
 
-        {selectedObject.type === "image" ? (
+        {selectedObj.type === "image" ? (
           <PropertyRow label="Image Source">
-            <Input readOnly value={selectedObject.src.slice(0, 72)} />
+            <Input readOnly value={(selectedObj as any).src.slice(0, 72)} />
           </PropertyRow>
         ) : null}
       </CardContent>
