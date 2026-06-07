@@ -11,10 +11,12 @@ const ALLOWED_AVATAR_MIME_TYPES = new Set([
 ]);
 const USER_AVATAR_UPLOAD_DIR = path.join(
   process.cwd(),
-  "public",
+  "storage",
   "uploads",
   "user-avatars"
 );
+
+export { USER_AVATAR_UPLOAD_DIR };
 const AVATAR_SIZE = 512;
 
 function slugifySegment(value: string) {
@@ -64,5 +66,5 @@ export async function saveUserAvatarImage(
 
   await writeFile(outputPath, outputBuffer);
 
-  return `/uploads/user-avatars/${fileName}`;
+  return `/api/uploads/user-avatars/${fileName}`;
 }
