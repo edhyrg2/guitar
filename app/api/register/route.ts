@@ -2,6 +2,12 @@ import { NextResponse } from "next/server";
 import { hash } from "bcryptjs";
 
 import { getPrismaClient } from "@/lib/prisma";
+import {
+  buildVerificationEmail,
+  generateToken,
+  getAppUrl,
+  sendEmail,
+} from "@/lib/email";
 
 type RegisterBody = {
   name?: string;
@@ -67,6 +73,8 @@ export async function POST(request: Request) {
   }
 
   const passwordHash = await hash(password, 12);
+  const { token, hashedToken } = generateToken();
+  const emailVerificationExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
   await prisma.user.create({
     data: {
@@ -75,8 +83,21 @@ export async function POST(request: Request) {
       passwordHash,
       level: "USER",
       isActive: true,
+      emailVerificationToken: hashedToken,
+      emailVerificationExpiresAt,
     },
   });
+
+  const verifyUrl = `${getAppUrl()}/verify-email?token=${encodeURIComponent(token)}`;
+  const emailContent = buildVerificationEmail(name, verifyUrl);
+  const result = await sendEmail({ to: email, ...emailContent });
+
+  if (!result.ok) {
+    return NextResponse.json(
+      { error: result.error },
+      { status: 503 }
+    );
+  }
 
   return NextResponse.json({ success: true }, { status: 201 });
 }

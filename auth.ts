@@ -66,10 +66,11 @@ export const authOptions: NextAuthOptions = {
             level: true,
             photoUrl: true,
             isActive: true,
+            emailVerifiedAt: true,
           },
         });
 
-        if (!user?.isActive) {
+        if (!user?.isActive || !user.emailVerifiedAt) {
           return null;
         }
 

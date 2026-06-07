@@ -2,7 +2,6 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
@@ -86,20 +85,7 @@ export function RegisterForm({ callbackUrl }: RegisterFormProps) {
         return;
       }
 
-      // Auto sign-in after successful registration
-      const result = await signIn("credentials", {
-        email,
-        password,
-        callbackUrl,
-        redirect: false,
-      });
-
-      if (!result || result.error) {
-        setSuccessRedirectUrl(`/login?registered=1&callbackUrl=${encodeURIComponent(callbackUrl)}`);
-        return;
-      }
-
-      setSuccessRedirectUrl(result.url ?? callbackUrl);
+      setSuccessRedirectUrl(`/login?registered=1&callbackUrl=${encodeURIComponent(callbackUrl)}`);
     } finally {
       setSubmitting(false);
     }
@@ -118,7 +104,7 @@ export function RegisterForm({ callbackUrl }: RegisterFormProps) {
           <DialogHeader>
             <DialogTitle>Account created!</DialogTitle>
             <DialogDescription>
-              Welcome, {name}. Your account has been created successfully. You will be redirected shortly.
+              Welcome, {name}. We sent a verification link to {email}. Please verify your email before signing in.
             </DialogDescription>
           </DialogHeader>
           <Button
@@ -128,7 +114,7 @@ export function RegisterForm({ callbackUrl }: RegisterFormProps) {
               router.refresh();
             }}
           >
-            Continue
+            Continue to sign in
           </Button>
         </DialogContent>
       </Dialog>

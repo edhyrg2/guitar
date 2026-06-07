@@ -15,6 +15,7 @@ type LoginPageProps = {
   searchParams?: Promise<{
     callbackUrl?: string;
     registered?: string;
+    reset?: string;
   }>;
 };
 
@@ -46,6 +47,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   const resolvedSearchParams = (await searchParams) ?? {};
   const callbackUrl = resolvedSearchParams.callbackUrl || "/";
   const justRegistered = resolvedSearchParams.registered === "1";
+  const justResetPassword = resolvedSearchParams.reset === "1";
 
   return (
     <main className="min-h-screen lg:grid lg:grid-cols-[1fr_minmax(400px,480px)]">
@@ -134,7 +136,13 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
 
           {justRegistered && (
             <div className="mb-6 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-600 dark:text-emerald-400">
-              Account created successfully. Sign in to continue.
+              Account created successfully. Please verify your email before signing in.
+            </div>
+          )}
+
+          {justResetPassword && (
+            <div className="mb-6 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-600 dark:text-emerald-400">
+              Password reset successfully. Sign in with your new password.
             </div>
           )}
 

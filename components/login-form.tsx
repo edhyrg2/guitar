@@ -78,6 +78,12 @@ export function LoginForm({ callbackUrl }: LoginFormProps) {
       <label className="grid gap-1.5">
         <div className="flex items-center justify-between">
           <span className="text-sm font-medium text-foreground">Password</span>
+          <Link
+            href="/forgot-password"
+            className="text-xs font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+          >
+            Forgot password?
+          </Link>
         </div>
         <div className="relative">
           <HugeiconsIcon
