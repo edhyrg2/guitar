@@ -5,7 +5,6 @@ import {
 } from "@hugeicons/core-free-icons";
 
 import { AppSidebar } from "@/components/app-sidebar";
-import { GuitarIcon } from "@/components/guitar-icon";
 import { GuitarModelManagementContent } from "@/components/guitar-model-management-content";
 import { TopNavbar } from "@/components/top-navbar";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
@@ -33,7 +32,7 @@ export default async function GuitarModelsPage() {
               {
                 label: "Guitar Brand",
                 href: "/guitar/brands",
-                customIcon: GuitarIcon,
+                customIcon: "guitar",
               },
               {
                 label: "Guitar Models",

@@ -6,7 +6,6 @@ import {
 
 import { AppSidebar } from "@/components/app-sidebar";
 import { GuitarBrandManagementContent } from "@/components/guitar-brand-management-content";
-import { GuitarIcon } from "@/components/guitar-icon";
 import { TopNavbar } from "@/components/top-navbar";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { getGuitarBrandRows } from "@/lib/guitar-brand-data";
@@ -27,7 +26,7 @@ export default async function GuitarBrandsPage() {
               {
                 label: "Guitar Brands",
                 href: "/guitar/brands",
-                customIcon: GuitarIcon,
+                customIcon: "guitar",
                 active: true,
               },
               {

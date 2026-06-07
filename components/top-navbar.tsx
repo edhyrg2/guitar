@@ -1,11 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import type { ComponentType } from "react";
 import { useSession } from "next-auth/react";
 import { HugeiconsIcon } from "@hugeicons/react";
 import type { IconSvgElement } from "@hugeicons/react";
 
+import { GuitarIcon } from "@/components/guitar-icon";
 import { ThemeControls } from "@/components/theme-controls";
 import { Button } from "@/components/ui/button";
 import { SidebarTrigger } from "@/components/ui/sidebar";
@@ -17,7 +17,7 @@ type TopNavbarItem = {
   href?: string;
   active?: boolean;
   icon?: IconSvgElement;
-  customIcon?: ComponentType<{ className?: string }>;
+  customIcon?: "guitar";
   requiredLevel?: UserLevel;
 };
 
@@ -93,8 +93,8 @@ export function TopNavbar({ items }: TopNavbarProps) {
                   className="size-4 text-muted-foreground"
                 />
               )}
-              {activeItem.customIcon && (
-                <activeItem.customIcon className="size-4 text-muted-foreground" />
+              {activeItem.customIcon === "guitar" && (
+                <GuitarIcon className="size-4 text-muted-foreground" />
               )}
               <h1 className="text-sm font-semibold text-foreground">
                 {activeItem.label}
@@ -114,8 +114,8 @@ export function TopNavbar({ items }: TopNavbarProps) {
                     strokeWidth={2}
                     data-icon="inline-start"
                   />
-                ) : item.customIcon ? (
-                  <item.customIcon className="size-4" />
+                ) : item.customIcon === "guitar" ? (
+                  <GuitarIcon className="size-4" />
                 ) : null}
                 {item.label}
               </>
