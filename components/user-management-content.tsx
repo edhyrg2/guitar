@@ -21,6 +21,7 @@ import { StatusPill } from "@/components/status-pill";
 import { UserFormDialog } from "@/components/user-form-dialog";
 import { Button } from "@/components/ui/button";
 import { TableCell, TableHead, TableRow } from "@/components/ui/table";
+import { cn } from "@/lib/utils";
 
 type UserManagementContentProps = {
   initialUsers: UserRow[];
@@ -33,6 +34,33 @@ export function UserManagementContent({
   const [createOpen, setCreateOpen] = React.useState(false);
   const [editTarget, setEditTarget] = React.useState<UserRow | null>(null);
   const [deleteTarget, setDeleteTarget] = React.useState<UserRow | null>(null);
+  const [message, setMessage] = React.useState<
+    { tone: "success" | "error"; text: string } | null
+  >(null);
+  const messageTimeoutRef = React.useRef<number | null>(null);
+
+  const showMessage = React.useCallback(
+    (tone: "success" | "error", text: string) => {
+      if (messageTimeoutRef.current) {
+        window.clearTimeout(messageTimeoutRef.current);
+      }
+
+      setMessage({ tone, text });
+      messageTimeoutRef.current = window.setTimeout(() => {
+        setMessage(null);
+        messageTimeoutRef.current = null;
+      }, 4000);
+    },
+    []
+  );
+
+  React.useEffect(() => {
+    return () => {
+      if (messageTimeoutRef.current) {
+        window.clearTimeout(messageTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const stats = [
     {
@@ -72,6 +100,19 @@ export function UserManagementContent({
           <StatCard key={stat.title} {...stat} />
         ))}
       </section>
+
+      {message ? (
+        <div
+          className={cn(
+            "rounded-2xl border px-4 py-3 text-sm font-medium",
+            message.tone === "success"
+              ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+              : "border-destructive/30 bg-destructive/10 text-destructive"
+          )}
+        >
+          {message.text}
+        </div>
+      ) : null}
 
       <section>
         <DataTableCard
@@ -182,6 +223,7 @@ export function UserManagementContent({
         submitLabel="Create user"
         onSubmit={(value) => {
           setUsers((current) => [value, ...current]);
+          showMessage("success", `${value.name} has been created.`);
         }}
       />
 
@@ -207,6 +249,7 @@ export function UserManagementContent({
             )
           );
           setEditTarget(null);
+          showMessage("success", `${value.name} has been updated.`);
         }}
       />
 
@@ -225,10 +268,12 @@ export function UserManagementContent({
             return;
           }
 
+          const deletedName = deleteTarget.name;
           setUsers((current) =>
             current.filter((user) => user.email !== deleteTarget.email)
           );
           setDeleteTarget(null);
+          showMessage("success", `${deletedName} has been deleted.`);
         }}
       />
     </div>

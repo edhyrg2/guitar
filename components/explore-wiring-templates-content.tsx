@@ -371,9 +371,9 @@ export function ExploreWiringTemplatesContent({
                       />
                       <div className="absolute inset-0 flex items-center justify-center px-6 text-center text-white/90">
                         <div>
-                          <div className="text-sm font-medium">Preview belum tersedia</div>
+                          <div className="text-sm font-medium">Preview not available</div>
                           <div className="mt-2 text-xs text-white/75">
-                            Template ini sudah publish, tapi belum punya thumbnail.
+                            This template has been published but does not have a thumbnail yet.
                           </div>
                         </div>
                       </div>
@@ -514,10 +514,10 @@ export function ExploreWiringTemplatesContent({
           <Card className="rounded-[1.8rem] border border-dashed border-border/80 bg-card/80 py-10">
             <CardContent className="text-center">
               <div className="text-base font-medium text-foreground">
-                Tidak ada wiring publish yang cocok
+                No matching published wiring found
               </div>
               <div className="mt-2 text-sm text-muted-foreground">
-                Coba ubah kata kunci pencarian atau longgarkan filter pickup, switch, atau status.
+                Try changing your search keywords or loosening the pickup, switch, or status filters.
               </div>
             </CardContent>
           </Card>

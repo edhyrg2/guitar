@@ -12,6 +12,7 @@ import {
   Location01Icon,
   Mail01Icon,
   NoteIcon,
+  Wrench01Icon,
 } from "@hugeicons/core-free-icons";
 
 import { Button } from "@/components/ui/button";
@@ -40,6 +41,15 @@ type MyDesignContentProps = {
 type ProfileFormState = {
   profileBio: string;
   location: string;
+  city: string;
+  country: string;
+  isBuilder: boolean;
+  builderWorkshopName: string;
+  builderBio: string;
+  builderSpecialty: string;
+  builderExperienceYears: string;
+  builderPortfolioUrl: string;
+  builderShopUrl: string;
   websiteUrl: string;
   facebookUrl: string;
   instagramUrl: string;
@@ -87,6 +97,15 @@ function createInitialForm(profile: MyDesignProfile): ProfileFormState {
   return {
     profileBio: profile.profileBio ?? "",
     location: profile.location ?? "",
+    city: profile.city ?? "",
+    country: profile.country ?? "",
+    isBuilder: profile.isBuilder,
+    builderWorkshopName: profile.builderWorkshopName ?? "",
+    builderBio: profile.builderBio ?? "",
+    builderSpecialty: profile.builderSpecialty ?? "",
+    builderExperienceYears: profile.builderExperienceYears?.toString() ?? "",
+    builderPortfolioUrl: profile.builderPortfolioUrl ?? "",
+    builderShopUrl: profile.builderShopUrl ?? "",
     websiteUrl: profile.websiteUrl ?? "",
     facebookUrl: profile.facebookUrl ?? "",
     instagramUrl: profile.instagramUrl ?? "",
@@ -129,6 +148,8 @@ export function MyDesignContent({
 
   const socialLinks = [
     { label: "Website", value: profile.websiteUrl },
+    { label: "Portfolio", value: profile.builderPortfolioUrl },
+    { label: "Shop", value: profile.builderShopUrl },
     { label: "Facebook", value: profile.facebookUrl },
     { label: "Instagram", value: profile.instagramUrl },
     { label: "YouTube", value: profile.youtubeUrl },
@@ -194,6 +215,15 @@ export function MyDesignContent({
           photo?: string | null;
           profileBio?: string | null;
           location?: string | null;
+          city?: string | null;
+          country?: string | null;
+          isBuilder?: boolean;
+          builderWorkshopName?: string | null;
+          builderBio?: string | null;
+          builderSpecialty?: string | null;
+          builderExperienceYears?: number | null;
+          builderPortfolioUrl?: string | null;
+          builderShopUrl?: string | null;
           websiteUrl?: string | null;
           facebookUrl?: string | null;
           instagramUrl?: string | null;
@@ -213,6 +243,15 @@ export function MyDesignContent({
       photoUrl: payload?.photo ?? profile.photoUrl ?? profile.photo,
       profileBio: payload?.profileBio ?? null,
       location: payload?.location ?? null,
+      city: payload?.city ?? null,
+      country: payload?.country ?? null,
+      isBuilder: payload?.isBuilder ?? false,
+      builderWorkshopName: payload?.builderWorkshopName ?? null,
+      builderBio: payload?.builderBio ?? null,
+      builderSpecialty: payload?.builderSpecialty ?? null,
+      builderExperienceYears: payload?.builderExperienceYears ?? null,
+      builderPortfolioUrl: payload?.builderPortfolioUrl ?? null,
+      builderShopUrl: payload?.builderShopUrl ?? null,
       websiteUrl: payload?.websiteUrl ?? null,
       facebookUrl: payload?.facebookUrl ?? null,
       instagramUrl: payload?.instagramUrl ?? null,
@@ -304,7 +343,8 @@ export function MyDesignContent({
   return (
     <div className="flex flex-1 flex-col gap-6 bg-[linear-gradient(180deg,rgba(248,250,252,0.92),rgba(241,245,249,0.72))] px-4 py-6 text-foreground dark:bg-[linear-gradient(180deg,rgba(10,10,10,0.96),rgba(23,23,23,0.98))] sm:px-6">
       <section className="overflow-hidden rounded-[2rem] border border-border/70 bg-background/95 shadow-[0_30px_80px_rgba(15,23,42,0.08)] dark:bg-background/90 dark:shadow-[0_30px_80px_rgba(0,0,0,0.35)]">
-        <div className="relative border-b border-border/70 bg-[radial-gradient(circle_at_top_left,rgba(14,116,144,0.20),transparent_32%),radial-gradient(circle_at_top_right,rgba(59,130,246,0.10),transparent_26%),linear-gradient(135deg,rgba(255,255,255,0.98),rgba(248,250,252,0.96))] px-6 py-8 dark:bg-[radial-gradient(circle_at_top_left,rgba(13,148,136,0.16),transparent_28%),radial-gradient(circle_at_top_right,rgba(59,130,246,0.12),transparent_24%),linear-gradient(135deg,rgba(18,18,18,0.98),rgba(28,28,28,0.96))] sm:px-8">
+        <div className="relative bg-[radial-gradient(circle_at_top_left,rgba(14,116,144,0.20),transparent_32%),radial-gradient(circle_at_top_right,rgba(59,130,246,0.10),transparent_26%),linear-gradient(135deg,rgba(255,255,255,0.98),rgba(248,250,252,0.96))] px-6 py-8 dark:bg-[radial-gradient(circle_at_top_left,rgba(13,148,136,0.16),transparent_28%),radial-gradient(circle_at_top_right,rgba(59,130,246,0.12),transparent_24%),linear-gradient(135deg,rgba(18,18,18,0.98),rgba(28,28,28,0.96))] sm:px-8">
+          {/* Profile section */}
           <div className="flex flex-col gap-6 xl:flex-row xl:items-start xl:justify-between">
             <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
               <div className="relative flex h-44 w-36 shrink-0 items-center justify-center overflow-hidden rounded-[2rem] bg-[linear-gradient(135deg,#0f172a,#0f766e)] text-3xl font-semibold tracking-tight text-white shadow-lg dark:shadow-[0_18px_40px_rgba(0,0,0,0.45)] sm:h-48 sm:w-40">
@@ -406,6 +446,73 @@ export function MyDesignContent({
             </div>
           </div>
         </div>
+
+        {/* Builder section */}
+        {profile.isBuilder ? (
+          <div className="border-t border-border/70 bg-background/95 px-6 py-6 dark:bg-background/80 sm:px-8">
+            <div className="flex items-center gap-2">
+              <HugeiconsIcon
+                icon={Wrench01Icon}
+                strokeWidth={2}
+                className="size-4 text-primary"
+              />
+              <h2 className="text-[0.7rem] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                Builder Profile
+              </h2>
+            </div>
+
+            <div className="mt-4 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div className="space-y-1.5">
+                <div className="text-lg font-semibold text-foreground">
+                  {profile.builderWorkshopName || "Guitar Builder"}
+                </div>
+                {profile.builderSpecialty ? (
+                  <div className="text-sm text-muted-foreground">{profile.builderSpecialty}</div>
+                ) : null}
+                {profile.builderBio ? (
+                  <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
+                    {profile.builderBio}
+                  </p>
+                ) : null}
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 sm:flex sm:flex-wrap">
+                {profile.builderExperienceYears !== null ? (
+                  <div className="rounded-2xl border border-border/70 bg-muted/30 px-4 py-3 dark:bg-muted/10">
+                    <div className="text-xl font-semibold text-foreground">
+                      {profile.builderExperienceYears}
+                    </div>
+                    <div className="mt-0.5 text-[0.7rem] uppercase tracking-[0.12em] text-muted-foreground">
+                      Years Experience
+                    </div>
+                  </div>
+                ) : null}
+                {profile.builderPortfolioUrl ? (
+                  <a
+                    href={getLinkHref(profile.builderPortfolioUrl)}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-2 rounded-2xl border border-border/70 bg-muted/30 px-4 py-3 text-sm font-medium text-foreground transition hover:border-primary/40 hover:bg-primary/5 dark:bg-muted/10"
+                  >
+                    <HugeiconsIcon icon={LinkSquare02Icon} strokeWidth={2} className="size-4" />
+                    Portfolio
+                  </a>
+                ) : null}
+                {profile.builderShopUrl ? (
+                  <a
+                    href={getLinkHref(profile.builderShopUrl)}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-2 rounded-2xl border border-border/70 bg-muted/30 px-4 py-3 text-sm font-medium text-foreground transition hover:border-primary/40 hover:bg-primary/5 dark:bg-muted/10"
+                  >
+                    <HugeiconsIcon icon={LinkSquare02Icon} strokeWidth={2} className="size-4" />
+                    Shop
+                  </a>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        ) : null}
       </section>
 
       <section>
@@ -616,13 +723,93 @@ export function MyDesignContent({
               />
             </div>
 
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground">Location</label>
-              <Input
-                value={form.location ?? ""}
-                onChange={(event) => updateField("location", event.target.value)}
-                placeholder="Bandung, Indonesia"
-              />
+            <div className="grid gap-4 sm:grid-cols-3">
+              <div className="space-y-2 sm:col-span-3">
+                <label className="text-sm font-medium text-foreground">Location</label>
+                <Input
+                  value={form.location ?? ""}
+                  onChange={(event) => updateField("location", event.target.value)}
+                  placeholder="Bandung, Indonesia"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-foreground">City</label>
+                <Input
+                  value={form.city}
+                  onChange={(event) => updateField("city", event.target.value)}
+                  placeholder="Bandung"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-foreground">Country</label>
+                <Input
+                  value={form.country}
+                  onChange={(event) => updateField("country", event.target.value)}
+                  placeholder="Indonesia"
+                />
+              </div>
+              <label className="flex items-center gap-2 rounded-2xl border border-border/70 bg-muted/20 px-4 py-3 text-sm font-medium text-foreground">
+                <input
+                  type="checkbox"
+                  checked={form.isBuilder}
+                  onChange={(event) => updateField("isBuilder", event.target.checked)}
+                  className="size-4"
+                />
+                Guitar builder
+              </label>
+            </div>
+
+            <div className="grid gap-4 rounded-3xl border border-border/70 bg-muted/20 p-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-foreground">Workshop / Brand Name</label>
+                <Input
+                  value={form.builderWorkshopName}
+                  onChange={(event) => updateField("builderWorkshopName", event.target.value)}
+                  placeholder="Your guitar workshop"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-foreground">Specialty</label>
+                <Input
+                  value={form.builderSpecialty}
+                  onChange={(event) => updateField("builderSpecialty", event.target.value)}
+                  placeholder="Custom electric guitars, rewiring, pickups"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-foreground">Years of Experience</label>
+                <Input
+                  type="number"
+                  min={0}
+                  value={form.builderExperienceYears}
+                  onChange={(event) => updateField("builderExperienceYears", event.target.value)}
+                  placeholder="5"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-foreground">Builder Bio</label>
+                <Input
+                  value={form.builderBio}
+                  onChange={(event) => updateField("builderBio", event.target.value)}
+                  placeholder="Short builder profile"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-foreground">Portfolio URL</label>
+                <Input
+                  value={form.builderPortfolioUrl}
+                  onChange={(event) => updateField("builderPortfolioUrl", event.target.value)}
+                  placeholder="https://portfolio.example.com"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-foreground">Shop URL</label>
+                <Input
+                  value={form.builderShopUrl}
+                  onChange={(event) => updateField("builderShopUrl", event.target.value)}
+                  placeholder="https://shop.example.com"
+                />
+              </div>
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
@@ -639,7 +826,7 @@ export function MyDesignContent({
                 >
                   <label className="text-sm font-medium text-foreground">{label}</label>
                   <Input
-                    value={form[field as keyof ProfileFormState] ?? ""}
+                    value={(form[field as keyof ProfileFormState] as string) ?? ""}
                     onChange={(event) =>
                       updateField(field as keyof ProfileFormState, event.target.value as never)
                     }

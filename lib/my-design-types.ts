@@ -7,6 +7,15 @@ export type MyDesignProfile = {
   photoUrl?: string | null;
   profileBio: string | null;
   location: string | null;
+  city: string | null;
+  country: string | null;
+  isBuilder: boolean;
+  builderWorkshopName: string | null;
+  builderBio: string | null;
+  builderSpecialty: string | null;
+  builderExperienceYears: number | null;
+  builderPortfolioUrl: string | null;
+  builderShopUrl: string | null;
   websiteUrl: string | null;
   facebookUrl: string | null;
   instagramUrl: string | null;

@@ -42,7 +42,7 @@ export function LoginForm({ callbackUrl }: LoginFormProps) {
       });
 
       if (!result || result.error) {
-        setError("Email atau password tidak valid.");
+        setError("Invalid email or password.");
         return;
       }
 

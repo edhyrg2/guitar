@@ -15,6 +15,13 @@ import {
 } from "@hugeicons/core-free-icons";
 
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 
 type RegisterFormProps = {
@@ -31,6 +38,7 @@ export function RegisterForm({ callbackUrl }: RegisterFormProps) {
   const [showConfirm, setShowConfirm] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [submitting, setSubmitting] = React.useState(false);
+  const [successRedirectUrl, setSuccessRedirectUrl] = React.useState<string | null>(null);
 
   const passwordStrength = React.useMemo(() => {
     if (!password) return null;
@@ -87,13 +95,11 @@ export function RegisterForm({ callbackUrl }: RegisterFormProps) {
       });
 
       if (!result || result.error) {
-        // Registration succeeded but auto-login failed — redirect to login with success message
-        router.push(`/login?registered=1&callbackUrl=${encodeURIComponent(callbackUrl)}`);
+        setSuccessRedirectUrl(`/login?registered=1&callbackUrl=${encodeURIComponent(callbackUrl)}`);
         return;
       }
 
-      router.push(result.url ?? callbackUrl);
-      router.refresh();
+      setSuccessRedirectUrl(result.url ?? callbackUrl);
     } finally {
       setSubmitting(false);
     }
@@ -106,7 +112,28 @@ export function RegisterForm({ callbackUrl }: RegisterFormProps) {
     confirmPassword.length > 0;
 
   return (
-    <form onSubmit={handleSubmit} className="grid gap-5">
+    <>
+      <Dialog open={!!successRedirectUrl}>
+        <DialogContent className="sm:max-w-sm" onInteractOutside={(e) => e.preventDefault()}>
+          <DialogHeader>
+            <DialogTitle>Account created!</DialogTitle>
+            <DialogDescription>
+              Welcome, {name}. Your account has been created successfully. You will be redirected shortly.
+            </DialogDescription>
+          </DialogHeader>
+          <Button
+            className="w-full"
+            onClick={() => {
+              router.push(successRedirectUrl!);
+              router.refresh();
+            }}
+          >
+            Continue
+          </Button>
+        </DialogContent>
+      </Dialog>
+
+      <form onSubmit={handleSubmit} className="grid gap-5">
       {/* Name */}
       <label className="grid gap-1.5">
         <span className="text-sm font-medium text-foreground">Full name</span>
@@ -275,6 +302,7 @@ export function RegisterForm({ callbackUrl }: RegisterFormProps) {
           Sign in
         </Link>
       </p>
-    </form>
+      </form>
+    </>
   );
 }

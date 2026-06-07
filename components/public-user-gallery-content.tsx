@@ -27,6 +27,15 @@ type PublicUserGalleryProfile = {
   photo: string | null;
   profileBio: string | null;
   location: string | null;
+  city: string | null;
+  country: string | null;
+  isBuilder: boolean;
+  builderWorkshopName: string | null;
+  builderBio: string | null;
+  builderSpecialty: string | null;
+  builderExperienceYears: number | null;
+  builderPortfolioUrl: string | null;
+  builderShopUrl: string | null;
   websiteUrl: string | null;
   facebookUrl: string | null;
   instagramUrl: string | null;
@@ -86,6 +95,8 @@ export function PublicUserGalleryContent({
 
   const socialLinks = [
     { label: "Website", value: profile.websiteUrl },
+    { label: "Portfolio", value: profile.builderPortfolioUrl },
+    { label: "Shop", value: profile.builderShopUrl },
     { label: "Facebook", value: profile.facebookUrl },
     { label: "Instagram", value: profile.instagramUrl },
     { label: "YouTube", value: profile.youtubeUrl },
@@ -182,6 +193,19 @@ export function PublicUserGalleryContent({
                   <p className="max-w-3xl text-sm leading-7 text-muted-foreground sm:text-base">
                     {profile.profileBio || "Creator ini belum menambahkan deskripsi publik."}
                   </p>
+
+                  {profile.isBuilder ? (
+                    <div className="grid gap-2 rounded-2xl border border-border/70 bg-background/70 p-4 text-sm text-muted-foreground dark:bg-background/40">
+                      <div className="font-medium text-foreground">
+                        {profile.builderWorkshopName || "Guitar Builder"}
+                      </div>
+                      {profile.builderSpecialty ? <div>{profile.builderSpecialty}</div> : null}
+                      {profile.builderExperienceYears !== null ? (
+                        <div>{profile.builderExperienceYears} years of builder experience</div>
+                      ) : null}
+                      {profile.builderBio ? <div>{profile.builderBio}</div> : null}
+                    </div>
+                  ) : null}
 
                   <div className="flex flex-wrap gap-2">
                     {socialLinks.length > 0 ? (

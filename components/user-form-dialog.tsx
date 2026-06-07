@@ -1,6 +1,8 @@
 "use client";
 
 import * as React from "react";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { ViewIcon, ViewOffIcon } from "@hugeicons/core-free-icons";
 
 import {
   USER_ACTIVITY_OPTIONS,
@@ -84,6 +86,8 @@ function UserFormDialogContent({
 }: UserFormDialogContentProps) {
   const [form, setForm] = React.useState<UserRow>(initialValue ?? defaultUser);
 
+  const [showPassword, setShowPassword] = React.useState(false);
+
   const updateField = <K extends keyof UserRow>(key: K, value: UserRow[K]) => {
     setForm((current) => ({ ...current, [key]: value }));
   };
@@ -115,7 +119,26 @@ function UserFormDialogContent({
         </label>
         <label className="flex flex-col gap-2">
           <span className="text-xs font-medium">Password</span>
-          <Input type="password" placeholder="Minimum 8 characters" />
+          <div className="relative">
+            <Input
+              type={showPassword ? "text" : "password"}
+              placeholder="Minimum 8 characters"
+              className="pr-10"
+            />
+            <button
+              type="button"
+              tabIndex={-1}
+              onClick={() => setShowPassword((value) => !value)}
+              className="absolute top-1/2 right-3 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              aria-label={showPassword ? "Hide password" : "Show password"}
+            >
+              <HugeiconsIcon
+                icon={showPassword ? ViewOffIcon : ViewIcon}
+                strokeWidth={2}
+                className="size-4"
+              />
+            </button>
+          </div>
         </label>
         <label className="flex flex-col gap-2">
           <span className="text-xs font-medium">Level</span>

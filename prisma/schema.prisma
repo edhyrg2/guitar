@@ -18,31 +18,41 @@ enum BuilderSavedSetupStatus {
 }
 
 model User {
-  id              String    @id @default(cuid())
-  name            String
-  email           String    @unique
-  passwordHash    String
-  level           UserLevel @default(USER)
-  photoUrl        String?
-  profileBio      String?   @map("profile_bio")
-  location        String?
-  websiteUrl      String?   @map("website_url")
-  facebookUrl     String?   @map("facebook_url")
-  instagramUrl    String?   @map("instagram_url")
-  youtubeUrl      String?   @map("youtube_url")
-  xUrl            String?   @map("x_url")
-  isActive        Boolean   @default(true)
-  emailVerifiedAt DateTime?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-  customComponentDrafts CustomComponentDraft[]
-  builderSavedSetups   BuilderSavedSetup[]
-  wiringTemplateLoves  WiringTemplateLove[]
-  wiringTemplateSaves  WiringTemplateSave[]
+  id                     String    @id @default(cuid())
+  name                   String
+  email                  String    @unique
+  passwordHash           String
+  level                  UserLevel @default(USER)
+  photoUrl               String?
+  profileBio             String?   @map("profile_bio")
+  location               String?
+  city                   String?
+  country                String?
+  websiteUrl             String?   @map("website_url")
+  facebookUrl            String?   @map("facebook_url")
+  instagramUrl           String?   @map("instagram_url")
+  youtubeUrl             String?   @map("youtube_url")
+  xUrl                   String?   @map("x_url")
+  isBuilder              Boolean   @default(false) @map("is_builder")
+  builderWorkshopName    String?   @map("builder_workshop_name")
+  builderBio             String?   @map("builder_bio")
+  builderSpecialty       String?   @map("builder_specialty")
+  builderExperienceYears Int?      @map("builder_experience_years")
+  builderPortfolioUrl    String?   @map("builder_portfolio_url")
+  builderShopUrl         String?   @map("builder_shop_url")
+  isActive               Boolean   @default(true)
+  emailVerifiedAt        DateTime?
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+  customComponentDrafts  CustomComponentDraft[]
+  builderSavedSetups     BuilderSavedSetup[]
+  wiringTemplateLoves    WiringTemplateLove[]
+  wiringTemplateSaves    WiringTemplateSave[]
   wiringTemplateComments WiringTemplateComment[]
 
   @@index([email])
   @@index([level])
+  @@index([isBuilder])
   @@index([isActive])
 }
 

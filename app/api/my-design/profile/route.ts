@@ -6,6 +6,15 @@ import { getPrismaClient } from "@/lib/prisma";
 type ProfileUpdateBody = {
   profileBio?: string | null;
   location?: string | null;
+  city?: string | null;
+  country?: string | null;
+  isBuilder?: boolean;
+  builderWorkshopName?: string | null;
+  builderBio?: string | null;
+  builderSpecialty?: string | null;
+  builderExperienceYears?: number | string | null;
+  builderPortfolioUrl?: string | null;
+  builderShopUrl?: string | null;
   websiteUrl?: string | null;
   facebookUrl?: string | null;
   instagramUrl?: string | null;
@@ -23,10 +32,33 @@ function normalizeOptionalText(value: string | null | undefined, maxLength: numb
   return normalized.slice(0, maxLength);
 }
 
+function normalizeOptionalInt(value: number | string | null | undefined) {
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
+
+  const normalized = Number(value);
+
+  if (!Number.isFinite(normalized)) {
+    return null;
+  }
+
+  return Math.max(0, Math.floor(normalized));
+}
+
 function formatProfileResponse(profile: {
   photoUrl?: string | null;
   profileBio: string | null;
   location: string | null;
+  city: string | null;
+  country: string | null;
+  isBuilder: boolean;
+  builderWorkshopName: string | null;
+  builderBio: string | null;
+  builderSpecialty: string | null;
+  builderExperienceYears: number | null;
+  builderPortfolioUrl: string | null;
+  builderShopUrl: string | null;
   websiteUrl: string | null;
   facebookUrl: string | null;
   instagramUrl: string | null;
@@ -38,6 +70,15 @@ function formatProfileResponse(profile: {
     photo: profile.photoUrl ?? null,
     profileBio: profile.profileBio,
     location: profile.location,
+    city: profile.city,
+    country: profile.country,
+    isBuilder: profile.isBuilder,
+    builderWorkshopName: profile.builderWorkshopName,
+    builderBio: profile.builderBio,
+    builderSpecialty: profile.builderSpecialty,
+    builderExperienceYears: profile.builderExperienceYears,
+    builderPortfolioUrl: profile.builderPortfolioUrl,
+    builderShopUrl: profile.builderShopUrl,
     websiteUrl: profile.websiteUrl,
     facebookUrl: profile.facebookUrl,
     instagramUrl: profile.instagramUrl,
@@ -69,6 +110,15 @@ export async function GET() {
       photoUrl: true,
       profileBio: true,
       location: true,
+      city: true,
+      country: true,
+      isBuilder: true,
+      builderWorkshopName: true,
+      builderBio: true,
+      builderSpecialty: true,
+      builderExperienceYears: true,
+      builderPortfolioUrl: true,
+      builderShopUrl: true,
       websiteUrl: true,
       facebookUrl: true,
       instagramUrl: true,
@@ -109,6 +159,15 @@ export async function PATCH(request: Request) {
       data: {
         profileBio: normalizeOptionalText(body.profileBio, 800),
         location: normalizeOptionalText(body.location, 120),
+        city: normalizeOptionalText(body.city, 120),
+        country: normalizeOptionalText(body.country, 120),
+        isBuilder: Boolean(body.isBuilder),
+        builderWorkshopName: normalizeOptionalText(body.builderWorkshopName, 160),
+        builderBio: normalizeOptionalText(body.builderBio, 1000),
+        builderSpecialty: normalizeOptionalText(body.builderSpecialty, 240),
+        builderExperienceYears: normalizeOptionalInt(body.builderExperienceYears),
+        builderPortfolioUrl: normalizeOptionalText(body.builderPortfolioUrl, 500),
+        builderShopUrl: normalizeOptionalText(body.builderShopUrl, 500),
         websiteUrl: normalizeOptionalText(body.websiteUrl, 500),
         facebookUrl: normalizeOptionalText(body.facebookUrl, 500),
         instagramUrl: normalizeOptionalText(body.instagramUrl, 500),
@@ -119,6 +178,15 @@ export async function PATCH(request: Request) {
         photoUrl: true,
         profileBio: true,
         location: true,
+        city: true,
+        country: true,
+        isBuilder: true,
+        builderWorkshopName: true,
+        builderBio: true,
+        builderSpecialty: true,
+        builderExperienceYears: true,
+        builderPortfolioUrl: true,
+        builderShopUrl: true,
         websiteUrl: true,
         facebookUrl: true,
         instagramUrl: true,
