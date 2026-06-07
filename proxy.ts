@@ -103,10 +103,13 @@ function getRequiredApiLevel(pathname: string): UserLevel | null {
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Always allow auth and register endpoints
+  // Always allow auth, register, and password/email endpoints
   if (
     pathname.startsWith("/api/auth/") ||
-    pathname.startsWith("/api/register")
+    pathname.startsWith("/api/register") ||
+    pathname.startsWith("/api/forgot-password") ||
+    pathname.startsWith("/api/reset-password") ||
+    pathname.startsWith("/api/verify-email")
   ) {
     return NextResponse.next();
   }
