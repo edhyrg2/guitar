@@ -23,6 +23,10 @@ import type {
   CanvasObject,
   ConnectionPoint,
 } from "@/lib/custom-component-editor-types";
+import {
+  STANDARD_PINS_BY_TYPE,
+  type StandardPinTemplate,
+} from "@/lib/standard-pins-client";
 
 function PropertyRow({
   label,
@@ -153,6 +157,7 @@ export function PropertiesPanel() {
   const selectedConnectionPointIds = useEditorStore(
     (state) => state.selectedConnectionPointIds
   );
+  const componentType = useEditorStore((state) => state.componentType);
   const selectedObject = useEditorStore((state) =>
     state.objects.find((object) => object.id === selectedId)
   );
@@ -216,6 +221,7 @@ export function PropertiesPanel() {
     return (
       <ConnectionPointProperties
         connectionPoint={selectedConnectionPoint}
+        componentType={componentType}
         onUpdate={(patch) =>
           updateConnectionPoint(selectedConnectionPoint.id, patch)
         }
@@ -791,10 +797,12 @@ export function PropertiesPanel() {
 
 function ConnectionPointProperties({
   connectionPoint,
+  componentType,
   onUpdate,
   onDelete,
 }: {
   connectionPoint: ConnectionPoint;
+  componentType: string | null;
   onUpdate: (patch: Partial<ConnectionPoint>) => void;
   onDelete: () => void;
 }) {
@@ -804,20 +812,27 @@ function ConnectionPointProperties({
   const endHistoryTransaction = useEditorStore((state) => state.endHistoryTransaction);
   const colorHistoryActiveRef = React.useRef(false);
 
-  function beginColorHistorySession() {
-    if (colorHistoryActiveRef.current) {
-      return;
-    }
+  const standardPins: StandardPinTemplate[] =
+    (componentType && STANDARD_PINS_BY_TYPE[componentType]) || [];
 
+  function applyStandardPin(pin: StandardPinTemplate) {
+    onUpdate({
+      key: pin.pointKey,
+      label: pin.label,
+      pointType: pin.pointType,
+      color: pin.color,
+      description: pin.description,
+    });
+  }
+
+  function beginColorHistorySession() {
+    if (colorHistoryActiveRef.current) return;
     colorHistoryActiveRef.current = true;
     beginHistoryTransaction();
   }
 
   function endColorHistorySession() {
-    if (!colorHistoryActiveRef.current) {
-      return;
-    }
-
+    if (!colorHistoryActiveRef.current) return;
     colorHistoryActiveRef.current = false;
     endHistoryTransaction();
   }
@@ -831,6 +846,36 @@ function ConnectionPointProperties({
         </CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
+
+        {/* ── Standard Pin Quick-fill ── */}
+        {standardPins.length > 0 && (
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+              Standard Pin ({componentType})
+            </label>
+            <div className="flex flex-wrap gap-1.5">
+              {standardPins.map((pin) => (
+                <button
+                  key={pin.pointKey}
+                  type="button"
+                  title={pin.description}
+                  onClick={() => applyStandardPin(pin)}
+                  className="flex items-center gap-1.5 rounded-lg border border-border/60 bg-card px-2.5 py-1 text-xs font-medium transition hover:border-primary/40 hover:bg-primary/5 hover:text-primary"
+                >
+                  <span
+                    className="inline-block h-2 w-2 shrink-0 rounded-full"
+                    style={{ background: pin.color }}
+                  />
+                  {pin.label}
+                </button>
+              ))}
+            </div>
+            <p className="text-[0.65rem] text-muted-foreground">
+              Click a pin to auto-fill key, label, type, color, and description.
+            </p>
+          </div>
+        )}
+
         <PropertyRow label="Key">
           <Input
             value={connectionPoint.key}

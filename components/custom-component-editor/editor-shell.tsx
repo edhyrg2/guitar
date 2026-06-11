@@ -21,9 +21,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Toolbar } from "@/components/custom-component-editor/toolbar";
+import { AppSelect } from "@/components/ui/app-select";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useEditorStore } from "@/lib/custom-component-editor-store";
+import { STANDARD_COMPONENT_TYPES } from "@/lib/component-type-standards";
 import type { CustomComponentDraftRow } from "@/lib/custom-component-draft-types";
 import type {
   CanvasObject,
@@ -162,6 +164,7 @@ export function EditorShell({ initialTarget = null }: EditorShellProps) {
   const pastCount = useEditorStore((state) => state.past.length);
   const futureCount = useEditorStore((state) => state.future.length);
   const setViewport = useEditorStore((state) => state.setViewport);
+  const setComponentType = useEditorStore((state) => state.setComponentType);
   const deleteSelectedObject = useEditorStore((state) => state.deleteSelectedObject);
   const deleteSelectedConnectionPoint = useEditorStore(
     (state) => state.deleteSelectedConnectionPoint
@@ -194,6 +197,9 @@ export function EditorShell({ initialTarget = null }: EditorShellProps) {
   const [isSavingDraft, setIsSavingDraft] = React.useState(false);
   const [isLoadingDrafts, setIsLoadingDrafts] = React.useState(false);
   const [draftActionId, setDraftActionId] = React.useState<string | null>(null);
+  const [startupDialogOpen, setStartupDialogOpen] = React.useState(!initialTarget);
+  const [startupTab, setStartupTab] = React.useState<"new" | "open">("new");
+  const [startupComponentType, setStartupComponentType] = React.useState<string>("Pickup");
   const [autosaveEnabled, setAutosaveEnabled] = React.useState(false);
   const [pendingAutosaveEnable, setPendingAutosaveEnable] = React.useState(false);
   const [publishDialogOpen, setPublishDialogOpen] = React.useState(false);
@@ -293,12 +299,16 @@ export function EditorShell({ initialTarget = null }: EditorShellProps) {
       setActiveDraftId(metadata?.id ?? null);
       setActiveDraftName(metadata?.name ?? null);
       setActiveDraftDescription(metadata?.description ?? "");
+      const typeMatch = (metadata?.description ?? "").match(/Component Type:\s*(.+)/i);
+      if (typeMatch) {
+        setComponentType(typeMatch[1].trim());
+      }
       markSnapshotAsSaved(JSON.stringify(document));
       setDraftStatus(
         metadata?.name ? `Loaded draft "${metadata.name}".` : "Loaded document."
       );
     },
-    [importDocument, markSnapshotAsSaved]
+    [importDocument, markSnapshotAsSaved, setComponentType]
   );
 
   const loadDrafts = React.useCallback(async () => {
@@ -608,6 +618,12 @@ export function EditorShell({ initialTarget = null }: EditorShellProps) {
   }, [documentSnapshot]);
 
   React.useEffect(() => {
+    if (startupDialogOpen && startupTab === "open" && canPersistDraft) {
+      void loadDrafts();
+    }
+  }, [startupDialogOpen, startupTab, canPersistDraft, loadDrafts]);
+
+  React.useEffect(() => {
     if (!initialTarget || importedInitialTargetRef.current) {
       return;
     }
@@ -890,31 +906,43 @@ export function EditorShell({ initialTarget = null }: EditorShellProps) {
     [addObject, viewport]
   );
 
-  const handleNewCanvas = React.useCallback(() => {
-    importDocument({
-      version: 1,
+  const handleNewCanvas = React.useCallback((componentType?: string) => {
+    const document = {
+      version: 1 as const,
       background: "#f8fafc",
       objects: [],
       connectionPoints: [],
-    });
+    };
+    importDocument(document);
     setViewport({ x: 64, y: 40, scale: 1 });
     setActiveDraftId(null);
-    setActiveDraftName(null);
-    setActiveDraftDescription("");
-    setDraftName("");
-    setDraftDescription("");
+    setActiveDraftName(componentType ? `New ${componentType}` : null);
+    setActiveDraftDescription(componentType ? `Component Type: ${componentType}` : "");
+    setDraftName(componentType ? `New ${componentType}` : "");
+    setDraftDescription(componentType ? `Component Type: ${componentType}` : "");
     setAutosaveEnabled(false);
     setPendingAutosaveEnable(false);
-    setDraftStatus("Started a new canvas.");
-    markSnapshotAsSaved(
-      JSON.stringify({
-        version: 1,
-        background: "#f8fafc",
-        objects: [],
-        connectionPoints: [],
-      })
-    );
-  }, [importDocument, markSnapshotAsSaved, setViewport]);
+    setDraftStatus(componentType ? `Started a new ${componentType} canvas.` : "Started a new canvas.");
+    markSnapshotAsSaved(JSON.stringify(document));
+    if (componentType) setComponentType(componentType);
+  }, [importDocument, markSnapshotAsSaved, setViewport, setComponentType]);
+
+  const handleStartupCreateNew = React.useCallback(() => {
+    handleNewCanvas(startupComponentType);
+    setStartupDialogOpen(false);
+  }, [handleNewCanvas, startupComponentType]);
+
+  const handleStartupOpenDraft = React.useCallback(
+    (draft: CustomComponentDraftRow) => {
+      handleDocumentLoaded(normalizeEditorDocument(draft.documentJson), {
+        id: draft.id,
+        name: draft.name,
+        description: draft.description,
+      });
+      setStartupDialogOpen(false);
+    },
+    [handleDocumentLoaded]
+  );
 
   const handlePublish = React.useCallback(
     async (value: PublishSubmitValue) => {
@@ -1114,6 +1142,179 @@ export function EditorShell({ initialTarget = null }: EditorShellProps) {
           </div>
         </div>
       </div>
+
+      {/* ── Welcome / Startup Modal ── */}
+      <Dialog
+        open={startupDialogOpen}
+        onOpenChange={(open) => {
+          // allow closing only if user has explicitly picked new or open
+          if (!open) {
+            handleNewCanvas(startupComponentType);
+            setStartupDialogOpen(false);
+          }
+        }}
+      >
+        <DialogContent className="max-w-2xl p-0 overflow-hidden">
+          {/* Header */}
+          <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 px-8 pt-8 pb-6">
+            <DialogHeader>
+              <DialogTitle className="text-xl font-semibold text-white">
+                Component Studio
+              </DialogTitle>
+              <DialogDescription className="text-slate-400 text-sm mt-1">
+                Design custom guitar components with connection points and export as assets.
+              </DialogDescription>
+            </DialogHeader>
+
+            {/* Tab switcher */}
+            <div className="mt-5 flex gap-1 rounded-lg bg-slate-800/60 p-1 w-fit">
+              <button
+                type="button"
+                onClick={() => setStartupTab("new")}
+                className={`rounded-md px-5 py-1.5 text-sm font-medium transition-all ${
+                  startupTab === "new"
+                    ? "bg-white text-slate-900 shadow"
+                    : "text-slate-400 hover:text-slate-200"
+                }`}
+              >
+                New
+              </button>
+              <button
+                type="button"
+                onClick={() => setStartupTab("open")}
+                className={`rounded-md px-5 py-1.5 text-sm font-medium transition-all ${
+                  startupTab === "open"
+                    ? "bg-white text-slate-900 shadow"
+                    : "text-slate-400 hover:text-slate-200"
+                }`}
+              >
+                Open
+              </button>
+            </div>
+          </div>
+
+          {/* Body */}
+          <div className="px-8 py-6 bg-background">
+            {startupTab === "new" ? (
+              <div className="flex flex-col gap-5">
+                <p className="text-sm text-muted-foreground">
+                  Choose a component type to start with. This sets the default pin templates for your new design.
+                </p>
+                <div className="grid grid-cols-3 gap-3">
+                  {STANDARD_COMPONENT_TYPES.map((type) => (
+                    <button
+                      key={type}
+                      type="button"
+                      onClick={() => setStartupComponentType(type)}
+                      className={`rounded-xl border-2 px-4 py-3 text-left text-sm font-medium transition-all ${
+                        startupComponentType === type
+                          ? "border-primary bg-primary/10 text-primary"
+                          : "border-border/60 bg-card text-foreground hover:border-primary/40 hover:bg-primary/5"
+                      }`}
+                    >
+                      {type}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex justify-end gap-2 pt-1">
+                  <Button variant="outline" onClick={() => setStartupDialogOpen(false)}>
+                    Skip
+                  </Button>
+                  <Button onClick={handleStartupCreateNew}>
+                    Create {startupComponentType}
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-4">
+                <div className="flex items-center gap-3">
+                  <input
+                    type="text"
+                    placeholder="Search saved designs..."
+                    className="h-9 flex-1 rounded-lg border border-border/70 bg-background px-3 text-sm outline-none transition placeholder:text-muted-foreground/60 focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
+                    onChange={(e) => setDraftBrowserQuery(e.target.value.toLowerCase())}
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={!canPersistDraft || isLoadingDrafts}
+                    onClick={() => { void loadDrafts(); }}
+                  >
+                    {isLoadingDrafts ? "Loading..." : "Refresh"}
+                  </Button>
+                </div>
+
+                <div className="max-h-[42vh] overflow-auto rounded-xl">
+                  {isLoadingDrafts ? (
+                    <div className="flex items-center justify-center py-12 text-sm text-muted-foreground">
+                      Loading drafts…
+                    </div>
+                  ) : filteredDrafts.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border/70 py-12 text-center">
+                      <p className="text-sm text-muted-foreground">
+                        {drafts.length === 0
+                          ? "No saved drafts yet. Create your first design."
+                          : "No drafts match your search."}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                      {filteredDrafts.map((draft) => (
+                        <div
+                          key={draft.id}
+                          className="group overflow-hidden rounded-xl border border-border/60 bg-card transition hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-md"
+                        >
+                          <button
+                            type="button"
+                            className="relative block aspect-[4/3] w-full overflow-hidden bg-white"
+                            onClick={() => handleStartupOpenDraft(draft)}
+                          >
+                            {draft.thumbnailUrl ? (
+                              <img
+                                src={draft.thumbnailUrl}
+                                alt={draft.name}
+                                className="h-full w-full object-contain object-center"
+                              />
+                            ) : (
+                              <div className="absolute inset-0 bg-gradient-to-br from-purple-900/80 to-pink-500/60" />
+                            )}
+                          </button>
+                          <div className="flex items-center justify-between gap-2 px-3 py-2.5">
+                            <div className="min-w-0">
+                              <p className="truncate text-xs font-medium text-foreground">{draft.name}</p>
+                              <p className="truncate text-[0.65rem] text-muted-foreground">
+                                {new Date(draft.updatedAt).toLocaleDateString()}
+                              </p>
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="shrink-0 text-destructive hover:text-destructive"
+                              disabled={draftActionId === draft.id}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                void deleteDraft(draft.id);
+                              }}
+                            >
+                              {draftActionId === draft.id ? "…" : "Delete"}
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex justify-end gap-2 pt-1">
+                  <Button variant="outline" onClick={() => setStartupTab("new")}>
+                    Back
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <PublishDialog
         key={`${publishDialogOpen}-${initialTarget?.ownerType ?? "new"}-${initialTarget?.ownerId ?? "draft"}-${activeDraftName ?? "draft"}-${connectionPoints.length}`}

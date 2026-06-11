@@ -2635,17 +2635,58 @@ export function CustomBuilderContent({
     // Fallback: create a minimal asset definition from instance data
     const instance = instances.find((i) => i.assetId === assetId);
     if (instance) {
+      const width = instance.renderWidth || 180;
+      const height = instance.renderHeight || 120;
+      const connectionPoints = (() => {
+        if (instance.componentType === "Pickup") {
+          return [
+            { id: `${assetId}-hot`, pointKey: "hot", label: "Hot", pointType: "Hot", color: "#ef4444", x: width, y: height * 0.35, description: null },
+            { id: `${assetId}-ground`, pointKey: "ground", label: "Ground", pointType: "Ground", color: "#111827", x: width, y: height * 0.65, description: null },
+          ];
+        }
+        if (instance.componentType === "Switch") {
+          return [
+            { id: `${assetId}-lug1`, pointKey: "lug1", label: "Lug 1", pointType: "Lug", color: "#f97316", x: 0, y: height * 0.2, description: null },
+            { id: `${assetId}-lug2`, pointKey: "lug2", label: "Lug 2", pointType: "Lug", color: "#f97316", x: 0, y: height * 0.38, description: null },
+            { id: `${assetId}-lug3`, pointKey: "lug3", label: "Lug 3", pointType: "Lug", color: "#f97316", x: 0, y: height * 0.56, description: null },
+            { id: `${assetId}-lug4`, pointKey: "lug4", label: "Lug 4", pointType: "Lug", color: "#f97316", x: 0, y: height * 0.74, description: null },
+            { id: `${assetId}-common`, pointKey: "common", label: "Common", pointType: "Common", color: "#22c55e", x: width, y: height * 0.5, description: null },
+            { id: `${assetId}-ground`, pointKey: "ground", label: "Ground", pointType: "Ground", color: "#111827", x: width, y: height * 0.8, description: null },
+          ];
+        }
+        if (instance.componentType === "Potentiometer") {
+          return [
+            { id: `${assetId}-lug1`, pointKey: "lug1", label: "Lug 1", pointType: "Lug", color: "#f97316", x: 0, y: height * 0.25, description: null },
+            { id: `${assetId}-lug2`, pointKey: "lug2", label: "Lug 2", pointType: "Lug", color: "#22c55e", x: 0, y: height * 0.5, description: null },
+            { id: `${assetId}-lug3`, pointKey: "lug3", label: "Lug 3", pointType: "Lug", color: "#f97316", x: 0, y: height * 0.75, description: null },
+            { id: `${assetId}-case-ground`, pointKey: "case-ground", label: "Case Ground", pointType: "Ground", color: "#111827", x: width, y: height * 0.82, description: null },
+          ];
+        }
+        if (instance.componentType === "Output Jack") {
+          return [
+            { id: `${assetId}-tip`, pointKey: "tip", label: "Tip", pointType: "Output", color: "#22c55e", x: 0, y: height * 0.35, description: null },
+            { id: `${assetId}-sleeve`, pointKey: "sleeve", label: "Sleeve", pointType: "Ground", color: "#111827", x: 0, y: height * 0.65, description: null },
+          ];
+        }
+        if (instance.componentType === "Ground Bus") {
+          return [
+            { id: `${assetId}-ground`, pointKey: "ground", label: "Ground", pointType: "Ground", color: "#111827", x: width * 0.5, y: height * 0.5, description: null },
+          ];
+        }
+        return [];
+      })();
+
       return {
         id: assetId,
         componentAssetId: instance.componentAssetId ?? assetId,
         componentType: instance.componentType,
         name: instance.name,
         slug: null,
-        width: instance.renderWidth || 180,
-        height: instance.renderHeight || 120,
+        width,
+        height,
         previewUrl: null,
         styleType: null,
-        connectionPoints: [],
+        connectionPoints,
       };
     }
 

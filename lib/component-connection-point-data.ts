@@ -19,10 +19,14 @@ type PrismaComponentConnectionPointRecord = {
 type PrismaComponentConnectionPointReferenceRecord = {
   id: string;
   name: string;
+  slug: string | null;
+  componentType: string | null;
+  ownerType: string | null;
   svgUrl: string | null;
   thumbnailUrl: string | null;
   width: number | null;
   height: number | null;
+  anchorPointsJson: unknown;
 };
 
 export const seedComponentConnectionPointRows: ComponentConnectionPointRow[] = [
@@ -79,6 +83,9 @@ export const seedComponentConnectionPointReferences: ComponentConnectionPointRef
     imageUrl: "/assets/components/switches/5-way-blade-top.svg",
     width: 320,
     height: 120,
+    componentType: "Switch",
+    slug: "seed-switch-5-way",
+    standardPins: [],
   },
   {
     id: "seed-component-asset-pot-250k",
@@ -86,6 +93,9 @@ export const seedComponentConnectionPointReferences: ComponentConnectionPointRef
     imageUrl: "/assets/components/pots/250k-audio-front.svg",
     width: 240,
     height: 240,
+    componentType: "Potentiometer",
+    slug: "seed-pot-250k",
+    standardPins: [],
   },
   {
     id: "seed-component-asset-jack-mono",
@@ -93,6 +103,9 @@ export const seedComponentConnectionPointReferences: ComponentConnectionPointRef
     imageUrl: "/assets/components/jacks/mono-side.svg",
     width: 260,
     height: 200,
+    componentType: "Output Jack",
+    slug: "seed-jack-mono",
+    standardPins: [],
   },
   {
     id: "seed-component-asset-pickup-humbucker",
@@ -100,6 +113,9 @@ export const seedComponentConnectionPointReferences: ComponentConnectionPointRef
     imageUrl: "/assets/components/pickups/humbucker-base.svg",
     width: 360,
     height: 140,
+    componentType: "Pickup",
+    slug: "seed-pickup-humbucker",
+    standardPins: [],
   },
 ];
 
@@ -163,22 +179,105 @@ export async function getComponentConnectionPointReferences(): Promise<
       select: {
         id: true,
         name: true,
+        slug: true,
+        componentType: true,
+        ownerType: true,
         svgUrl: true,
         thumbnailUrl: true,
         width: true,
         height: true,
+        anchorPointsJson: true,
       },
     });
 
-    return (componentAssets as PrismaComponentConnectionPointReferenceRecord[]).map(
-      (item) => ({
+    const records = componentAssets as PrismaComponentConnectionPointReferenceRecord[];
+    const standardPinsByType = new Map<string, ComponentConnectionPointReference["standardPins"]>();
+
+    for (const item of records) {
+      if (item.ownerType !== "standard-component" || !item.componentType) {
+        continue;
+      }
+
+      const rawPins = Array.isArray(item.anchorPointsJson) ? item.anchorPointsJson : [];
+      const pins = rawPins
+        .map((pin) => {
+          const value = pin as {
+            pointKey?: unknown;
+            label?: unknown;
+            pointType?: unknown;
+            color?: unknown;
+            description?: unknown;
+          };
+
+          if (
+            typeof value.pointKey !== "string" ||
+            typeof value.label !== "string" ||
+            typeof value.pointType !== "string"
+          ) {
+            return null;
+          }
+
+          return {
+            pointKey: value.pointKey,
+            label: value.label,
+            pointType: value.pointType,
+            color: typeof value.color === "string" ? value.color : null,
+            description: typeof value.description === "string" ? value.description : null,
+          };
+        })
+        .filter((pin): pin is ComponentConnectionPointReference["standardPins"][number] => pin !== null);
+
+      if (pins.length && !standardPinsByType.has(item.componentType)) {
+        standardPinsByType.set(item.componentType, pins);
+      }
+    }
+
+    return records.map((item) => {
+      const ownPins = Array.isArray(item.anchorPointsJson)
+        ? item.anchorPointsJson
+            .map((pin) => {
+              const value = pin as {
+                pointKey?: unknown;
+                label?: unknown;
+                pointType?: unknown;
+                color?: unknown;
+                description?: unknown;
+              };
+
+              if (
+                typeof value.pointKey !== "string" ||
+                typeof value.label !== "string" ||
+                typeof value.pointType !== "string"
+              ) {
+                return null;
+              }
+
+              return {
+                pointKey: value.pointKey,
+                label: value.label,
+                pointType: value.pointType,
+                color: typeof value.color === "string" ? value.color : null,
+                description: typeof value.description === "string" ? value.description : null,
+              };
+            })
+            .filter((pin): pin is ComponentConnectionPointReference["standardPins"][number] => pin !== null)
+        : [];
+
+      return {
         id: item.id,
         name: item.name,
         imageUrl: item.svgUrl ?? item.thumbnailUrl,
         width: item.width,
         height: item.height,
-      })
-    );
+        componentType: item.componentType,
+        slug: item.slug,
+        standardPins: item.ownerType === "standard-component"
+          ? ownPins
+          : item.componentType
+            ? standardPinsByType.get(item.componentType) ?? []
+            : [],
+      };
+    });
   } catch {
     return seedComponentConnectionPointReferences;
   }

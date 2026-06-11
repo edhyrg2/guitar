@@ -38,6 +38,9 @@ type EditorState = {
   future: HistorySnapshot[];
   historyTransactionDepth: number;
   historyTransactionSnapshot: HistorySnapshot | null;
+  /** Active component type — used to show standard pin suggestions. */
+  componentType: string | null;
+  setComponentType: (componentType: string | null) => void;
   setTool: (tool: EditorTool) => void;
   setViewport: (viewport: Partial<EditorViewport>) => void;
   selectObject: (id: string | null, additive?: boolean) => void;
@@ -187,6 +190,9 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   future: [],
   historyTransactionDepth: 0,
   historyTransactionSnapshot: null,
+  componentType: null,
+
+  setComponentType: (componentType) => set({ componentType }),
 
   setTool: (tool) => set({ tool }),
 

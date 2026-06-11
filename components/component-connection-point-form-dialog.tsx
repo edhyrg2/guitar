@@ -122,6 +122,23 @@ function ComponentConnectionPointFormDialogContent({
     () => componentAssetOptions.find((option) => option.id === form.componentAssetId) ?? null,
     [componentAssetOptions, form.componentAssetId]
   );
+  const standardPinOptions = selectedAsset?.standardPins ?? [];
+  const selectedStandardPinValue = standardPinOptions.some((pin) => pin.pointKey === form.pointKey)
+    ? form.pointKey
+    : "";
+
+  function applyStandardPin(pointKey: string) {
+    const pin = standardPinOptions.find((item) => item.pointKey === pointKey);
+    if (!pin) return;
+
+    setForm((current) => ({
+      ...current,
+      pointKey: pin.pointKey,
+      label: pin.label,
+      pointType: pin.pointType,
+      description: pin.description ?? current.description,
+    }));
+  }
   const coordinateBase =
     selectedAsset?.width != null && selectedAsset?.height != null
       ? { width: selectedAsset.width, height: selectedAsset.height }
@@ -321,6 +338,25 @@ function ComponentConnectionPointFormDialogContent({
             )}
           </div>
         </div>
+        <label className="flex flex-col gap-2 sm:col-span-2">
+          <span className="text-xs font-medium">Standard Pin</span>
+          <AppSelect
+            value={selectedStandardPinValue}
+            onValueChange={applyStandardPin}
+            placeholder={standardPinOptions.length ? "Choose standard pin for this component type" : "No standard pins available"}
+            disabled={!standardPinOptions.length}
+            className="h-9 px-3 text-sm"
+            options={standardPinOptions.map((pin) => ({
+              value: pin.pointKey,
+              label: `${pin.pointKey} — ${pin.label} (${pin.pointType})`,
+            }))}
+          />
+          <span className="text-[0.7rem] text-muted-foreground">
+            {selectedAsset?.componentType
+              ? `Using ${selectedAsset.componentType} standard pins. Selecting one fills Point Key, Label, and Point Type.`
+              : "Select a component asset first to see standard pins."}
+          </span>
+        </label>
         <label className="flex flex-col gap-2">
           <span className="text-xs font-medium">Point Key</span>
           <Input

@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import type { ComponentAssetCatalogGroup } from "@/lib/component-asset-catalog";
+import { normalizeComponentType } from "@/lib/component-type-standards";
 import {
   type ComponentAssetInput,
   type ComponentAssetRow,
@@ -126,21 +127,6 @@ function ComponentAssetFormDialogContent({
 
     return [currentType, ...baseOptions];
   }, [catalogGroups, form.componentType]);
-  const selectedGroup = React.useMemo(
-    () => catalogGroups.find((group) => group.type === form.componentType.trim()) ?? null,
-    [catalogGroups, form.componentType]
-  );
-  const componentNameOptions = React.useMemo(() => {
-    const currentName = form.name.trim();
-    const baseOptions = selectedGroup?.names ?? [];
-
-    if (!currentName || baseOptions.includes(currentName)) {
-      return baseOptions;
-    }
-
-    return [currentName, ...baseOptions];
-  }, [form.name, selectedGroup]);
-
   const updateField = <K extends keyof ComponentAssetInput>(
     key: K,
     value: ComponentAssetInput[K]
@@ -170,7 +156,7 @@ function ComponentAssetFormDialogContent({
       await onSubmit({
         data: {
           ...form,
-          componentType: form.componentType.trim(),
+          componentType: normalizeComponentType(form.componentType),
           name: form.name.trim(),
           slug: form.slug?.trim() || null,
           svgUrl: form.svgUrl?.trim() || null,
@@ -199,11 +185,7 @@ function ComponentAssetFormDialogContent({
           <AppSelect
             value={form.componentType}
             onValueChange={(nextType) => {
-              const nextGroup =
-                catalogGroups.find((group) => group.type === nextType) ?? null;
-
               updateField("componentType", nextType);
-              updateField("name", nextGroup?.names[0] ?? "");
             }}
             className="h-9 px-3 text-sm"
             placeholder="Select component type"
@@ -216,22 +198,14 @@ function ComponentAssetFormDialogContent({
         </label>
         <label className="flex flex-col gap-2">
           <span className="text-xs font-medium">Name</span>
-          <AppSelect
+          <Input
             value={form.name}
-            onValueChange={(value) => updateField("name", value)}
-            disabled={!selectedGroup}
-            className="h-9 px-3 text-sm"
-            placeholder={
-              selectedGroup ? "Select component name" : "Select component type first"
-            }
-            emptyLabel={
-              selectedGroup ? "Select component name" : "Select component type first"
-            }
-            options={componentNameOptions.map((option) => ({
-              value: option,
-              label: option,
-            }))}
+            onChange={(event) => updateField("name", event.target.value)}
+            placeholder="e.g. Orange Drop 0.047uF Capacitor"
           />
+          <span className="text-[0.7rem] text-muted-foreground">
+            Free text. Component Type controls the standard pin dropdown.
+          </span>
         </label>
         <label className="flex flex-col gap-2">
           <span className="text-xs font-medium">Slug</span>

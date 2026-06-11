@@ -59,6 +59,7 @@ type SidebarItem = {
 // Visible to all authenticated users (USER+)
 const userPrimaryItems: SidebarItem[] = [
   { title: "Wiring Library", href: "/explore", icon: ViewIcon },
+  { title: "Builder Assistant", href: "/builder-assistant", icon: SparklesIcon, badge: "New" },
   { title: "Wiring Builder", href: "/custom-builder", icon: Wrench01Icon },
   { title: "Component Studio", href: "/custom-component", icon: CpuIcon },
   { title: "AI Import", href: "/ai/diagram-import", icon: SparklesIcon },
