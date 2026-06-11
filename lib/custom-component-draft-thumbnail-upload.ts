@@ -1,13 +1,6 @@
-import { mkdir, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
-import path from "node:path";
 
-const CUSTOM_COMPONENT_DRAFT_UPLOAD_DIR = path.join(
-  process.cwd(),
-  "public",
-  "uploads",
-  "custom-component-drafts"
-);
+import { uploadToR2 } from "@/lib/r2-storage";
 
 function slugifySegment(value: string) {
   return value
@@ -40,8 +33,6 @@ export async function saveCustomComponentDraftThumbnail(
     throw new Error("Draft thumbnail image is empty.");
   }
 
-  await mkdir(CUSTOM_COMPONENT_DRAFT_UPLOAD_DIR, { recursive: true });
-
   const fileName = [
     slugifySegment(options.slug ?? "") ||
       slugifySegment(options.name) ||
@@ -49,9 +40,7 @@ export async function saveCustomComponentDraftThumbnail(
     randomUUID().slice(0, 8),
     "thumbnail.png",
   ].join("-");
-  const filePath = path.join(CUSTOM_COMPONENT_DRAFT_UPLOAD_DIR, fileName);
+  const key = `custom-component-drafts/${fileName}`;
 
-  await writeFile(filePath, buffer);
-
-  return `/uploads/custom-component-drafts/${fileName}`;
+  return uploadToR2(key, buffer, "image/png");
 }

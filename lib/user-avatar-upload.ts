@@ -1,7 +1,7 @@
-import { mkdir, writeFile } from "node:fs/promises";
-import path from "node:path";
 import { randomUUID } from "node:crypto";
 import sharp from "sharp";
+
+import { uploadToR2 } from "@/lib/r2-storage";
 
 const ALLOWED_AVATAR_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".webp"]);
 const ALLOWED_AVATAR_MIME_TYPES = new Set([
@@ -9,14 +9,6 @@ const ALLOWED_AVATAR_MIME_TYPES = new Set([
   "image/jpeg",
   "image/webp",
 ]);
-const USER_AVATAR_UPLOAD_DIR = path.join(
-  process.cwd(),
-  "storage",
-  "uploads",
-  "user-avatars"
-);
-
-export { USER_AVATAR_UPLOAD_DIR };
 const AVATAR_SIZE = 512;
 
 function slugifySegment(value: string) {
@@ -28,7 +20,9 @@ function slugifySegment(value: string) {
 }
 
 export function isAllowedUserAvatarFile(file: File) {
-  const extension = path.extname(file.name).toLowerCase();
+  const name = file.name.toLowerCase();
+  const dotIndex = name.lastIndexOf(".");
+  const extension = dotIndex >= 0 ? name.slice(dotIndex) : "";
 
   return (
     ALLOWED_AVATAR_EXTENSIONS.has(extension) ||
@@ -43,8 +37,6 @@ export async function saveUserAvatarImage(
   if (!isAllowedUserAvatarFile(file)) {
     throw new Error("Only PNG, JPG, JPEG, and WEBP avatar files are allowed.");
   }
-
-  await mkdir(USER_AVATAR_UPLOAD_DIR, { recursive: true });
 
   const buffer = Buffer.from(await file.arrayBuffer());
   const outputBuffer = await sharp(buffer)
@@ -62,9 +54,7 @@ export async function saveUserAvatarImage(
     randomUUID().slice(0, 8),
     "avatar.webp",
   ].join("-");
-  const outputPath = path.join(USER_AVATAR_UPLOAD_DIR, fileName);
+  const key = `user-avatars/${fileName}`;
 
-  await writeFile(outputPath, outputBuffer);
-
-  return `/api/uploads/user-avatars/${fileName}`;
+  return uploadToR2(key, outputBuffer, "image/webp");
 }

@@ -1,13 +1,6 @@
-import { mkdir, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
-import path from "node:path";
 
-const WIRING_TEMPLATE_UPLOAD_DIR = path.join(
-  process.cwd(),
-  "public",
-  "uploads",
-  "wiring-templates"
-);
+import { uploadToR2 } from "@/lib/r2-storage";
 
 function slugifySegment(value: string) {
   return value
@@ -40,8 +33,6 @@ export async function saveWiringTemplateThumbnail(
     throw new Error("Thumbnail image is empty.");
   }
 
-  await mkdir(WIRING_TEMPLATE_UPLOAD_DIR, { recursive: true });
-
   const fileName = [
     slugifySegment(options.slug ?? "") ||
       slugifySegment(options.name) ||
@@ -49,9 +40,7 @@ export async function saveWiringTemplateThumbnail(
     randomUUID().slice(0, 8),
     "thumbnail.png",
   ].join("-");
-  const filePath = path.join(WIRING_TEMPLATE_UPLOAD_DIR, fileName);
+  const key = `wiring-templates/${fileName}`;
 
-  await writeFile(filePath, buffer);
-
-  return `/uploads/wiring-templates/${fileName}`;
+  return uploadToR2(key, buffer, "image/png");
 }

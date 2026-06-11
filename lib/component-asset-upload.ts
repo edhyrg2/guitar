@@ -1,7 +1,7 @@
-import { mkdir, writeFile } from "node:fs/promises";
-import path from "node:path";
 import { randomUUID } from "node:crypto";
 import sharp from "sharp";
+
+import { uploadToR2 } from "@/lib/r2-storage";
 
 const ALLOWED_IMAGE_EXTENSIONS = new Set([".svg", ".png", ".jpg", ".jpeg"]);
 const ALLOWED_IMAGE_MIME_TYPES = new Set([
@@ -10,12 +10,6 @@ const ALLOWED_IMAGE_MIME_TYPES = new Set([
   "image/jpeg",
 ]);
 
-const COMPONENT_ASSET_UPLOAD_DIR = path.join(
-  process.cwd(),
-  "public",
-  "uploads",
-  "component-assets"
-);
 const THUMBNAIL_MAX_SIZE = 320;
 const THUMBNAIL_QUALITY = 72;
 
@@ -28,7 +22,9 @@ function slugifySegment(value: string) {
 }
 
 function getFileExtension(file: File) {
-  const extension = path.extname(file.name).toLowerCase();
+  const name = file.name.toLowerCase();
+  const dotIndex = name.lastIndexOf(".");
+  const extension = dotIndex >= 0 ? name.slice(dotIndex) : "";
 
   if (ALLOWED_IMAGE_EXTENSIONS.has(extension)) {
     return extension;
@@ -49,8 +45,24 @@ function getFileExtension(file: File) {
   return "";
 }
 
+function getContentType(extension: string) {
+  switch (extension) {
+    case ".svg":
+      return "image/svg+xml";
+    case ".png":
+      return "image/png";
+    case ".jpg":
+    case ".jpeg":
+      return "image/jpeg";
+    default:
+      return "application/octet-stream";
+  }
+}
+
 export function isAllowedComponentAssetFile(file: File) {
-  const extension = path.extname(file.name).toLowerCase();
+  const name = file.name.toLowerCase();
+  const dotIndex = name.lastIndexOf(".");
+  const extension = dotIndex >= 0 ? name.slice(dotIndex) : "";
 
   return (
     ALLOWED_IMAGE_EXTENSIONS.has(extension) ||
@@ -102,20 +114,19 @@ export async function saveComponentAssetImages(
     throw new Error("Unable to determine the uploaded file extension.");
   }
 
-  await mkdir(COMPONENT_ASSET_UPLOAD_DIR, { recursive: true });
-
   const buffer = Buffer.from(await file.arrayBuffer());
   const fileNamePrefix = buildFileNamePrefix(options.componentType, options.name);
-  const assetFileName = `${fileNamePrefix}-asset${extension}`;
-  const thumbnailFileName = `${fileNamePrefix}-thumbnail.webp`;
-  const assetPath = path.join(COMPONENT_ASSET_UPLOAD_DIR, assetFileName);
-  const thumbnailPath = path.join(COMPONENT_ASSET_UPLOAD_DIR, thumbnailFileName);
+  const assetKey = `component-assets/${fileNamePrefix}-asset${extension}`;
+  const thumbnailKey = `component-assets/${fileNamePrefix}-thumbnail.webp`;
   const thumbnailBuffer = await createThumbnailBuffer(file);
 
-  await Promise.all([writeFile(assetPath, buffer), writeFile(thumbnailPath, thumbnailBuffer)]);
+  const [svgUrl, thumbnailUrl] = await Promise.all([
+    uploadToR2(assetKey, buffer, getContentType(extension)),
+    uploadToR2(thumbnailKey, thumbnailBuffer, "image/webp"),
+  ]);
 
   return {
-    svgUrl: `/uploads/component-assets/${assetFileName}`,
-    thumbnailUrl: `/uploads/component-assets/${thumbnailFileName}`,
+    svgUrl,
+    thumbnailUrl,
   };
 }
