@@ -103,7 +103,7 @@ export function EditorTopbar({
 
   function runMenuAction(action: () => void) {
     setMenuOpen(false);
-    action();
+    setTimeout(action, 0);
   }
 
   return (
@@ -130,7 +130,11 @@ export function EditorTopbar({
               <button
                 type="button"
                 className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm transition hover:bg-muted"
-                onClick={() => runMenuAction(onNewCanvas)}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  runMenuAction(onNewCanvas);
+                }}
               >
                 <HugeiconsIcon icon={AddSquareIcon} strokeWidth={2} data-icon="inline-start" />
                 New Component
@@ -138,7 +142,11 @@ export function EditorTopbar({
               <button
                 type="button"
                 className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm transition hover:bg-muted"
-                onClick={() => runMenuAction(onOpenDrafts)}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  runMenuAction(onOpenDrafts);
+                }}
               >
                 <HugeiconsIcon icon={DatabaseIcon} strokeWidth={2} data-icon="inline-start" />
                 Open
@@ -147,7 +155,11 @@ export function EditorTopbar({
                 type="button"
                 className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
                 disabled={!canSaveDraft || draftBusy}
-                onClick={() => runMenuAction(onSaveDraft)}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  runMenuAction(onSaveDraft);
+                }}
               >
                 <HugeiconsIcon icon={FloppyDiskIcon} strokeWidth={2} data-icon="inline-start" />
                 Save
@@ -156,7 +168,11 @@ export function EditorTopbar({
                 type="button"
                 className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
                 disabled={!canSaveDraft || draftBusy}
-                onClick={() => runMenuAction(onSaveAsDraft)}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  runMenuAction(onSaveAsDraft);
+                }}
               >
                 <HugeiconsIcon icon={FloppyDiskIcon} strokeWidth={2} data-icon="inline-start" />
                 Save As
@@ -164,7 +180,11 @@ export function EditorTopbar({
               <button
                 type="button"
                 className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm transition hover:bg-muted"
-                onClick={() => runMenuAction(onImportJson)}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  runMenuAction(onImportJson);
+                }}
               >
                 <HugeiconsIcon icon={Upload01Icon} strokeWidth={2} data-icon="inline-start" />
                 Import JSON
@@ -172,7 +192,11 @@ export function EditorTopbar({
               <button
                 type="button"
                 className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm transition hover:bg-muted"
-                onClick={() => runMenuAction(onExportJson)}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  runMenuAction(onExportJson);
+                }}
               >
                 <HugeiconsIcon icon={Download01Icon} strokeWidth={2} data-icon="inline-start" />
                 Export JSON

@@ -188,17 +188,16 @@ export function EditorShell({ initialTarget = null }: EditorShellProps) {
   const [activeDraftName, setActiveDraftName] = React.useState<string | null>(null);
   const [activeDraftDescription, setActiveDraftDescription] = React.useState<string>("");
   const [draftStatus, setDraftStatus] = React.useState<string | null>(null);
-  const [saveDialogOpen, setSaveDialogOpen] = React.useState(false);
-  const [saveDialogMode, setSaveDialogMode] = React.useState<"create" | "save-as">("create");
-  const [draftBrowserOpen, setDraftBrowserOpen] = React.useState(false);
   const [draftBrowserQuery, setDraftBrowserQuery] = React.useState("");
-  const [draftName, setDraftName] = React.useState("");
+  const [draftName, setDraftName] = React.useState("My Custom Pickup");
   const [draftDescription, setDraftDescription] = React.useState("");
   const [isSavingDraft, setIsSavingDraft] = React.useState(false);
   const [isLoadingDrafts, setIsLoadingDrafts] = React.useState(false);
   const [draftActionId, setDraftActionId] = React.useState<string | null>(null);
-  const [startupDialogOpen, setStartupDialogOpen] = React.useState(!initialTarget);
-  const [startupTab, setStartupTab] = React.useState<"new" | "open">("new");
+  const [managerOpen, setManagerOpen] = React.useState(!initialTarget);
+  const [managerTab, setManagerTab] = React.useState<"new" | "open" | "save" | "save-as">(
+    initialTarget ? "save" : "new"
+  );
   const [startupComponentType, setStartupComponentType] = React.useState<string>("Pickup");
   const [autosaveEnabled, setAutosaveEnabled] = React.useState(false);
   const [pendingAutosaveEnable, setPendingAutosaveEnable] = React.useState(false);
@@ -412,8 +411,7 @@ export function EditorShell({ initialTarget = null }: EditorShellProps) {
           setAutosaveEnabled(true);
           setPendingAutosaveEnable(false);
         }
-        setSaveDialogOpen(false);
-        setSaveDialogMode("create");
+        setManagerOpen(false);
       } catch (error) {
         setDraftStatus(getErrorMessage(error));
       } finally {
@@ -452,8 +450,8 @@ export function EditorShell({ initialTarget = null }: EditorShellProps) {
 
     setDraftName(activeDraftName ?? draftName);
     setDraftDescription(activeDraftDescription);
-    setSaveDialogMode("create");
-    setSaveDialogOpen(true);
+    setManagerTab("save");
+    setManagerOpen(true);
   }, [
     activeDraftDescription,
     activeDraftId,
@@ -477,8 +475,8 @@ export function EditorShell({ initialTarget = null }: EditorShellProps) {
 
     setDraftName(suggestedName);
     setDraftDescription(activeDraftDescription || draftDescription);
-    setSaveDialogMode("save-as");
-    setSaveDialogOpen(true);
+    setManagerTab("save-as");
+    setManagerOpen(true);
   }, [
     activeDraftDescription,
     activeDraftName,
@@ -518,7 +516,8 @@ export function EditorShell({ initialTarget = null }: EditorShellProps) {
   }, [activeDraftId]);
 
   const openDraftBrowser = React.useCallback(() => {
-    setDraftBrowserOpen(true);
+    setManagerTab("open");
+    setManagerOpen(true);
 
     if (canPersistDraft) {
       void loadDrafts();
@@ -599,7 +598,8 @@ export function EditorShell({ initialTarget = null }: EditorShellProps) {
         setDraftDescription(
           activeDraftDescription || "Created automatically by autosave every 5 minutes."
         );
-        setSaveDialogOpen(true);
+        setManagerTab("save");
+        setManagerOpen(true);
         setDraftStatus("Save draft first to enable autosave.");
         return;
       }
@@ -618,10 +618,10 @@ export function EditorShell({ initialTarget = null }: EditorShellProps) {
   }, [documentSnapshot]);
 
   React.useEffect(() => {
-    if (startupDialogOpen && startupTab === "open" && canPersistDraft) {
+    if (managerOpen && managerTab === "open" && canPersistDraft) {
       void loadDrafts();
     }
-  }, [startupDialogOpen, startupTab, canPersistDraft, loadDrafts]);
+  }, [managerOpen, managerTab, canPersistDraft, loadDrafts]);
 
   React.useEffect(() => {
     if (!initialTarget || importedInitialTargetRef.current) {
@@ -927,10 +927,82 @@ export function EditorShell({ initialTarget = null }: EditorShellProps) {
     if (componentType) setComponentType(componentType);
   }, [importDocument, markSnapshotAsSaved, setViewport, setComponentType]);
 
-  const handleStartupCreateNew = React.useCallback(() => {
-    handleNewCanvas(startupComponentType);
-    setStartupDialogOpen(false);
-  }, [handleNewCanvas, startupComponentType]);
+  const handleCreateNewDraft = React.useCallback(async (name: string, componentType: string, description: string) => {
+    const emptyDoc = {
+      version: 1 as const,
+      background: "#f8fafc",
+      objects: [],
+      connectionPoints: [],
+    };
+    importDocument(emptyDoc);
+    setViewport({ x: 64, y: 40, scale: 1 });
+    setComponentType(componentType);
+
+    const effectiveDescription = `Component Type: ${componentType}\n${description}`.trim();
+
+    if (!canPersistDraft) {
+      setActiveDraftId(null);
+      setActiveDraftName(name);
+      setActiveDraftDescription(effectiveDescription);
+      setDraftName(name);
+      setDraftDescription(effectiveDescription);
+      setAutosaveEnabled(false);
+      setPendingAutosaveEnable(false);
+      setDraftStatus(`Started a new ${componentType} canvas locally.`);
+      markSnapshotAsSaved(JSON.stringify(emptyDoc));
+      setManagerOpen(false);
+      return;
+    }
+
+    setIsSavingDraft(true);
+    try {
+      const response = await fetch("/api/custom-component-drafts", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          name,
+          description: effectiveDescription || null,
+          thumbnailDataUrl: null,
+          document: emptyDoc,
+        }),
+      });
+
+      const payload = (await response.json()) as
+        | CustomComponentDraftRow
+        | { error?: string };
+
+      if (!response.ok || Array.isArray(payload) || !("id" in payload)) {
+        throw new Error(
+          !Array.isArray(payload) && "error" in payload && payload.error
+            ? payload.error
+            : "Failed to create draft."
+        );
+      }
+
+      setActiveDraftId(payload.id);
+      setActiveDraftName(payload.name);
+      setActiveDraftDescription(payload.description ?? "");
+      setDraftName(payload.name);
+      setDraftDescription(payload.description ?? "");
+      markSnapshotAsSaved(JSON.stringify(emptyDoc));
+      persistDraftListEntry(payload);
+      setDraftStatus(`Draft "${payload.name}" created and saved.`);
+      setManagerOpen(false);
+    } catch (error) {
+      setDraftStatus(getErrorMessage(error));
+    } finally {
+      setIsSavingDraft(false);
+    }
+  }, [importDocument, setViewport, setComponentType, canPersistDraft, markSnapshotAsSaved, persistDraftListEntry]);
+
+  const openNewCanvasDialog = React.useCallback(() => {
+    setDraftName(`My Custom ${startupComponentType}`);
+    setDraftDescription("");
+    setManagerTab("new");
+    setManagerOpen(true);
+  }, [startupComponentType]);
 
   const handleStartupOpenDraft = React.useCallback(
     (draft: CustomComponentDraftRow) => {
@@ -939,7 +1011,7 @@ export function EditorShell({ initialTarget = null }: EditorShellProps) {
         name: draft.name,
         description: draft.description,
       });
-      setStartupDialogOpen(false);
+      setManagerOpen(false);
     },
     [handleDocumentLoaded]
   );
@@ -1102,7 +1174,7 @@ export function EditorShell({ initialTarget = null }: EditorShellProps) {
             downloadDataUrl("custom-component.png", exported.url);
           }
         }}
-        onNewCanvas={handleNewCanvas}
+        onNewCanvas={openNewCanvasDialog}
         onSaveDraft={() => {
           void saveCurrentDraft();
         }}
@@ -1143,18 +1215,23 @@ export function EditorShell({ initialTarget = null }: EditorShellProps) {
         </div>
       </div>
 
-      {/* ── Welcome / Startup Modal ── */}
+      {/* ── Studio Manager Modal (New, Open, Save) ── */}
       <Dialog
-        open={startupDialogOpen}
+        open={managerOpen}
         onOpenChange={(open) => {
-          // allow closing only if user has explicitly picked new or open
           if (!open) {
-            handleNewCanvas(startupComponentType);
-            setStartupDialogOpen(false);
+            if (!activeDraftName && !activeDraftId) {
+              handleNewCanvas(startupComponentType);
+            }
+            setManagerOpen(false);
           }
         }}
       >
-        <DialogContent className="max-w-2xl p-0 overflow-hidden">
+        <DialogContent
+          className="max-w-2xl p-0 overflow-hidden"
+          onPointerDownOutside={(e) => e.preventDefault()}
+          onInteractOutside={(e) => e.preventDefault()}
+        >
           {/* Header */}
           <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 px-8 pt-8 pb-6">
             <DialogHeader>
@@ -1168,11 +1245,24 @@ export function EditorShell({ initialTarget = null }: EditorShellProps) {
 
             {/* Tab switcher */}
             <div className="mt-5 flex gap-1 rounded-lg bg-slate-800/60 p-1 w-fit">
+              {(activeDraftName || objects.length > 0) && (
+                <button
+                  type="button"
+                  onClick={() => setManagerTab("save")}
+                  className={`rounded-md px-5 py-1.5 text-sm font-medium transition-all ${
+                    managerTab === "save" || managerTab === "save-as"
+                      ? "bg-white text-slate-900 shadow"
+                      : "text-slate-400 hover:text-slate-200"
+                  }`}
+                >
+                  Save
+                </button>
+              )}
               <button
                 type="button"
-                onClick={() => setStartupTab("new")}
+                onClick={() => setManagerTab("new")}
                 className={`rounded-md px-5 py-1.5 text-sm font-medium transition-all ${
-                  startupTab === "new"
+                  managerTab === "new"
                     ? "bg-white text-slate-900 shadow"
                     : "text-slate-400 hover:text-slate-200"
                 }`}
@@ -1181,9 +1271,9 @@ export function EditorShell({ initialTarget = null }: EditorShellProps) {
               </button>
               <button
                 type="button"
-                onClick={() => setStartupTab("open")}
+                onClick={() => setManagerTab("open")}
                 className={`rounded-md px-5 py-1.5 text-sm font-medium transition-all ${
-                  startupTab === "open"
+                  managerTab === "open"
                     ? "bg-white text-slate-900 shadow"
                     : "text-slate-400 hover:text-slate-200"
                 }`}
@@ -1195,37 +1285,89 @@ export function EditorShell({ initialTarget = null }: EditorShellProps) {
 
           {/* Body */}
           <div className="px-8 py-6 bg-background">
-            {startupTab === "new" ? (
+            {managerTab === "new" && (
               <div className="flex flex-col gap-5">
                 <p className="text-sm text-muted-foreground">
-                  Choose a component type to start with. This sets the default pin templates for your new design.
+                  Choose a component type and enter a name to start. The component type sets the default pin templates for your design.
                 </p>
-                <div className="grid grid-cols-3 gap-3">
-                  {STANDARD_COMPONENT_TYPES.map((type) => (
-                    <button
-                      key={type}
-                      type="button"
-                      onClick={() => setStartupComponentType(type)}
-                      className={`rounded-xl border-2 px-4 py-3 text-left text-sm font-medium transition-all ${
-                        startupComponentType === type
-                          ? "border-primary bg-primary/10 text-primary"
-                          : "border-border/60 bg-card text-foreground hover:border-primary/40 hover:bg-primary/5"
-                      }`}
-                    >
-                      {type}
-                    </button>
-                  ))}
+                
+                <div className="grid gap-3">
+                  <div className="grid gap-1.5">
+                    <label htmlFor="new-draft-name" className="text-sm font-medium text-foreground">
+                      Component Name
+                    </label>
+                    <Input
+                      id="new-draft-name"
+                      value={draftName}
+                      onChange={(event) => setDraftName(event.target.value)}
+                      placeholder={`e.g. My Custom ${startupComponentType}`}
+                    />
+                  </div>
+                  <div className="grid gap-1.5">
+                    <label htmlFor="new-draft-description" className="text-sm font-medium text-foreground">
+                      Description <span className="text-xs text-muted-foreground">(Optional)</span>
+                    </label>
+                    <textarea
+                      id="new-draft-description"
+                      value={draftDescription}
+                      onChange={(event) => setDraftDescription(event.target.value)}
+                      placeholder="Brief notes about the purpose or specifications of this component."
+                      className="min-h-20 rounded-md border border-input bg-input/20 px-3 py-2 text-sm outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
+                    />
+                  </div>
                 </div>
+
+                <div className="flex flex-col gap-2">
+                  <label className="text-sm font-medium text-foreground">Component Type</label>
+                  <div className="grid grid-cols-3 gap-3">
+                    {STANDARD_COMPONENT_TYPES.map((type) => (
+                      <button
+                        key={type}
+                        type="button"
+                        onClick={() => {
+                          setStartupComponentType(type);
+                          if (!draftName || draftName.startsWith("New ") || draftName.startsWith("My Custom ")) {
+                            setDraftName(`My Custom ${type}`);
+                          }
+                        }}
+                        className={`rounded-xl border-2 px-4 py-3 text-left text-sm font-medium transition-all ${
+                          startupComponentType === type
+                            ? "border-primary bg-primary/10 text-primary"
+                            : "border-border/60 bg-card text-foreground hover:border-primary/40 hover:bg-primary/5"
+                        }`}
+                      >
+                        {type}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
                 <div className="flex justify-end gap-2 pt-1">
-                  <Button variant="outline" onClick={() => setStartupDialogOpen(false)}>
-                    Skip
-                  </Button>
-                  <Button onClick={handleStartupCreateNew}>
-                    Create {startupComponentType}
+                  {activeDraftName || objects.length > 0 ? (
+                    <Button variant="outline" onClick={() => setManagerOpen(false)}>
+                      Cancel
+                    </Button>
+                  ) : (
+                    <Button variant="outline" onClick={() => {
+                      handleNewCanvas(startupComponentType);
+                      setManagerOpen(false);
+                    }}>
+                      Skip
+                    </Button>
+                  )}
+                  <Button
+                    disabled={!draftName.trim()}
+                    onClick={() => {
+                      void handleCreateNewDraft(draftName, startupComponentType, draftDescription);
+                    }}
+                  >
+                    Create Component
                   </Button>
                 </div>
               </div>
-            ) : (
+            )}
+
+            {managerTab === "open" && (
               <div className="flex flex-col gap-4">
                 <div className="flex items-center gap-3">
                   <input
@@ -1306,8 +1448,75 @@ export function EditorShell({ initialTarget = null }: EditorShellProps) {
                 </div>
 
                 <div className="flex justify-end gap-2 pt-1">
-                  <Button variant="outline" onClick={() => setStartupTab("new")}>
-                    Back
+                  {!activeDraftName && !activeDraftId ? (
+                    <Button variant="outline" onClick={() => setManagerTab("new")}>
+                      Back
+                    </Button>
+                  ) : (
+                    <Button variant="outline" onClick={() => setManagerOpen(false)}>
+                      Close
+                    </Button>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {(managerTab === "save" || managerTab === "save-as") && (
+              <div className="flex flex-col gap-5">
+                <div>
+                  <h3 className="text-sm font-medium text-foreground mb-1">
+                    {managerTab === "save-as" ? "Save As Copy" : "Save Draft"}
+                  </h3>
+                  <p className="text-xs text-muted-foreground">
+                    {managerTab === "save-as"
+                      ? "Save a copy of the current custom component draft under a new name."
+                      : "Update the component draft details in the database."}
+                  </p>
+                </div>
+
+                <div className="grid gap-3">
+                  <div className="grid gap-1.5">
+                    <label htmlFor="save-draft-name" className="text-sm font-medium text-foreground">
+                      Draft Name
+                    </label>
+                    <Input
+                      id="save-draft-name"
+                      value={draftName}
+                      onChange={(event) => setDraftName(event.target.value)}
+                      placeholder="e.g. My Humbucker Custom"
+                    />
+                  </div>
+                  <div className="grid gap-1.5">
+                    <label htmlFor="save-draft-description" className="text-sm font-medium text-foreground">
+                      Description <span className="text-xs text-muted-foreground">(Optional)</span>
+                    </label>
+                    <textarea
+                      id="save-draft-description"
+                      value={draftDescription}
+                      onChange={(event) => setDraftDescription(event.target.value)}
+                      placeholder="Brief notes about the changes or specifications."
+                      className="min-h-24 rounded-md border border-input bg-input/20 px-3 py-2 text-sm outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-2 pt-1">
+                  <Button variant="outline" onClick={() => setManagerOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button
+                    disabled={isSavingDraft || !draftName.trim()}
+                    onClick={() => {
+                      void saveDraft(
+                        managerTab === "save-as"
+                          ? "save-as"
+                          : activeDraftId
+                            ? "update"
+                            : "create"
+                      );
+                    }}
+                  >
+                    {isSavingDraft ? "Saving..." : managerTab === "save-as" ? "Save As Copy" : "Save Draft"}
                   </Button>
                 </div>
               </div>
@@ -1335,81 +1544,6 @@ export function EditorShell({ initialTarget = null }: EditorShellProps) {
         onSubmit={handlePublish}
       />
 
-      <Dialog
-        open={saveDialogOpen}
-        onOpenChange={(open) => {
-          setSaveDialogOpen(open);
-
-          if (!open && pendingAutosaveEnable) {
-            setPendingAutosaveEnable(false);
-          }
-
-          if (!open) {
-            setSaveDialogMode("create");
-          }
-        }}
-      >
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>{saveDialogMode === "save-as" ? "Save As" : "Save Draft"}</DialogTitle>
-            <DialogDescription>
-              {saveDialogMode === "save-as"
-                ? "Save a copy of the custom component draft as a new file."
-                : "Save the custom component draft to the currently signed-in user's database."}
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="grid gap-3 px-6 pb-2">
-            <div className="grid gap-1.5">
-              <label htmlFor="draft-name" className="text-sm font-medium text-foreground">
-                Draft name
-              </label>
-              <Input
-                id="draft-name"
-                value={draftName}
-                onChange={(event) => setDraftName(event.target.value)}
-                placeholder="e.g. Humbucker base v1"
-              />
-            </div>
-            <div className="grid gap-1.5">
-              <label
-                htmlFor="draft-description"
-                className="text-sm font-medium text-foreground"
-              >
-                Description
-              </label>
-              <textarea
-                id="draft-description"
-                value={draftDescription}
-                onChange={(event) => setDraftDescription(event.target.value)}
-                placeholder="Brief notes about changes or the purpose of this draft."
-                className="min-h-24 rounded-md border border-input bg-input/20 px-3 py-2 text-sm outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
-              />
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setSaveDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              disabled={isSavingDraft}
-              onClick={() => {
-                void saveDraft(
-                  saveDialogMode === "save-as"
-                    ? "save-as"
-                    : activeDraftId
-                      ? "update"
-                      : "create"
-                );
-              }}
-            >
-              {isSavingDraft ? "Saving..." : saveDialogMode === "save-as" ? "Save As" : "Save Draft"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       <Dialog open={isSavingDraft} onOpenChange={() => undefined}>
         <DialogContent className="max-w-sm" showCloseButton={false}>
           <DialogHeader className="items-center text-center">
@@ -1418,104 +1552,6 @@ export function EditorShell({ initialTarget = null }: EditorShellProps) {
               Please wait. The custom component draft is being saved.
             </DialogDescription>
           </DialogHeader>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={draftBrowserOpen} onOpenChange={setDraftBrowserOpen}>
-        <DialogContent className="max-w-4xl">
-          <DialogHeader>
-            <DialogTitle>Open Design</DialogTitle>
-            <DialogDescription>
-              Browse, search, and load your saved component drafts.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="grid gap-3 px-6 pb-2">
-            <div className="flex items-center gap-3">
-              <input
-                type="text"
-                placeholder="Search drafts..."
-                className="h-9 flex-1 rounded-lg border border-border/70 bg-background px-3 text-sm outline-none transition placeholder:text-muted-foreground/60 focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
-                onChange={(e) => {
-                  const q = e.target.value.toLowerCase();
-                  setDraftBrowserQuery(q);
-                }}
-              />
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={!canPersistDraft || isLoadingDrafts}
-                onClick={() => { void loadDrafts(); }}
-              >
-                {isLoadingDrafts ? "Loading..." : "Refresh"}
-              </Button>
-            </div>
-
-            <div className="max-h-[60vh] overflow-auto">
-              {filteredDrafts.length === 0 ? (
-                <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border/70 py-12 text-center">
-                  <div className="text-sm text-muted-foreground">
-                    {isLoadingDrafts
-                      ? "Loading drafts..."
-                      : drafts.length === 0
-                        ? "No saved drafts yet. Save your first design to see it here."
-                        : "No drafts match your search."}
-                  </div>
-                </div>
-              ) : (
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                  {filteredDrafts.map((draft) => (
-                    <div
-                      key={draft.id}
-                      className="group overflow-hidden rounded-xl border border-border/60 bg-card transition hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-md"
-                    >
-                      <button
-                        type="button"
-                        className="relative block aspect-[4/3] w-full overflow-hidden bg-white"
-                        onClick={() => {
-                          handleDocumentLoaded(
-                            normalizeEditorDocument(draft.documentJson),
-                            { id: draft.id, name: draft.name, description: draft.description }
-                          );
-                          setDraftBrowserOpen(false);
-                        }}
-                      >
-                        {draft.thumbnailUrl ? (
-                          <img
-                            src={draft.thumbnailUrl}
-                            alt={draft.name}
-                            className="h-full w-full object-contain object-center"
-                          />
-                        ) : (
-                          <div className="absolute inset-0 bg-gradient-to-br from-purple-900/80 to-pink-500/60" />
-                        )}
-                      </button>
-                      <div className="flex items-center justify-between gap-2 px-3 py-2.5">
-                        <div className="min-w-0">
-                          <p className="truncate text-xs font-medium text-foreground">{draft.name}</p>
-                          <p className="truncate text-[0.65rem] text-muted-foreground">
-                            {new Date(draft.updatedAt).toLocaleDateString()}
-                          </p>
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="shrink-0 text-destructive hover:text-destructive"
-                          disabled={draftActionId === draft.id}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            void deleteDraft(draft.id);
-                          }}
-                        >
-                          {draftActionId === draft.id ? "..." : "Delete"}
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
         </DialogContent>
       </Dialog>
     </div>
