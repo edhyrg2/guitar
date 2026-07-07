@@ -4,7 +4,7 @@ import { getSafeServerSession } from "@/lib/auth-session";
 import { getWiringTemplateRowsForUser } from "@/lib/wiring-template-data";
 
 export const metadata = {
-  title: "Community Wiring Gallery",
+  title: "Guitar Wire Gallery",
   description:
     "Discover, save, and explore guitar wiring diagrams shared by the community.",
 };

@@ -225,7 +225,7 @@ export function PublicGalleryContent({
         <div className="relative mx-auto max-w-4xl px-4 py-12 text-center sm:px-6 sm:py-16">
           <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/5 px-4 py-1.5 text-sm font-medium text-primary">
             <GuitarIcon className="size-4" />
-            Community Wiring Gallery
+            Guitar Wire Gallery
           </div>
 
           <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">
@@ -525,7 +525,7 @@ export function PublicGalleryContent({
         <div className="flex flex-col items-center gap-3 px-4 py-6 text-center text-xs text-muted-foreground sm:flex-row sm:justify-between sm:px-6 sm:text-left">
           <div className="flex items-center gap-2">
             <GuitarIcon className="size-3.5" />
-            <span>Guitar Wiring Community</span>
+            <span>Guitar Wire Community</span>
           </div>
           <div className="flex items-center gap-4">
             <Link href="/explore" className="transition hover:text-foreground">Explore</Link>

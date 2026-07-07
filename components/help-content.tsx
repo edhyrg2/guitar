@@ -137,7 +137,7 @@ export function HelpContent({ hideNavbar = false }: { hideNavbar?: boolean }) {
             <div>
               <h1 className="text-2xl font-bold text-foreground">Help Center</h1>
               <p className="text-sm text-muted-foreground">
-                Learn how to use Guitar Wiring Diagrams
+                Learn how to use Guitar Wire Diagrams
               </p>
             </div>
           </div>

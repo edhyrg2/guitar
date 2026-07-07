@@ -134,7 +134,7 @@ export function PublicGalleryNavbar() {
             </div>
             <div className="hidden sm:block">
               <div className="text-sm font-semibold tracking-tight">
-                Guitar Wiring
+                Guitar Wire
               </div>
               <div className="text-[0.6rem] font-medium uppercase tracking-[0.16em] text-muted-foreground">
                 Community

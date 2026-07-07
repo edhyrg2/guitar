@@ -8,8 +8,11 @@ import {
   ArrowLeft01Icon,
   CheckmarkCircle02Icon,
   AlertCircleIcon,
+  Mail01Icon,
 } from "@hugeicons/core-free-icons";
 
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { GuitarIcon } from "@/components/guitar-icon";
 
 type VerifyState = "verifying" | "success" | "error";
@@ -17,8 +20,11 @@ type VerifyState = "verifying" | "success" | "error";
 function VerifyEmailContent() {
   const searchParams = useSearchParams();
   const token = searchParams.get("token") ?? "";
+  const initialEmail = searchParams.get("email") ?? "";
   const [state, setState] = React.useState<VerifyState>("verifying");
   const [message, setMessage] = React.useState("");
+  const [resendEmail, setResendEmail] = React.useState(initialEmail);
+  const [resendState, setResendState] = React.useState<"idle" | "sending" | "sent">("idle");
 
   React.useEffect(() => {
     if (!token) {
@@ -70,6 +76,21 @@ function VerifyEmailContent() {
     };
   }, [token]);
 
+  async function handleResend() {
+    if (!resendEmail) return;
+    setResendState("sending");
+    try {
+      await fetch("/api/resend-verification", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: resendEmail }),
+      });
+      setResendState("sent");
+    } catch {
+      setResendState("idle");
+    }
+  }
+
   if (state === "verifying") {
     return (
       <div className="grid gap-3">
@@ -117,6 +138,31 @@ function VerifyEmailContent() {
       <div className="rounded-lg border border-destructive/30 bg-destructive/8 px-4 py-3 text-sm text-destructive">
         {message}
       </div>
+
+      <div className="grid gap-3 rounded-lg border bg-muted/30 p-4">
+        <div className="flex items-center gap-2 text-sm font-medium">
+          <HugeiconsIcon icon={Mail01Icon} strokeWidth={2} className="size-4" />
+          Resend verification email
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Enter your email and we will send a fresh verification link.
+        </p>
+        <Input
+          type="email"
+          placeholder="you@example.com"
+          value={resendEmail}
+          onChange={(e) => setResendEmail(e.target.value)}
+          disabled={resendState === "sending"}
+        />
+        <Button
+          type="button"
+          onClick={handleResend}
+          disabled={!resendEmail || resendState === "sending" || resendState === "sent"}
+        >
+          {resendState === "sending" ? "Sending..." : resendState === "sent" ? "Sent — check your inbox" : "Send verification email"}
+        </Button>
+      </div>
+
       <Link
         href="/login"
         className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
@@ -137,7 +183,7 @@ export default function VerifyEmailPage() {
             <GuitarIcon className="size-4.5" />
           </div>
           <div>
-            <div className="text-sm font-semibold">Guitar Wiring</div>
+            <div className="text-sm font-semibold">Guitar Wire</div>
             <div className="text-xs text-muted-foreground">Diagram Studio</div>
           </div>
         </div>

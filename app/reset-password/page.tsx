@@ -206,7 +206,7 @@ export default function ResetPasswordPage() {
             <GuitarIcon className="size-4.5" />
           </div>
           <div>
-            <div className="text-sm font-semibold">Guitar Wiring</div>
+            <div className="text-sm font-semibold">Guitar Wire</div>
             <div className="text-xs text-muted-foreground">Diagram Studio</div>
           </div>
         </div>

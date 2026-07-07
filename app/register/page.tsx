@@ -66,7 +66,7 @@ export default async function RegisterPage({ searchParams }: RegisterPageProps) 
               <GuitarIcon className="size-4.5" />
             </div>
             <div>
-              <div className="text-sm font-semibold leading-tight">Guitar Wiring</div>
+              <div className="text-sm font-semibold leading-tight">Guitar Wire</div>
               <div className="text-[11px] text-sidebar-foreground/60">Diagram Studio</div>
             </div>
           </Link>
@@ -103,7 +103,7 @@ export default async function RegisterPage({ searchParams }: RegisterPageProps) 
 
           {/* Footer */}
           <p className="text-xs text-sidebar-foreground/40">
-            © {new Date().getFullYear()} Guitar Wiring Studio
+            © {new Date().getFullYear()} Guitar Wire
           </p>
         </div>
       </section>
@@ -117,7 +117,7 @@ export default async function RegisterPage({ searchParams }: RegisterPageProps) 
               <GuitarIcon className="size-4.5" />
             </div>
             <div>
-              <div className="text-sm font-semibold">Guitar Wiring</div>
+              <div className="text-sm font-semibold">Guitar Wire</div>
               <div className="text-xs text-muted-foreground">Diagram Studio</div>
             </div>
           </div>
